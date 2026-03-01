@@ -1,0 +1,35 @@
+---
+description: Use uv for Python package management and tooling
+alwaysApply: true
+---
+
+# Use uv for Python
+
+Use [uv](https://docs.astral.sh/uv/) for all Python tooling in this project.
+
+## Commands
+
+- **Sync/install dependencies**: `uv sync` (reads `pyproject.toml` and locks/installs)
+- **Add a dependency**: `uv add <package>` (e.g. `uv add pytest`)
+- **Run a script**: `uv run python script.py` or `uv run pytest`
+- **Create/lock env**: `uv lock` then `uv sync` if you change dependencies
+
+## Do not use
+
+- `pip install` — use `uv add` or `uv sync`
+- `python -m venv` — use `uv sync` (uv manages the venv)
+- `pip freeze` — use `uv lock` and commit `uv.lock`
+
+## Examples
+
+```bash
+# Install project deps (creates .venv if needed)
+uv sync
+
+# Add and install a new dependency
+uv add requests
+
+# Run the app or tests
+uv run python -m pjtracker
+uv run pytest
+```
