@@ -17,10 +17,12 @@ from nf_parser import (
 )
 
 DB_PATH = Path(__file__).resolve().parent / "pjtracker.db"
+PDF_DIR = Path(__file__).resolve().parent / "pdfs"
 
 
 def init_db() -> None:
     """Create the nf_entries table if it does not exist and ensure unique (nf_date, verification_code, usd)."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS nf_entries (
@@ -34,6 +36,7 @@ def init_db() -> None:
                 nf_date TEXT,
                 verification_code TEXT,
                 payment_via TEXT,
+                pdf_path TEXT,
                 created_at TEXT NOT NULL
             )
         """)
@@ -42,11 +45,36 @@ def init_db() -> None:
             conn.execute("ALTER TABLE nf_entries ADD COLUMN payment_via TEXT")
         except sqlite3.OperationalError:
             pass  # column already exists
+        # Migration: add pdf_path if table existed without it
+        try:
+            conn.execute("ALTER TABLE nf_entries ADD COLUMN pdf_path TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         # Uniqueness: one row per NF (NULLs normalized to '' for index)
         conn.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_nf_entries_unique
             ON nf_entries (COALESCE(nf_date, ''), COALESCE(verification_code, ''), usd)
         """)
+
+
+def _sanitize_filename(s: str) -> str:
+    """Replace characters that are unsafe in filenames."""
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in s)
+
+
+def save_pdf(pdf_bytes: bytes, verification_code: str, nf_date: str | None, usd: float) -> Path:
+    """Save PDF to pdfs/ and return the path. Filename is unique per (date, code, usd)."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    safe_code = _sanitize_filename(verification_code or "unknown")[:50]
+    safe_date = _sanitize_filename((nf_date or "").replace(" ", "_"))[:30] or "nodate"
+    base = f"nf_{safe_date}_{safe_code}_{usd:.2f}"
+    path = PDF_DIR / f"{base}.pdf"
+    counter = 0
+    while path.exists():
+        counter += 1
+        path = PDF_DIR / f"{base}_{counter}.pdf"
+    path.write_bytes(pdf_bytes)
+    return path
 
 
 def save_nf_entry(
@@ -59,6 +87,7 @@ def save_nf_entry(
     nf_date: str | None,
     verification_code: str | None,
     payment_via: str | None,
+    pdf_path: str | None = None,
 ) -> bool:
     """Insert one NF entry; skip if (nf_date, verification_code, usd) already exists. Returns True if inserted."""
     with sqlite3.connect(DB_PATH) as conn:
@@ -66,8 +95,8 @@ def save_nf_entry(
             """
             INSERT OR IGNORE INTO nf_entries (
                 company, usd, rate, spread, brl_no_spread, brl_with_spread,
-                nf_date, verification_code, payment_via, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                nf_date, verification_code, payment_via, pdf_path, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 company,
@@ -79,6 +108,7 @@ def save_nf_entry(
                 nf_date,
                 verification_code,
                 payment_via,
+                pdf_path,
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
@@ -164,6 +194,10 @@ if uploaded is not None:
 
                         st.divider()
                         if st.button("Aceitar e salvar"):
+                            pdf_path_obj = save_pdf(
+                                pdf_bytes, verification_code, nf_date, parsed.usd
+                            )
+                            pdf_path_str = str(pdf_path_obj)
                             inserted = save_nf_entry(
                                 company=parsed.company,
                                 usd=parsed.usd,
@@ -174,10 +208,12 @@ if uploaded is not None:
                                 nf_date=nf_date,
                                 verification_code=verification_code,
                                 payment_via=payment_via,
+                                pdf_path=pdf_path_str,
                             )
                             if inserted:
-                                st.success("Dados salvos.")
+                                st.success("Dados e PDF salvos.")
                             else:
+                                pdf_path_obj.unlink(missing_ok=True)  # remove orphan PDF
                                 st.info("Estes dados já foram salvos anteriormente.")
 
         except Exception as e:
