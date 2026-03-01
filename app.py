@@ -5,12 +5,9 @@ import streamlit as st
 from nf_parser import (
     compute_brl,
     extract_text_from_pdf,
-    find_brl_no_spread,
-    find_valor_liquido,
     get_description_block,
     get_verification_code,
     parse_description_block,
-    validate,
 )
 
 st.set_page_config(page_title="Nota Fiscal Tracker", layout="centered")
@@ -43,10 +40,6 @@ if uploaded is not None:
                         )
                     else:
                         brl = compute_brl(parsed.usd, parsed.rate, parsed.spread)
-                        brl_no_spread_from_pdf = find_brl_no_spread(full_text)
-                        brl_no_spread = brl_no_spread_from_pdf if brl_no_spread_from_pdf is not None else brl.brl_no_spread
-                        valor_liquido = find_valor_liquido(full_text)
-                        validation = validate(brl.brl_with_spread, valor_liquido)
 
                         st.subheader("Dados extraídos")
                         verification_code = get_verification_code(full_text)
@@ -64,26 +57,11 @@ if uploaded is not None:
                             st.metric("Spread", spread_label)
 
                         st.subheader("Valores em BRL")
-                        brl_no_spread_label = "BRL sem spread (do PDF)" if brl_no_spread_from_pdf is not None else "BRL sem spread"
-                        st.metric(brl_no_spread_label, f"R$ {brl_no_spread:,.2f}")
-                        st.metric("BRL com spread", f"R$ {brl.brl_with_spread:,.2f}")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("BRL sem spread", f"R$ {brl.brl_no_spread:,.2f}")
+                        with col2:
+                            st.metric("BRL com spread", f"R$ {brl.brl_with_spread:,.2f}")
 
-                        if valor_liquido is not None:
-                            st.metric(
-                                "Valor Líquido da NFSe Campinas (R$)",
-                                f"R$ {valor_liquido:,.2f}",
-                            )
-
-                        st.subheader("Conferência")
-                        if validation.match:
-                            st.success(validation.message)
-                        else:
-                            st.warning(validation.message)
-                            if validation.difference is not None:
-                                st.caption(
-                                    f"Computed: R$ {validation.computed_brl:,.2f} | "
-                                    f"PDF: R$ {validation.valor_liquido:,.2f} | "
-                                    f"Diferença: R$ {validation.difference:,.2f}"
-                                )
         except Exception as e:
             st.error(f"Erro ao processar o PDF: {e}")

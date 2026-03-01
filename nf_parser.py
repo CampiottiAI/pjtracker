@@ -16,13 +16,6 @@ END_MARKER = "TRIBUTAÇÃO MUNICIPAL"
 CODIGO_VERIFICACAO_LABEL = "Código de Verificação"
 RETENCOES_MARKER = "RETENÇÕES"
 VALOR_LIQUIDO_LABEL = "Valor Líquido da NFSe Campinas (R$)"
-# Labels that may appear in the PDF for the BRL amount at full rate (before spread)
-VALOR_BRL_SEM_SPREAD_LABELS = (
-    "Valor em Reais (R$)",
-    "Valor em Reais",
-    "Valor em R$",
-    "Valor (BRL)",
-)
 DEFAULT_SPREAD = 3.0
 DEFAULT_TOLERANCE_BRL = 0.01
 DEFAULT_TOLERANCE_PERCENT = 0.001
@@ -45,17 +38,6 @@ class BRLResult:
 
     brl_no_spread: float
     brl_with_spread: float
-
-
-@dataclass
-class ValidationResult:
-    """Result of comparing computed BRL to Valor Líquido."""
-
-    match: bool
-    computed_brl: float
-    valor_liquido: float | None
-    difference: float | None
-    message: str
 
 
 def _normalize_br_number(s: str) -> float:
@@ -215,78 +197,3 @@ def compute_brl(usd: float, rate: float, spread: float) -> BRLResult:
     effective_rate = rate * (1 - spread / 1000)  # spread 3 → 0.3% off the rate
     brl_with_spread = round(usd * effective_rate, 2)  # smaller: rate after spread deduction
     return BRLResult(brl_no_spread=brl_no_spread, brl_with_spread=brl_with_spread)
-
-
-def find_brl_no_spread(full_text: str) -> float | None:
-    """Find the value without spread (BRL at full rate) in the PDF text.
-    Tries common labels; returns the first numeric value found after any of them."""
-    if not full_text:
-        return None
-    for label in VALOR_BRL_SEM_SPREAD_LABELS:
-        if label not in full_text:
-            continue
-        start = 0
-        while True:
-            idx = full_text.find(label, start)
-            if idx == -1:
-                break
-            after = full_text[idx + len(label) : idx + len(label) + 50]
-            num_match = re.search(r"[\s:]*([\d.,\s]+)", after)
-            if num_match:
-                try:
-                    return _normalize_br_number(num_match.group(1))
-                except ValueError:
-                    pass
-            start = idx + 1
-    return None
-
-
-def find_valor_liquido(full_text: str) -> float | None:
-    """Find the last occurrence of 'Valor Líquido da NFSe Campinas (R$)' and return the numeric value."""
-    if not full_text or VALOR_LIQUIDO_LABEL not in full_text:
-        return None
-    # Find all occurrences; we want the last one
-    start = 0
-    last_value: float | None = None
-    while True:
-        idx = full_text.find(VALOR_LIQUIDO_LABEL, start)
-        if idx == -1:
-            break
-        after_label = full_text[idx + len(VALOR_LIQUIDO_LABEL) : idx + len(VALOR_LIQUIDO_LABEL) + 50]
-        # Match number: digits, optional . or , (Brazilian or US)
-        num_match = re.search(r"[\s:]*([\d.,\s]+)", after_label)
-        if num_match:
-            try:
-                last_value = _normalize_br_number(num_match.group(1))
-            except ValueError:
-                pass
-        start = idx + 1
-    return last_value
-
-
-def validate(
-    computed_brl: float,
-    valor_liquido: float | None,
-    tolerance_brl: float = DEFAULT_TOLERANCE_BRL,
-    tolerance_percent: float = DEFAULT_TOLERANCE_PERCENT,
-) -> ValidationResult:
-    """Compare computed BRL (with spread) to Valor Líquido from PDF."""
-    if valor_liquido is None:
-        return ValidationResult(
-            match=False,
-            computed_brl=computed_brl,
-            valor_liquido=None,
-            difference=None,
-            message="Valor Líquido não encontrado no PDF.",
-        )
-    diff = abs(computed_brl - valor_liquido)
-    abs_ok = diff <= tolerance_brl
-    rel_ok = (computed_brl != 0) and (diff / computed_brl <= tolerance_percent)
-    match = abs_ok or rel_ok
-    return ValidationResult(
-        match=match,
-        computed_brl=computed_brl,
-        valor_liquido=valor_liquido,
-        difference=round(diff, 2),
-        message="Valores conferem." if match else f"Diferença: R$ {diff:.2f}",
-    )
