@@ -11,13 +11,26 @@ init_db()
 
 st.title("Histórico de Notas Fiscais")
 
-date_from = st.date_input("De", value=date.today() - timedelta(days=30), format="DD/MM/YYYY")
-date_to = st.date_input("Até", value=date.today(), format="DD/MM/YYYY")
+if "hist_applied_date_from" not in st.session_state:
+    st.session_state.hist_applied_date_from = date.today() - timedelta(days=30)
+if "hist_applied_date_to" not in st.session_state:
+    st.session_state.hist_applied_date_to = date.today()
+
+date_from = st.date_input("De", value=st.session_state.hist_applied_date_from, format="DD/MM/YYYY")
+date_to = st.date_input("Até", value=st.session_state.hist_applied_date_to, format="DD/MM/YYYY")
 
 if date_from > date_to:
     st.warning("A data 'De' deve ser anterior ou igual à data 'Até'.")
-    date_from, date_to = date_to, date_from
 
+if st.button("Aplicar filtro"):
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+    st.session_state.hist_applied_date_from = date_from
+    st.session_state.hist_applied_date_to = date_to
+    st.rerun()
+
+date_from = st.session_state.hist_applied_date_from
+date_to = st.session_state.hist_applied_date_to
 entries = get_nf_entries(date_from=date_from, date_to=date_to)
 
 if not entries:
