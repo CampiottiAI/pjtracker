@@ -116,19 +116,21 @@ if uploaded is not None:
                             "<strong>Dados extraídos</strong></div>",
                             unsafe_allow_html=True,
                         )
-                        verification_code = get_verification_code(full_text)
+                        verification_code = get_verification_code(full_text) or "-"
                         nf_date = get_date_from_pdf(full_text)
+
+                        date_part, time_part = "-", "-"
+                        if nf_date:
+                            date_part, time_part = nf_date.split(" ", 1)
+                          
                         col1, col2 = st.columns(2)
                         with col1:
                             st.metric("Empresa", parsed.company or "—")
+                            st.metric("Data", date_part)
                             st.metric("Valor em USD", f"${parsed.usd:,.2f}")
-                            if nf_date:
-                                date_part, time_part = nf_date.split(" ", 1)
-                                st.metric("Data", date_part)
-                                st.metric("Hora", time_part)
-                            if verification_code:
-                                st.metric("Código de Verificação", verification_code)
                         with col2:
+                            st.metric("Código de Verificação", verification_code)
+                            st.metric("Hora", time_part)
                             st.metric("Cotação (BRL)", f"{parsed.rate:.4f}")
                             st.metric("Spread", f"{parsed.spread}%")
 
