@@ -76,6 +76,18 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         return ""
 
 
+# Date format in NFSe PDF: DD/MM/YYYY HH:MM:SS
+DATE_PATTERN = re.compile(r"\b(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2})\b")
+
+
+def get_date_from_pdf(full_text: str) -> str | None:
+    """Return the first date/time string in format DD/MM/YYYY HH:MM:SS found in the PDF text."""
+    if not full_text:
+        return None
+    match = DATE_PATTERN.search(full_text)
+    return match.group(1) if match else None
+
+
 def get_verification_code(full_text: str) -> str | None:
     """Return the verification code: the line immediately after 'Código de Verificação'."""
     if not full_text or CODIGO_VERIFICACAO_LABEL not in full_text:

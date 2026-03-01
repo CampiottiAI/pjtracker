@@ -5,6 +5,7 @@ import streamlit as st
 from nf_parser import (
     compute_brl,
     extract_text_from_pdf,
+    get_date_from_pdf,
     get_description_block,
     get_verification_code,
     parse_description_block,
@@ -43,10 +44,13 @@ if uploaded is not None:
 
                         st.subheader("Dados extraídos")
                         verification_code = get_verification_code(full_text)
+                        nf_date = get_date_from_pdf(full_text)
                         col1, col2 = st.columns(2)
                         with col1:
                             st.metric("Empresa", parsed.company or "—")
                             st.metric("Valor em USD", f"${parsed.usd:,.2f}")
+                            if nf_date:
+                                st.metric("Data/Hora", nf_date)
                             if verification_code:
                                 st.metric("Código de Verificação", verification_code)
                         with col2:
