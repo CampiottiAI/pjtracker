@@ -11,6 +11,7 @@ from nf_parser import (
     extract_text_from_pdf,
     get_date_from_pdf,
     get_description_block,
+    get_payment_via,
     get_verification_code,
     parse_description_block,
 )
@@ -32,9 +33,15 @@ def init_db() -> None:
                 brl_with_spread REAL NOT NULL,
                 nf_date TEXT,
                 verification_code TEXT,
+                payment_via TEXT,
                 created_at TEXT NOT NULL
             )
         """)
+        # Migration: add payment_via if table existed without it
+        try:
+            conn.execute("ALTER TABLE nf_entries ADD COLUMN payment_via TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         # Uniqueness: one row per NF (NULLs normalized to '' for index)
         conn.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_nf_entries_unique
@@ -51,6 +58,7 @@ def save_nf_entry(
     brl_with_spread: float,
     nf_date: str | None,
     verification_code: str | None,
+    payment_via: str | None,
 ) -> bool:
     """Insert one NF entry; skip if (nf_date, verification_code, usd) already exists. Returns True if inserted."""
     with sqlite3.connect(DB_PATH) as conn:
@@ -58,8 +66,8 @@ def save_nf_entry(
             """
             INSERT OR IGNORE INTO nf_entries (
                 company, usd, rate, spread, brl_no_spread, brl_with_spread,
-                nf_date, verification_code, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                nf_date, verification_code, payment_via, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 company,
@@ -70,6 +78,7 @@ def save_nf_entry(
                 brl_with_spread,
                 nf_date,
                 verification_code,
+                payment_via,
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
@@ -118,7 +127,7 @@ if uploaded is not None:
                         )
                         verification_code = get_verification_code(full_text) or "-"
                         nf_date = get_date_from_pdf(full_text)
-
+                        payment_via = get_payment_via(full_text)
                         date_part, time_part = "-", "-"
                         if nf_date:
                             date_part, time_part = nf_date.split(" ", 1)
@@ -127,11 +136,12 @@ if uploaded is not None:
                         with col1:
                             st.metric("Empresa", parsed.company or "—")
                             st.metric("Data", date_part)
-                            st.metric("Valor em USD", f"${parsed.usd:,.2f}")
+                            st.metric("Pagamento via", f"{payment_via}")
+                            st.metric("Cotação (BRL)", f"{parsed.rate:.4f}")
                         with col2:
                             st.metric("Código de Verificação", verification_code)
                             st.metric("Hora", time_part)
-                            st.metric("Cotação (BRL)", f"{parsed.rate:.4f}")
+                            st.metric("Valor em USD", f"${parsed.usd:,.2f}")
                             st.metric("Spread", f"{parsed.spread}%")
 
                         st.divider()
@@ -163,6 +173,7 @@ if uploaded is not None:
                                 brl_with_spread=brl.brl_with_spread,
                                 nf_date=nf_date,
                                 verification_code=verification_code,
+                                payment_via=payment_via,
                             )
                             if inserted:
                                 st.success("Dados salvos.")

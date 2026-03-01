@@ -88,6 +88,27 @@ def get_date_from_pdf(full_text: str) -> str | None:
     return match.group(1) if match else None
 
 
+PAYMENT_VIA_PATTERN = re.compile(
+    r"Pagamento via\s+(\w+)",
+    re.IGNORECASE,
+)
+
+
+def get_payment_via(full_text: str) -> str | None:
+    """Search for 'Pagamento via X' in the PDF text; return 'Higlobe' or 'Wise' if found, else None."""
+    if not full_text:
+        return None
+    match = PAYMENT_VIA_PATTERN.search(full_text)
+    if not match:
+        return None
+    word = match.group(1).strip()
+    if word.lower() == "higlobe":
+        return "Higlobe"
+    if word.lower() == "wise":
+        return "Wise"
+    return None
+
+
 def get_verification_code(full_text: str) -> str | None:
     """Return the verification code: the line immediately after 'Código de Verificação'."""
     if not full_text or CODIGO_VERIFICACAO_LABEL not in full_text:
