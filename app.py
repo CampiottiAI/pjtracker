@@ -5,6 +5,7 @@ import streamlit as st
 from nf_parser import (
     compute_brl,
     extract_text_from_pdf,
+    find_brl_no_spread,
     find_valor_liquido,
     get_description_block,
     get_verification_code,
@@ -42,6 +43,8 @@ if uploaded is not None:
                         )
                     else:
                         brl = compute_brl(parsed.usd, parsed.rate, parsed.spread)
+                        brl_no_spread_from_pdf = find_brl_no_spread(full_text)
+                        brl_no_spread = brl_no_spread_from_pdf if brl_no_spread_from_pdf is not None else brl.brl_no_spread
                         valor_liquido = find_valor_liquido(full_text)
                         validation = validate(brl.brl_with_spread, valor_liquido)
 
@@ -61,7 +64,8 @@ if uploaded is not None:
                             st.metric("Spread", spread_label)
 
                         st.subheader("Valores em BRL")
-                        st.metric("BRL sem spread", f"R$ {brl.brl_no_spread:,.2f}")
+                        brl_no_spread_label = "BRL sem spread (do PDF)" if brl_no_spread_from_pdf is not None else "BRL sem spread"
+                        st.metric(brl_no_spread_label, f"R$ {brl_no_spread:,.2f}")
                         st.metric("BRL com spread", f"R$ {brl.brl_with_spread:,.2f}")
 
                         if valor_liquido is not None:

@@ -16,6 +16,13 @@ END_MARKER = "TRIBUTAÇÃO MUNICIPAL"
 CODIGO_VERIFICACAO_LABEL = "Código de Verificação"
 RETENCOES_MARKER = "RETENÇÕES"
 VALOR_LIQUIDO_LABEL = "Valor Líquido da NFSe Campinas (R$)"
+# Labels that may appear in the PDF for the BRL amount at full rate (before spread)
+VALOR_BRL_SEM_SPREAD_LABELS = (
+    "Valor em Reais (R$)",
+    "Valor em Reais",
+    "Valor em R$",
+    "Valor (BRL)",
+)
 DEFAULT_SPREAD = 3.0
 DEFAULT_TOLERANCE_BRL = 0.01
 DEFAULT_TOLERANCE_PERCENT = 0.001
@@ -201,10 +208,37 @@ def parse_description_block(block_text: str) -> ParsedFields:
 
 
 def compute_brl(usd: float, rate: float, spread: float) -> BRLResult:
-    """Compute BRL without and with spread. spread is in percent (e.g. 3 for 3%)."""
-    brl_no_spread = round(usd * rate, 2)
-    brl_with_spread = round(usd * rate * (1 + spread / 100), 2)
+    """Compute BRL without and with spread.
+    Spread is applied to the rate: e.g. spread 3 means 0.3% deducted from the base rate
+    (R$ 5.2011 - 0.30% = R$ 5.1854). So spread value is in tenths of percent."""
+    brl_no_spread = round(usd * rate, 2)  # highest: full rate (e.g. 5.2011)
+    effective_rate = rate * (1 - spread / 1000)  # spread 3 → 0.3% off the rate
+    brl_with_spread = round(usd * effective_rate, 2)  # smaller: rate after spread deduction
     return BRLResult(brl_no_spread=brl_no_spread, brl_with_spread=brl_with_spread)
+
+
+def find_brl_no_spread(full_text: str) -> float | None:
+    """Find the value without spread (BRL at full rate) in the PDF text.
+    Tries common labels; returns the first numeric value found after any of them."""
+    if not full_text:
+        return None
+    for label in VALOR_BRL_SEM_SPREAD_LABELS:
+        if label not in full_text:
+            continue
+        start = 0
+        while True:
+            idx = full_text.find(label, start)
+            if idx == -1:
+                break
+            after = full_text[idx + len(label) : idx + len(label) + 50]
+            num_match = re.search(r"[\s:]*([\d.,\s]+)", after)
+            if num_match:
+                try:
+                    return _normalize_br_number(num_match.group(1))
+                except ValueError:
+                    pass
+            start = idx + 1
+    return None
 
 
 def find_valor_liquido(full_text: str) -> float | None:
