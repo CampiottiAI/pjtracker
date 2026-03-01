@@ -115,7 +115,7 @@ def save_nf_entry(
         return cur.rowcount > 0
 
 
-def _parse_nf_date_to_date(nf_date: str | None) -> date | None:
+def parse_nf_date_to_date(nf_date: str | None) -> date | None:
     """Parse nf_date 'DD/MM/YYYY HH:MM:SS' to a date for filtering. Returns None if invalid or empty."""
     if not nf_date or not nf_date.strip():
         return None
@@ -143,7 +143,7 @@ def get_nf_entries(
 
     filtered = []
     for row in rows:
-        d = _parse_nf_date_to_date(row.get("nf_date"))
+        d = parse_nf_date_to_date(row.get("nf_date"))
         if d is None:
             continue
         if date_from is not None and d < date_from:
