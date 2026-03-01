@@ -6,7 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from nf_parser import (
+from src.nf_parser import (
     compute_brl,
     extract_text_from_pdf,
     get_date_from_pdf,

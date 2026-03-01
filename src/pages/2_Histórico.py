@@ -5,7 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from app import DB_PATH, get_nf_entries, init_db
+from src.app import DB_PATH, get_nf_entries, init_db
 
 init_db()
 
