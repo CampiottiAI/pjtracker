@@ -1,6 +1,7 @@
 """Home page – upload NF PDF, parse and save."""
 
 import base64
+import hashlib
 from pathlib import Path
 
 import streamlit as st
@@ -107,9 +108,13 @@ if uploaded is not None:
                             st.session_state["pending_nf_images"] = []
                             st.session_state["pending_nf_images_pdf_key"] = pdf_key
                             st.session_state["pending_nf_images_added_uploads"] = set()
+                            st.session_state["pending_nf_images_added_paste_hashes"] = set()
                         pending = st.session_state.setdefault("pending_nf_images", [])
                         added_uploads = st.session_state.setdefault(
                             "pending_nf_images_added_uploads", set()
+                        )
+                        added_paste_hashes = st.session_state.setdefault(
+                            "pending_nf_images_added_paste_hashes", set()
                         )
 
                         st.divider()
@@ -154,7 +159,10 @@ if uploaded is not None:
                                         encoded = image_data
                                         mime = "png"
                                     binary_data = base64.b64decode(encoded)
-                                    pending.append({"bytes": binary_data, "mime": mime})
+                                    paste_hash = hashlib.sha256(binary_data).hexdigest()
+                                    if paste_hash not in added_paste_hashes:
+                                        pending.append({"bytes": binary_data, "mime": mime})
+                                        added_paste_hashes.add(paste_hash)
                                 except Exception:
                                     pass  # ignore malformed paste
                         if pending:
@@ -196,6 +204,7 @@ if uploaded is not None:
                             st.session_state["last_saved_nf_id"] = nf_id
                             st.session_state["pending_nf_images"] = []
                             st.session_state["pending_nf_images_added_uploads"] = set()
+                            st.session_state["pending_nf_images_added_paste_hashes"] = set()
                             st.rerun()
 
         except Exception as e:
