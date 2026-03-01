@@ -111,7 +111,7 @@ if uploaded is not None:
 
                         st.divider()
                         st.markdown(
-                            '<div style="background: #e8f4f8; padding: 0.5rem 1rem; border-radius: 8px; '
+                            '<div style="background: #e8f4f8; color: black; padding: 0.5rem 1rem; border-radius: 8px; '
                             'border-left: 4px solid #1f77b4; margin-bottom: 1rem;">'
                             "<strong>Dados extraídos</strong></div>",
                             unsafe_allow_html=True,
@@ -134,7 +134,7 @@ if uploaded is not None:
 
                         st.divider()
                         st.markdown(
-                            '<div style="background: #e8f8e8; padding: 0.5rem 1rem; border-radius: 8px; '
+                            '<div style="background: #e8f8e8; color: black; padding: 0.5rem 1rem; border-radius: 8px; '
                             'border-left: 4px solid #2ca02c; margin-bottom: 1rem;">'
                             "<strong>Valores em BRL</strong></div>",
                             unsafe_allow_html=True,
