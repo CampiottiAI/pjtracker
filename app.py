@@ -7,6 +7,7 @@ from nf_parser import (
     extract_text_from_pdf,
     find_valor_liquido,
     get_description_block,
+    get_verification_code,
     parse_description_block,
     validate,
 )
@@ -45,10 +46,13 @@ if uploaded is not None:
                         validation = validate(brl.brl_with_spread, valor_liquido)
 
                         st.subheader("Dados extraídos")
+                        verification_code = get_verification_code(full_text)
                         col1, col2 = st.columns(2)
                         with col1:
                             st.metric("Empresa", parsed.company or "—")
                             st.metric("Valor em USD", f"${parsed.usd:,.2f}")
+                            if verification_code:
+                                st.metric("Código de Verificação", verification_code)
                         with col2:
                             st.metric("Cotação (BRL)", f"{parsed.rate:.4f}")
                             spread_label = f"{parsed.spread}%"

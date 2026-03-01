@@ -12,6 +12,9 @@ START_MARKER = (
     "PRESTADO, ESPECIFICANDO A QUANTIDADE E O PREÇO UNITÁRIO)"
 )
 END_MARKER = "TRIBUTAÇÃO MUNICIPAL"
+# Anchors for PDF-extracted text: "Código de Verificação" is always present, next line is the code (varies), then description until "RETENÇÕES"
+CODIGO_VERIFICACAO_LABEL = "Código de Verificação"
+RETENCOES_MARKER = "RETENÇÕES"
 VALOR_LIQUIDO_LABEL = "Valor Líquido da NFSe Campinas (R$)"
 DEFAULT_SPREAD = 3.0
 DEFAULT_TOLERANCE_BRL = 0.01
@@ -84,8 +87,45 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         return ""
 
 
+def get_verification_code(full_text: str) -> str | None:
+    """Return the verification code: the line immediately after 'Código de Verificação'."""
+    if not full_text or CODIGO_VERIFICACAO_LABEL not in full_text:
+        return None
+    start = full_text.index(CODIGO_VERIFICACAO_LABEL) + len(CODIGO_VERIFICACAO_LABEL)
+    rest = full_text[start:].lstrip()
+    if not rest:
+        return None
+    first_line = rest.split("\n", 1)[0].strip()
+    return first_line if first_line else None
+
+
+def _get_description_block_from_verification_section(full_text: str) -> str | None:
+    """Return description text between 'Código de Verificação' and 'RETENÇÕES'.
+    The line right after 'Código de Verificação' is the verification code (skipped);
+    the following lines up to 'RETENÇÕES' form the description block.
+    """
+    if not full_text or CODIGO_VERIFICACAO_LABEL not in full_text:
+        return None
+    start_idx = full_text.index(CODIGO_VERIFICACAO_LABEL) + len(CODIGO_VERIFICACAO_LABEL)
+    if RETENCOES_MARKER not in full_text[start_idx:]:
+        return None
+    end_idx = full_text.index(RETENCOES_MARKER, start_idx)
+    section = full_text[start_idx:end_idx].strip()
+    if not section:
+        return None
+    lines = [line.strip() for line in section.splitlines() if line.strip()]
+    if len(lines) < 2:
+        return None
+    # First line is the verification code; rest is description + payment line
+    return "\n".join(lines[1:])
+
+
 def get_description_block(full_text: str) -> str | None:
-    """Return text between START_MARKER and END_MARKER, or None if markers not found."""
+    """Return description block: prefer section between 'Código de Verificação' and 'RETENÇÕES'
+    (PDF-extracted order); fall back to text between START_MARKER and END_MARKER."""
+    block = _get_description_block_from_verification_section(full_text)
+    if block:
+        return block
     if not full_text or START_MARKER not in full_text:
         return None
     start_idx = full_text.index(START_MARKER) + len(START_MARKER)
