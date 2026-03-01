@@ -126,7 +126,6 @@ if nf_id is not None:
             img_bytes = p.read_bytes()
             if img_bytes:
                 displayable.append((img, p, img_bytes))
-    print(displayable)
     if displayable:
         st.divider()
         st.markdown(

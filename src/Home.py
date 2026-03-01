@@ -101,6 +101,65 @@ if uploaded is not None:
                                 delta=f"- R$ {delta_brl:,.2f}",
                             )
 
+                        # Pending images: clear when PDF context changes
+                        pdf_key = uploaded.name or str(id(uploaded))
+                        if st.session_state.get("pending_nf_images_pdf_key") != pdf_key:
+                            st.session_state["pending_nf_images"] = []
+                            st.session_state["pending_nf_images_pdf_key"] = pdf_key
+                            st.session_state["pending_nf_images_added_uploads"] = set()
+                        pending = st.session_state.setdefault("pending_nf_images", [])
+                        added_uploads = st.session_state.setdefault(
+                            "pending_nf_images_added_uploads", set()
+                        )
+
+                        st.divider()
+                        st.markdown(
+                            '<div style="background: #f0e8f8; color: black; padding: 0.5rem 1rem; border-radius: 8px; '
+                            'border-left: 4px solid #7b2cbf; margin-bottom: 1rem;">'
+                            "<strong>Adicionar imagem(ns) antes de salvar</strong> — envie arquivo(s) ou cole da área de transferência.</div>",
+                            unsafe_allow_html=True,
+                        )
+                        img_col1, img_col2 = st.columns(2)
+                        with img_col1:
+                            uploaded_imgs = st.file_uploader(
+                                "Enviar imagem(ns)",
+                                type=["png", "jpg", "jpeg", "gif", "webp"],
+                                accept_multiple_files=True,
+                                key="pending_image_upload",
+                            )
+                            if uploaded_imgs:
+                                for f in uploaded_imgs:
+                                    key = (f.name, f.size)
+                                    if key not in added_uploads:
+                                        data = f.read()
+                                        ext = (Path(f.name).suffix or ".png").lstrip(".").lower()
+                                        mime = ext if ext in ("png", "jpg", "jpeg", "gif", "webp") else "png"
+                                        if mime == "jpg":
+                                            mime = "jpeg"
+                                        pending.append({"bytes": data, "mime": mime})
+                                        added_uploads.add(key)
+                        with img_col2:
+                            image_data = paste(
+                                label="Colar imagem da área de transferência",
+                                key="paste_image_pending",
+                            )
+                            if image_data is not None:
+                                try:
+                                    if "," in image_data:
+                                        header, encoded = image_data.split(",", 1)
+                                        mime = "png"
+                                        if "image/" in header:
+                                            mime = header.split("image/", 1)[-1].split(";")[0].strip()
+                                    else:
+                                        encoded = image_data
+                                        mime = "png"
+                                    binary_data = base64.b64decode(encoded)
+                                    pending.append({"bytes": binary_data, "mime": mime})
+                                except Exception:
+                                    pass  # ignore malformed paste
+                        if pending:
+                            st.caption(f"{len(pending)} imagem(ns) anexada(s) — serão salvas com a NF.")
+
                         st.divider()
                         if st.button("Aceitar e salvar"):
                             pdf_path_obj = save_pdf(
@@ -124,40 +183,28 @@ if uploaded is not None:
                             else:
                                 pdf_path_obj.unlink(missing_ok=True)  # remove orphan PDF
                                 st.info("Estes dados já foram salvos anteriormente.")
+                            project_root = Path(DB_PATH).resolve().parent
+                            for item in pending:
+                                try:
+                                    path_obj = save_image(
+                                        item["bytes"], nf_id, item["mime"]
+                                    )
+                                    rel_path = path_obj.relative_to(project_root)
+                                    save_nf_image(nf_id, str(rel_path))
+                                except Exception:
+                                    pass  # log and continue
                             st.session_state["last_saved_nf_id"] = nf_id
+                            st.session_state["pending_nf_images"] = []
+                            st.session_state["pending_nf_images_added_uploads"] = set()
+                            st.rerun()
 
         except Exception as e:
             st.error(f"Erro ao processar o PDF: {e}")
 
-# Adicionar imagem (clipboard) à NF salva
+# Sucesso ao salvar — mostrar mensagem e opção de adicionar outra NF
 if st.session_state.get("last_saved_nf_id"):
     st.divider()
-    st.markdown(
-        '<div style="background: #f0e8f8; color: black; padding: 0.5rem 1rem; border-radius: 8px; '
-        'border-left: 4px solid #7b2cbf; margin-bottom: 1rem;">'
-        "<strong>Adicionar imagem</strong> — cole uma imagem da área de transferência para anexar a esta NF.</div>",
-        unsafe_allow_html=True,
-    )
-    nf_id = st.session_state["last_saved_nf_id"]
-    image_data = paste(label="Colar imagem da área de transferência", key="paste_image")
-    if image_data is not None:
-        try:
-            if "," in image_data:
-                header, encoded = image_data.split(",", 1)
-                mime = "png"
-                if "image/" in header:
-                    mime = header.split("image/", 1)[-1].split(";")[0].strip()
-            else:
-                encoded = image_data
-                mime = "png"
-            binary_data = base64.b64decode(encoded)
-            project_root = Path(DB_PATH).resolve().parent
-            path_obj = save_image(binary_data, nf_id, mime)
-            rel_path = path_obj.relative_to(project_root)
-            save_nf_image(nf_id, str(rel_path))
-            st.success("Imagem anexada à NF.")
-        except Exception as e:
-            st.error(f"Erro ao salvar a imagem: {e}")
-    if st.button("Concluído — adicionar outra NF", key="done_add_nf"):
+    st.success("NF salva com sucesso.")
+    if st.button("Adicionar outra NF", key="done_add_nf"):
         del st.session_state["last_saved_nf_id"]
         st.rerun()
