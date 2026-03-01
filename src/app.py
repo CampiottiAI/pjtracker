@@ -16,8 +16,8 @@ from src.nf_parser import (
     parse_description_block,
 )
 
-DB_PATH = Path(__file__).resolve().parent / "pjtracker.db"
-PDF_DIR = Path(__file__).resolve().parent / "pdfs"
+DB_PATH = Path(__file__).resolve().parent.parent / "pjtracker.db"
+PDF_DIR = Path(__file__).resolve().parent.parent / "pdfs"
 
 
 def init_db() -> None:
