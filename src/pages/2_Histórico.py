@@ -5,7 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.app import DB_PATH, get_nf_entries, init_db
+from src.app import DB_PATH, get_nf_entries, get_nf_images, init_db
 
 init_db()
 
@@ -108,3 +108,35 @@ if pdf_path_raw:
         st.info("PDF não disponível para esta NF.")
 else:
     st.info("PDF não disponível para esta NF.")
+
+# Imagens anexadas — só mostrar a seção se houver pelo menos uma imagem exibível (evita caixa vermelha de erro)
+nf_id = row.get("id")
+if nf_id is not None:
+    images = get_nf_images(nf_id)
+    project_root = Path(DB_PATH).resolve().parent
+    displayable = []
+    for img in images:
+        path_raw = img.get("image_path")
+        if not path_raw:
+            continue
+        p = Path(path_raw)
+        if not p.is_absolute():
+            p = project_root / path_raw
+        if p.exists():
+            img_bytes = p.read_bytes()
+            if img_bytes:
+                displayable.append((img, p, img_bytes))
+    print(displayable)
+    if displayable:
+        st.divider()
+        st.markdown(
+            '<div style="background: #f0e8f8; color: black; padding: 0.5rem 1rem; border-radius: 8px; '
+            'border-left: 4px solid #7b2cbf; margin-bottom: 1rem;">'
+            "<strong>Imagens anexadas</strong></div>",
+            unsafe_allow_html=True,
+        )
+        for i, (img, p, img_bytes) in enumerate(displayable):
+            try:
+                st.image(img_bytes, caption=f"Anexo {i + 1}", use_container_width=True)
+            except Exception:
+                st.caption(f"Anexo {i + 1}: não foi possível exibir a imagem.")

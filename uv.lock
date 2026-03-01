@@ -413,6 +413,7 @@ source = { editable = "." }
 dependencies = [
     { name = "plotly" },
     { name = "pypdf" },
+    { name = "st-img-pastebutton" },
     { name = "streamlit" },
 ]
 
@@ -420,6 +421,7 @@ dependencies = [
 requires-dist = [
     { name = "plotly", specifier = ">=5.24.0" },
     { name = "pypdf", specifier = ">=6.7.4" },
+    { name = "st-img-pastebutton", specifier = ">=0.0.6" },
     { name = "streamlit", specifier = ">=1.54.0" },
 ]
 
@@ -640,6 +642,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/44/cd/a040c4b3119bbe532e5b0732286f805445375489fceaec1f48306068ee3b/smmap-5.0.2.tar.gz", hash = "sha256:26ea65a03958fa0c8a1c7e8c7a58fdc77221b8910f6be2131affade476898ad5", size = 22329, upload-time = "2025-01-02T07:14:40.909Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/be/d09147ad1ec7934636ad912901c5fd7667e1c858e19d355237db0d0cd5e4/smmap-5.0.2-py3-none-any.whl", hash = "sha256:b30115f0def7d7531d22a0fb6502488d879e75b260a9db4d0819cfb25403af5e", size = 24303, upload-time = "2025-01-02T07:14:38.724Z" },
+]
+
+[[package]]
+name = "st-img-pastebutton"
+version = "0.0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ab/97/51a3819e63e2d69d8f5951700190436996daacb10c7c51e73463de25d527/st_img_pastebutton-0.0.6.tar.gz", hash = "sha256:fbccd6b3bac0bece7101c0af9efe9359c9947f36be4c20b249bceabab704d1de", size = 424366, upload-time = "2024-08-12T07:03:36.285Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/d9/7060e6015326a1c42a8330396613d94ee99bfc23a548b9960966fa2ecd9d/st_img_pastebutton-0.0.6-py3-none-any.whl", hash = "sha256:77ebe9044fe499ac195d3e6baa98521ebb510ad5573c046247e05074b81acd2f", size = 824671, upload-time = "2024-08-12T07:03:33.744Z" },
 ]
 
 [[package]]

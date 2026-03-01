@@ -1,10 +1,17 @@
 """Home page – upload NF PDF, parse and save."""
 
+import base64
+from pathlib import Path
+
 import streamlit as st
+from st_img_pastebutton import paste
 
 from src.app import (
+    DB_PATH,
     init_db,
+    save_image,
     save_nf_entry,
+    save_nf_image,
     save_pdf,
 )
 from src.nf_parser import (
@@ -100,7 +107,7 @@ if uploaded is not None:
                                 pdf_bytes, verification_code, nf_date, parsed.usd
                             )
                             pdf_path_str = str(pdf_path_obj)
-                            inserted = save_nf_entry(
+                            inserted, nf_id = save_nf_entry(
                                 company=parsed.company,
                                 usd=parsed.usd,
                                 rate=parsed.rate,
@@ -117,6 +124,40 @@ if uploaded is not None:
                             else:
                                 pdf_path_obj.unlink(missing_ok=True)  # remove orphan PDF
                                 st.info("Estes dados já foram salvos anteriormente.")
+                            st.session_state["last_saved_nf_id"] = nf_id
 
         except Exception as e:
             st.error(f"Erro ao processar o PDF: {e}")
+
+# Adicionar imagem (clipboard) à NF salva
+if st.session_state.get("last_saved_nf_id"):
+    st.divider()
+    st.markdown(
+        '<div style="background: #f0e8f8; color: black; padding: 0.5rem 1rem; border-radius: 8px; '
+        'border-left: 4px solid #7b2cbf; margin-bottom: 1rem;">'
+        "<strong>Adicionar imagem</strong> — cole uma imagem da área de transferência para anexar a esta NF.</div>",
+        unsafe_allow_html=True,
+    )
+    nf_id = st.session_state["last_saved_nf_id"]
+    image_data = paste(label="Colar imagem da área de transferência", key="paste_image")
+    if image_data is not None:
+        try:
+            if "," in image_data:
+                header, encoded = image_data.split(",", 1)
+                mime = "png"
+                if "image/" in header:
+                    mime = header.split("image/", 1)[-1].split(";")[0].strip()
+            else:
+                encoded = image_data
+                mime = "png"
+            binary_data = base64.b64decode(encoded)
+            project_root = Path(DB_PATH).resolve().parent
+            path_obj = save_image(binary_data, nf_id, mime)
+            rel_path = path_obj.relative_to(project_root)
+            save_nf_image(nf_id, str(rel_path))
+            st.success("Imagem anexada à NF.")
+        except Exception as e:
+            st.error(f"Erro ao salvar a imagem: {e}")
+    if st.button("Concluído — adicionar outra NF", key="done_add_nf"):
+        del st.session_state["last_saved_nf_id"]
+        st.rerun()
