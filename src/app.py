@@ -1,5 +1,6 @@
 """Nota Fiscal Tracker – shared DB and helpers (Home and pages import from here)."""
 
+import hashlib
 import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -68,6 +69,15 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT
             )
+        """)
+        # Migration: add content_hash for duplicate detection (value + emission_date + deadline_date)
+        try:
+            conn.execute("ALTER TABLE boletos ADD COLUMN content_hash TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_boletos_content_hash
+            ON boletos (content_hash) WHERE content_hash IS NOT NULL
         """)
 
 
@@ -221,6 +231,21 @@ def get_nf_entries(
 # --- Boletos ---
 
 
+def compute_boleto_content_hash(
+    value: float | None,
+    emission_date: str | None,
+    deadline_date: str | None,
+) -> str | None:
+    """Deterministic hash from value and dates. Returns None if all three are missing."""
+    val_str = f"{value:.2f}" if value is not None else "0"
+    em = (emission_date or "").strip()
+    dl = (deadline_date or "").strip()
+    payload = f"{val_str}|{em}|{dl}"
+    if payload == "0||":
+        return None
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def save_boleto_pdf(pdf_bytes: bytes, emission_date: str | None = None, value: float | None = None) -> Path:
     """Save boleto PDF to pdfs/ with unique name. Returns path (relative to project root or absolute)."""
     PDF_DIR.mkdir(parents=True, exist_ok=True)
@@ -262,20 +287,33 @@ def save_boleto_entry(
     deadline_date: str | None = None,
     receipt_path: str | None = None,
     receipt_date: str | None = None,
-) -> int:
-    """Insert one boleto row. Returns id."""
+) -> tuple[bool, int | None]:
+    """Insert one boleto row. Returns (inserted, id): (True, id) on success, (False, None) if duplicate (same value + dates)."""
+    content_hash = compute_boleto_content_hash(value, emission_date, deadline_date)
     now = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO boletos (
+                    pdf_path, receipt_path, value, emission_date, deadline_date,
+                    receipt_date, created_at, updated_at, content_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (pdf_path, receipt_path, value, emission_date, deadline_date, receipt_date, now, now, content_hash),
+            )
+            return (True, cur.lastrowid)
+    except sqlite3.IntegrityError:
+        return (False, None)
+
+
+def boleto_exists_with_hash(content_hash: str | None) -> bool:
+    """Return True if a boleto with this content_hash already exists."""
+    if not content_hash:
+        return False
     with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.execute(
-            """
-            INSERT INTO boletos (
-                pdf_path, receipt_path, value, emission_date, deadline_date,
-                receipt_date, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (pdf_path, receipt_path, value, emission_date, deadline_date, receipt_date, now, now),
-        )
-        return cur.lastrowid
+        cur = conn.execute("SELECT 1 FROM boletos WHERE content_hash = ? LIMIT 1", (content_hash,))
+        return cur.fetchone() is not None
 
 
 def get_boletos() -> list[dict]:
@@ -303,12 +341,13 @@ def update_boleto_pdf(
     value: float | None,
     emission_date: str | None,
     deadline_date: str | None,
-) -> None:
-    """Replace boleto PDF and update parsed fields. Keeps receipt_path/receipt_date unchanged."""
+) -> bool:
+    """Replace boleto PDF and update parsed fields. Keeps receipt_path/receipt_date unchanged.
+    Returns True on success, False if another boleto already has the same (value, emission_date, deadline_date)."""
     PDF_DIR.mkdir(parents=True, exist_ok=True)
     row = get_boleto_by_id(boleto_id)
     if not row:
-        return
+        return False
     old_path = row.get("pdf_path")
     if old_path:
         full_old = Path(DB_PATH).resolve().parent / old_path if not Path(old_path).is_absolute() else Path(old_path)
@@ -316,15 +355,20 @@ def update_boleto_pdf(
             full_old.unlink(missing_ok=True)
     new_path = save_boleto_pdf(pdf_bytes, emission_date, value)
     path_str = str(new_path)
+    content_hash = compute_boleto_content_hash(value, emission_date, deadline_date)
     now = datetime.now(timezone.utc).isoformat()
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            """
-            UPDATE boletos SET pdf_path = ?, value = ?, emission_date = ?, deadline_date = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (path_str, value, emission_date, deadline_date, now, boleto_id),
-        )
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                """
+                UPDATE boletos SET pdf_path = ?, value = ?, emission_date = ?, deadline_date = ?, content_hash = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (path_str, value, emission_date, deadline_date, content_hash, now, boleto_id),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False
 
 
 def update_boleto_receipt(boleto_id: int, receipt_path: str, receipt_date: str | None) -> None:
@@ -335,3 +379,23 @@ def update_boleto_receipt(boleto_id: int, receipt_path: str, receipt_date: str |
             "UPDATE boletos SET receipt_path = ?, receipt_date = ?, updated_at = ? WHERE id = ?",
             (receipt_path, receipt_date, now, boleto_id),
         )
+
+
+def delete_boleto(boleto_id: int) -> bool:
+    """Delete boleto row and its PDF and receipt files. Returns True if deleted, False if not found."""
+    row = get_boleto_by_id(boleto_id)
+    if not row:
+        return False
+    project_root = Path(DB_PATH).resolve().parent
+    for path_key in ("pdf_path", "receipt_path"):
+        raw = row.get(path_key)
+        if not raw or (isinstance(raw, str) and not raw.strip()):
+            continue
+        p = Path(raw)
+        if not p.is_absolute():
+            p = project_root / raw
+        if p.exists():
+            p.unlink(missing_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM boletos WHERE id = ?", (boleto_id,))
+    return True

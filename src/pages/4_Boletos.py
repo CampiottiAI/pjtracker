@@ -8,6 +8,7 @@ from st_img_pastebutton import paste
 
 from src.app import (
     DB_PATH,
+    delete_boleto,
     get_boletos,
     init_db,
     save_boleto_entry,
@@ -153,7 +154,7 @@ if mode == "Adicionar boleto":
                         emission_date=parsed.emission_date,
                         value=parsed.value,
                     )
-                    boleto_id = save_boleto_entry(
+                    inserted, boleto_id = save_boleto_entry(
                         pdf_path=str(pdf_path),
                         value=parsed.value,
                         emission_date=parsed.emission_date,
@@ -161,19 +162,30 @@ if mode == "Adicionar boleto":
                         receipt_path=None,
                         receipt_date=None,
                     )
-                    if pending_receipt:
-                        receipt_path = save_boleto_receipt(
-                            boleto_id,
-                            pending_receipt["bytes"],
-                            pending_receipt["mime"],
+                    if not inserted:
+                        # Remove the PDF we just saved to avoid orphan file
+                        p = Path(pdf_path)
+                        if not p.is_absolute():
+                            p = project_root / pdf_path
+                        if p.exists():
+                            p.unlink(missing_ok=True)
+                        st.error(
+                            "Já existe um boleto com esses dados (valor e datas)."
                         )
-                        update_boleto_receipt(
-                            boleto_id, str(receipt_path), receipt_date_str
-                        )
-                    st.session_state["pending_boleto_receipt"] = None
-                    st.session_state["pending_boleto_receipt_date"] = None
-                    st.success("Boleto salvo.")
-                    st.rerun()
+                    else:
+                        if pending_receipt and boleto_id:
+                            receipt_path = save_boleto_receipt(
+                                boleto_id,
+                                pending_receipt["bytes"],
+                                pending_receipt["mime"],
+                            )
+                            update_boleto_receipt(
+                                boleto_id, str(receipt_path), receipt_date_str
+                            )
+                        st.session_state["pending_boleto_receipt"] = None
+                        st.session_state["pending_boleto_receipt_date"] = None
+                        st.success("Boleto salvo.")
+                        st.rerun()
             except Exception as e:
                 st.error(f"Erro ao processar o PDF: {e}")
 
@@ -200,6 +212,12 @@ else:
     boleto_id = row["id"]
 
     st.divider()
+    if st.button("Excluir boleto", type="secondary", key="delete_boleto"):
+        if delete_boleto(boleto_id):
+            st.success("Boleto excluído.")
+            st.rerun()
+        else:
+            st.error("Boleto não encontrado.")
     if row.get("receipt_path") is None or (
         isinstance(row.get("receipt_path"), str)
         and row.get("receipt_path").strip() == ""
@@ -270,15 +288,18 @@ else:
                     f"Emissão {parsed.emission_date or '—'}; Vencimento {parsed.deadline_date or '—'}"
                 )
                 if st.button("Aplicar e salvar novo PDF", key="apply_update_pdf"):
-                    update_boleto_pdf(
+                    ok = update_boleto_pdf(
                         boleto_id,
                         new_bytes,
                         value=parsed.value,
                         emission_date=parsed.emission_date,
                         deadline_date=parsed.deadline_date,
                     )
-                    st.success("PDF atualizado.")
-                    st.rerun()
+                    if ok:
+                        st.success("PDF atualizado.")
+                        st.rerun()
+                    else:
+                        st.error("Já existe outro boleto com esses dados.")
             except Exception as e:
                 st.error(f"Erro: {e}")
 
