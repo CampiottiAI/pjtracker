@@ -1,12 +1,15 @@
-"""Boleto PDF parser: extract value (R$) and dates (DD/MM/YYYY) from boleto PDF text."""
+"""Boleto PDF parser: extract value (R$) and dates (DD/MM/YYYY) from boleto PDF text.
+Receipt image parser: extract receipt date (DD MMM YYYY - HH:MM:SS) from receipt image via EasyOCR."""
 
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 
-from pdf2image import convert_from_bytes
 import numpy as np
 import easyocr
+from pdf2image import convert_from_bytes
+from PIL import Image
 
 
 @dataclass
@@ -108,3 +111,60 @@ def parse_boleto_pdf(pdf_bytes: bytes) -> BoletoParsed:
         emission_date=emission_date,
         deadline_date=deadline_date,
     )
+
+
+# --- Receipt image: extract text and find date "03 MAR 2026 - 18:40:12" ---
+
+# DD MMM YYYY - HH:MM:SS (month 3 letters: PT or EN)
+_RECEIPT_DATE_PATTERN = re.compile(
+    r"(\d{1,2}) ([A-Za-z]{3}) (\d{4}) - (\d{2})[:,\.](\d{2})[:,\.](\d{2})",
+    re.IGNORECASE,
+)
+
+_MONTH_NAMES = {
+    "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+    "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12,
+    "feb": 2, "apr": 4, "may": 5, "aug": 8, "sep": 9, "oct": 10,
+}
+
+
+def receipt_text_extractor(image_bytes: bytes) -> str:
+    """Extract text from receipt image using EasyOCR (same as boleto)."""
+    ocr = easyocr.Reader(["pt"])
+    img = Image.open(BytesIO(image_bytes))
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    arr = np.array(img)
+    lines = ocr.readtext(
+        arr,
+        detail=0,
+        canvas_size=1280,
+        mag_ratio=1,
+        batch_size=1,
+    )
+    return " ".join(lines)
+
+
+def parse_receipt_date_from_text(text: str) -> str | None:
+    """Find first date in receipt format '03 MAR 2026 - 18:40:12', return 'DD/MM/YYYY HH:MM:SS'."""
+    for m in _RECEIPT_DATE_PATTERN.finditer(text):
+        day_s, month_s, year_s = m.group(1), m.group(2).lower()[:3], m.group(3)
+        h_s, min_s, sec_s = m.group(4), m.group(5), m.group(6)
+        month = _MONTH_NAMES.get(month_s)
+        if month is None:
+            continue
+        try:
+            day = int(day_s)
+            year = int(year_s)
+            h, mn, sec = int(h_s), int(min_s), int(sec_s)
+            if 1 <= day <= 31 and 1 <= month <= 12 and 0 <= h <= 23 and 0 <= mn <= 59 and 0 <= sec <= 59:
+                return f"{day:02d}/{month:02d}/{year} {h:02d}:{mn:02d}:{sec:02d}"
+        except ValueError:
+            continue
+    return None
+
+
+def parse_receipt_image(image_bytes: bytes) -> str | None:
+    """Extract text from receipt image with EasyOCR and parse date (e.g. 03 MAR 2026 - 18:40:12). Returns 'DD/MM/YYYY HH:MM:SS' or None."""
+    text = receipt_text_extractor(image_bytes)
+    return parse_receipt_date_from_text(text)

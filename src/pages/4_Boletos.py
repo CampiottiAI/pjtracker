@@ -1,6 +1,8 @@
 """Boletos – upload boleto PDF and optional receipt image; auto-extract value and dates from PDF."""
 
 import base64
+import hashlib
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -17,7 +19,7 @@ from src.app import (
     update_boleto_pdf,
     update_boleto_receipt,
 )
-from src.boleto_parser import parse_boleto_pdf
+from src.boleto_parser import parse_boleto_pdf, parse_receipt_image
 
 st.set_page_config(page_title="Boletos", layout="centered")
 st.title("Boletos")
@@ -25,6 +27,50 @@ st.title("Boletos")
 init_db()
 
 project_root = Path(DB_PATH).resolve().parent
+
+
+def _receipt_signature(image_bytes: bytes) -> str:
+    return hashlib.sha1(image_bytes).hexdigest()
+
+
+def _populate_receipt_datetime(
+    date_key: str, time_key: str, image_bytes: bytes, *, force: bool = False
+) -> None:
+    signature = _receipt_signature(image_bytes)
+    signature_key = f"{date_key}_ocr_signature"
+    status_key = f"{date_key}_ocr_status"
+    message_key = f"{date_key}_ocr_message"
+
+    if not force and st.session_state.get(signature_key) == signature:
+        return
+
+    with st.spinner("Lendo texto do comprovante..."):
+        extracted = parse_receipt_image(image_bytes)
+
+    st.session_state[signature_key] = signature
+    if extracted:
+        try:
+            dt = datetime.strptime(extracted, "%d/%m/%Y %H:%M:%S")
+            st.session_state[date_key] = dt.date()
+            st.session_state[time_key] = dt.strftime("%H:%M:%S")
+            st.session_state[status_key] = "success"
+            st.session_state[message_key] = f"Data extraída automaticamente: {extracted}"
+        except ValueError:
+            st.session_state[status_key] = "error"
+            st.session_state[message_key] = "Data extraída em formato inválido."
+    else:
+        st.session_state[status_key] = "warning"
+        st.session_state[message_key] = (
+            "Nenhuma data no formato 'DD MMM AAAA - HH:MM:SS' encontrada na imagem."
+        )
+
+
+def _show_receipt_feedback(date_key: str) -> None:
+    status = st.session_state.get(f"{date_key}_ocr_status")
+    message = st.session_state.get(f"{date_key}_ocr_message")
+    if not status or not message:
+        return
+    getattr(st, status)(message)
 
 mode = st.radio(
     "Modo",
@@ -75,6 +121,11 @@ if mode == "Adicionar boleto":
                     st.session_state["pending_boleto_receipt"] = None
                     st.session_state["pending_boleto_receipt_date"] = None
                     st.session_state["pending_boleto_receipt_pdf_key"] = pdf_key
+                    st.session_state["boleto_receipt_date"] = None
+                    st.session_state["boleto_receipt_time"] = ""
+                    st.session_state["boleto_receipt_date_ocr_signature"] = None
+                    st.session_state["boleto_receipt_date_ocr_status"] = None
+                    st.session_state["boleto_receipt_date_ocr_message"] = None
                 pending_receipt = st.session_state.get("pending_boleto_receipt")
                 receipt_col1, receipt_col2 = st.columns(2)
                 with receipt_col1:
@@ -101,6 +152,9 @@ if mode == "Adicionar boleto":
                             "bytes": data,
                             "mime": mime,
                         }
+                        _populate_receipt_datetime(
+                            "boleto_receipt_date", "boleto_receipt_time", data
+                        )
                     image_data = paste(
                         label="Colar imagem do comprovante",
                         key="boleto_receipt_paste",
@@ -124,9 +178,31 @@ if mode == "Adicionar boleto":
                                 "bytes": binary_data,
                                 "mime": mime,
                             }
+                            _populate_receipt_datetime(
+                                "boleto_receipt_date",
+                                "boleto_receipt_time",
+                                binary_data,
+                            )
                         except Exception:
                             pass
+                pending_receipt = st.session_state.get("pending_boleto_receipt")
                 with receipt_col2:
+                    if pending_receipt:
+                        _show_receipt_feedback("boleto_receipt_date")
+                        if st.button(
+                            "Extrair data novamente", key="extract_receipt_date"
+                        ):
+                            _populate_receipt_datetime(
+                                "boleto_receipt_date",
+                                "boleto_receipt_time",
+                                pending_receipt["bytes"],
+                                force=True,
+                            )
+                            st.rerun()
+                    if "boleto_receipt_date" not in st.session_state:
+                        st.session_state["boleto_receipt_date"] = None
+                    if "boleto_receipt_time" not in st.session_state:
+                        st.session_state["boleto_receipt_time"] = ""
                     receipt_date = st.date_input(
                         "Data do comprovante",
                         format="DD/MM/YYYY",
@@ -134,58 +210,61 @@ if mode == "Adicionar boleto":
                     )
                     receipt_time = st.text_input(
                         "Hora (opcional, ex: 18:40:12)",
-                        value="",
                         key="boleto_receipt_time",
                         placeholder="18:40:12",
                     )
                     if pending_receipt:
                         st.caption("Comprovante anexado.")
-                        time_part = receipt_time.strip() if receipt_time else "00:00:00"
-                        receipt_date_str = (
-                            f"{receipt_date.strftime('%d/%m/%Y')} {time_part}"
-                        )
+                        if receipt_date is None:
+                            receipt_date_str = None
+                        else:
+                            time_part = receipt_time.strip() if receipt_time else "00:00:00"
+                            receipt_date_str = (
+                                f"{receipt_date.strftime('%d/%m/%Y')} {time_part}"
+                            )
                     else:
                         receipt_date_str = None
 
                 st.divider()
                 if st.button("Salvar boleto"):
-                    pdf_path = save_boleto_pdf(
-                        pdf_bytes,
-                        emission_date=parsed.emission_date,
-                        value=parsed.value,
-                    )
-                    inserted, boleto_id = save_boleto_entry(
-                        pdf_path=str(pdf_path),
-                        value=parsed.value,
-                        emission_date=parsed.emission_date,
-                        deadline_date=parsed.deadline_date,
-                        receipt_path=None,
-                        receipt_date=None,
-                    )
-                    if not inserted:
-                        # Remove the PDF we just saved to avoid orphan file
-                        p = Path(pdf_path)
-                        if not p.is_absolute():
-                            p = project_root / pdf_path
-                        if p.exists():
-                            p.unlink(missing_ok=True)
-                        st.error(
-                            "Já existe um boleto com esses dados (valor e datas)."
-                        )
+                    if pending_receipt and receipt_date_str is None:
+                        st.error("Informe ou extraia a data do comprovante.")
                     else:
-                        if pending_receipt and boleto_id:
-                            receipt_path = save_boleto_receipt(
-                                boleto_id,
-                                pending_receipt["bytes"],
-                                pending_receipt["mime"],
-                            )
-                            update_boleto_receipt(
-                                boleto_id, str(receipt_path), receipt_date_str
-                            )
-                        st.session_state["pending_boleto_receipt"] = None
-                        st.session_state["pending_boleto_receipt_date"] = None
-                        st.success("Boleto salvo.")
-                        st.rerun()
+                        pdf_path = save_boleto_pdf(
+                            pdf_bytes,
+                            emission_date=parsed.emission_date,
+                            value=parsed.value,
+                        )
+                        inserted, boleto_id = save_boleto_entry(
+                            pdf_path=str(pdf_path),
+                            value=parsed.value,
+                            emission_date=parsed.emission_date,
+                            deadline_date=parsed.deadline_date,
+                            receipt_path=None,
+                            receipt_date=None,
+                        )
+                        if not inserted:
+                            # Remove the PDF we just saved to avoid orphan file
+                            p = Path(pdf_path)
+                            if not p.is_absolute():
+                                p = project_root / pdf_path
+                            if p.exists():
+                                p.unlink(missing_ok=True)
+                            st.error("Já existe um boleto com esses dados (valor e datas).")
+                        else:
+                            if pending_receipt and boleto_id:
+                                receipt_path = save_boleto_receipt(
+                                    boleto_id,
+                                    pending_receipt["bytes"],
+                                    pending_receipt["mime"],
+                                )
+                                update_boleto_receipt(
+                                    boleto_id, str(receipt_path), receipt_date_str
+                                )
+                            st.session_state["pending_boleto_receipt"] = None
+                            st.session_state["pending_boleto_receipt_date"] = None
+                            st.success("Boleto salvo.")
+                            st.rerun()
             except Exception as e:
                 st.error(f"Erro ao processar o PDF: {e}")
 
@@ -313,12 +392,6 @@ else:
     new_receipt_paste = paste(
         label="Colar nova imagem", key="update_boleto_receipt_paste"
     )
-    new_receipt_date = st.date_input(
-        "Data do comprovante", format="DD/MM/YYYY", key="update_receipt_date"
-    )
-    new_receipt_time = st.text_input(
-        "Hora (opcional)", value="", key="update_receipt_time", placeholder="18:40:12"
-    )
     new_receipt_bytes = None
     new_receipt_mime = "png"
     if new_receipt_upload:
@@ -347,6 +420,25 @@ else:
         except Exception:
             pass
     if new_receipt_bytes is not None:
+        _populate_receipt_datetime(
+            "update_receipt_date", "update_receipt_time", new_receipt_bytes
+        )
+    new_receipt_date = st.date_input(
+        "Data do comprovante", format="DD/MM/YYYY", key="update_receipt_date"
+    )
+    new_receipt_time = st.text_input(
+        "Hora (opcional)", key="update_receipt_time", placeholder="18:40:12"
+    )
+    if new_receipt_bytes is not None:
+        _show_receipt_feedback("update_receipt_date")
+        if st.button("Extrair data do comprovante", key="extract_update_receipt_date"):
+            _populate_receipt_datetime(
+                "update_receipt_date",
+                "update_receipt_time",
+                new_receipt_bytes,
+                force=True,
+            )
+            st.rerun()
         time_part = new_receipt_time.strip() if new_receipt_time else "00:00:00"
         new_receipt_date_str = f"{new_receipt_date.strftime('%d/%m/%Y')} {time_part}"
         if st.button("Salvar comprovante", key="apply_update_receipt"):
