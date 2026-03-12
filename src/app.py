@@ -79,6 +79,29 @@ def init_db() -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_boletos_content_hash
             ON boletos (content_hash) WHERE content_hash IS NOT NULL
         """)
+        # DARFs: DARF PDF + optional receipt image
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS darfs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pdf_path TEXT NOT NULL,
+                receipt_path TEXT,
+                value REAL,
+                emission_date TEXT,
+                deadline_date TEXT,
+                receipt_date TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT
+            )
+        """)
+        # Migration: add content_hash for duplicate detection (value + emission_date + deadline_date)
+        try:
+            conn.execute("ALTER TABLE darfs ADD COLUMN content_hash TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_darfs_content_hash
+            ON darfs (content_hash) WHERE content_hash IS NOT NULL
+        """)
 
 
 def _sanitize_filename(s: str) -> str:
@@ -398,4 +421,169 @@ def delete_boleto(boleto_id: int) -> bool:
             p.unlink(missing_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("DELETE FROM boletos WHERE id = ?", (boleto_id,))
+    return True
+
+
+# --- DARFs ---
+
+
+def compute_darf_content_hash(
+    value: float | None,
+    emission_date: str | None,
+    deadline_date: str | None,
+) -> str | None:
+    """Deterministic hash from value and dates. Returns None if all three are missing."""
+    val_str = f"{value:.2f}" if value is not None else "0"
+    em = (emission_date or "").strip()
+    dl = (deadline_date or "").strip()
+    payload = f"{val_str}|{em}|{dl}"
+    if payload == "0||":
+        return None
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def save_darf_pdf(
+    pdf_bytes: bytes, emission_date: str | None = None, value: float | None = None
+) -> Path:
+    """Save DARF PDF to pdfs/ with unique name. Returns path."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    safe_date = _sanitize_filename((emission_date or "").replace("/", "-"))[:20] or "nodate"
+    val_part = f"{value:.2f}" if value is not None else "0"
+    base = f"darf_{safe_date}_{val_part}"
+    path = PDF_DIR / f"{base}.pdf"
+    counter = 0
+    while path.exists():
+        counter += 1
+        path = PDF_DIR / f"{base}_{counter}.pdf"
+    path.write_bytes(pdf_bytes)
+    return path
+
+
+def save_darf_receipt(darf_id: int, image_bytes: bytes, mime_or_ext: str) -> Path:
+    """Save receipt image for a DARF. Returns path."""
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    ext = mime_or_ext.strip().lower()
+    if "/" in ext:
+        ext = ext.split("/", 1)[-1]
+    if ext not in ("png", "jpg", "jpeg", "gif", "webp"):
+        ext = "png"
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    base = f"darf_receipt_{darf_id}_{ts}"
+    path = IMAGES_DIR / f"{base}.{ext}"
+    counter = 0
+    while path.exists():
+        counter += 1
+        path = IMAGES_DIR / f"{base}_{counter}.{ext}"
+    path.write_bytes(image_bytes)
+    return path
+
+
+def save_darf_entry(
+    pdf_path: str,
+    value: float | None = None,
+    emission_date: str | None = None,
+    deadline_date: str | None = None,
+    receipt_path: str | None = None,
+    receipt_date: str | None = None,
+) -> tuple[bool, int | None]:
+    """Insert one DARF row. Returns (inserted, id): (True, id) on success, (False, None) on duplicate."""
+    content_hash = compute_darf_content_hash(value, emission_date, deadline_date)
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO darfs (
+                    pdf_path, receipt_path, value, emission_date, deadline_date,
+                    receipt_date, created_at, updated_at, content_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (pdf_path, receipt_path, value, emission_date, deadline_date, receipt_date, now, now, content_hash),
+            )
+            return (True, cur.lastrowid)
+    except sqlite3.IntegrityError:
+        return (False, None)
+
+
+def get_darfs() -> list[dict]:
+    """Return all DARFs, newest first."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            "SELECT * FROM darfs ORDER BY created_at DESC",
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_darf_by_id(darf_id: int) -> dict | None:
+    """Return one DARF by id or None."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute("SELECT * FROM darfs WHERE id = ?", (darf_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def update_darf_pdf(
+    darf_id: int,
+    pdf_bytes: bytes,
+    value: float | None,
+    emission_date: str | None,
+    deadline_date: str | None,
+) -> bool:
+    """Replace DARF PDF and update parsed fields. Keeps receipt_path/receipt_date unchanged."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    row = get_darf_by_id(darf_id)
+    if not row:
+        return False
+    old_path = row.get("pdf_path")
+    if old_path:
+        full_old = Path(DB_PATH).resolve().parent / old_path if not Path(old_path).is_absolute() else Path(old_path)
+        if full_old.exists():
+            full_old.unlink(missing_ok=True)
+    new_path = save_darf_pdf(pdf_bytes, emission_date, value)
+    path_str = str(new_path)
+    content_hash = compute_darf_content_hash(value, emission_date, deadline_date)
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                """
+                UPDATE darfs SET pdf_path = ?, value = ?, emission_date = ?, deadline_date = ?, content_hash = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (path_str, value, emission_date, deadline_date, content_hash, now, darf_id),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def update_darf_receipt(darf_id: int, receipt_path: str, receipt_date: str | None) -> None:
+    """Set receipt path and date for a DARF."""
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE darfs SET receipt_path = ?, receipt_date = ?, updated_at = ? WHERE id = ?",
+            (receipt_path, receipt_date, now, darf_id),
+        )
+
+
+def delete_darf(darf_id: int) -> bool:
+    """Delete DARF row and its PDF and receipt files. Returns True if deleted, False if not found."""
+    row = get_darf_by_id(darf_id)
+    if not row:
+        return False
+    project_root = Path(DB_PATH).resolve().parent
+    for path_key in ("pdf_path", "receipt_path"):
+        raw = row.get(path_key)
+        if not raw or (isinstance(raw, str) and not raw.strip()):
+            continue
+        p = Path(raw)
+        if not p.is_absolute():
+            p = project_root / raw
+        if p.exists():
+            p.unlink(missing_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM darfs WHERE id = ?", (darf_id,))
     return True

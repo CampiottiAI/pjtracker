@@ -117,7 +117,7 @@ def parse_boleto_pdf(pdf_bytes: bytes) -> BoletoParsed:
 
 # DD MMM YYYY - HH:MM:SS (month 3 letters: PT or EN)
 _RECEIPT_DATE_PATTERN = re.compile(
-    r"(\d{1,2}) ([A-Za-z]{3}) (\d{4}) - (\d{2})[:,\.](\d{2})[:,\.](\d{2})",
+    r"(\d{1,2}) ([A-Za-z]{3}) (\d{4})\s[-]?\s?(\d{2})[:,\.](\d{2})[:,\.](\d{2})",
     re.IGNORECASE,
 )
 
@@ -132,6 +132,9 @@ def receipt_text_extractor(image_bytes: bytes) -> str:
     """Extract text from receipt image using EasyOCR (same as boleto)."""
     ocr = easyocr.Reader(["pt"])
     img = Image.open(BytesIO(image_bytes))
+    # Only keep the first third of the image vertically before running OCR
+    width, height = img.size
+    img = img.crop((0, 0, width, height // 3))
     if img.mode != "RGB":
         img = img.convert("RGB")
     arr = np.array(img)
