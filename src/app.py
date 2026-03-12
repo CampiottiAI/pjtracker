@@ -55,6 +55,20 @@ def init_db() -> None:
                 FOREIGN KEY (nf_id) REFERENCES nf_entries (id)
             )
         """)
+        # Boletos: bill PDF + optional receipt image
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS boletos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pdf_path TEXT NOT NULL,
+                receipt_path TEXT,
+                value REAL,
+                emission_date TEXT,
+                deadline_date TEXT,
+                receipt_date TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT
+            )
+        """)
 
 
 def _sanitize_filename(s: str) -> str:
@@ -202,3 +216,122 @@ def get_nf_entries(
             continue
         filtered.append(row)
     return filtered
+
+
+# --- Boletos ---
+
+
+def save_boleto_pdf(pdf_bytes: bytes, emission_date: str | None = None, value: float | None = None) -> Path:
+    """Save boleto PDF to pdfs/ with unique name. Returns path (relative to project root or absolute)."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    safe_date = _sanitize_filename((emission_date or "").replace("/", "-"))[:20] or "nodate"
+    val_part = f"{value:.2f}" if value is not None else "0"
+    base = f"boleto_{safe_date}_{val_part}"
+    path = PDF_DIR / f"{base}.pdf"
+    counter = 0
+    while path.exists():
+        counter += 1
+        path = PDF_DIR / f"{base}_{counter}.pdf"
+    path.write_bytes(pdf_bytes)
+    return path
+
+
+def save_boleto_receipt(boleto_id: int, image_bytes: bytes, mime_or_ext: str) -> Path:
+    """Save receipt image for a boleto. Returns path."""
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    ext = mime_or_ext.strip().lower()
+    if "/" in ext:
+        ext = ext.split("/", 1)[-1]
+    if ext not in ("png", "jpg", "jpeg", "gif", "webp"):
+        ext = "png"
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    base = f"boleto_receipt_{boleto_id}_{ts}"
+    path = IMAGES_DIR / f"{base}.{ext}"
+    counter = 0
+    while path.exists():
+        counter += 1
+        path = IMAGES_DIR / f"{base}_{counter}.{ext}"
+    path.write_bytes(image_bytes)
+    return path
+
+
+def save_boleto_entry(
+    pdf_path: str,
+    value: float | None = None,
+    emission_date: str | None = None,
+    deadline_date: str | None = None,
+    receipt_path: str | None = None,
+    receipt_date: str | None = None,
+) -> int:
+    """Insert one boleto row. Returns id."""
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO boletos (
+                pdf_path, receipt_path, value, emission_date, deadline_date,
+                receipt_date, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (pdf_path, receipt_path, value, emission_date, deadline_date, receipt_date, now, now),
+        )
+        return cur.lastrowid
+
+
+def get_boletos() -> list[dict]:
+    """Return all boletos, newest first."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            "SELECT * FROM boletos ORDER BY created_at DESC",
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_boleto_by_id(boleto_id: int) -> dict | None:
+    """Return one boleto by id or None."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute("SELECT * FROM boletos WHERE id = ?", (boleto_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def update_boleto_pdf(
+    boleto_id: int,
+    pdf_bytes: bytes,
+    value: float | None,
+    emission_date: str | None,
+    deadline_date: str | None,
+) -> None:
+    """Replace boleto PDF and update parsed fields. Keeps receipt_path/receipt_date unchanged."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    row = get_boleto_by_id(boleto_id)
+    if not row:
+        return
+    old_path = row.get("pdf_path")
+    if old_path:
+        full_old = Path(DB_PATH).resolve().parent / old_path if not Path(old_path).is_absolute() else Path(old_path)
+        if full_old.exists():
+            full_old.unlink(missing_ok=True)
+    new_path = save_boleto_pdf(pdf_bytes, emission_date, value)
+    path_str = str(new_path)
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            UPDATE boletos SET pdf_path = ?, value = ?, emission_date = ?, deadline_date = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (path_str, value, emission_date, deadline_date, now, boleto_id),
+        )
+
+
+def update_boleto_receipt(boleto_id: int, receipt_path: str, receipt_date: str | None) -> None:
+    """Set receipt path and date for a boleto."""
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE boletos SET receipt_path = ?, receipt_date = ?, updated_at = ? WHERE id = ?",
+            (receipt_path, receipt_date, now, boleto_id),
+        )
