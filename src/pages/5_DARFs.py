@@ -357,7 +357,7 @@ if mode == "Adicionar DARF":
                                     ),
                                 )
                             st.session_state["pending_darf_receipt"] = None
-                            _clear_receipt_state("darf_receipt")
+                            st.session_state["pending_darf_receipt_pdf_key"] = None
                             st.success("DARF salvo.")
                             st.rerun()
             except Exception as e:

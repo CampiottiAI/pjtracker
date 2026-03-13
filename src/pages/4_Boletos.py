@@ -360,7 +360,7 @@ if mode == "Adicionar boleto":
                                     ),
                                 )
                             st.session_state["pending_boleto_receipt"] = None
-                            _clear_receipt_state("boleto_receipt")
+                            st.session_state["pending_boleto_receipt_pdf_key"] = None
                             st.success("Boleto salvo.")
                             st.rerun()
             except Exception as e:
