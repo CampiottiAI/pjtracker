@@ -28,6 +28,21 @@ init_db()
 project_root = Path(DB_PATH).resolve().parent
 
 
+def _set_flash_messages(success: str, warning: str | None = None) -> None:
+    st.session_state["extrato_flash_success"] = success
+    if warning:
+        st.session_state["extrato_flash_warning"] = warning
+
+
+def _show_flash_messages() -> None:
+    success = st.session_state.pop("extrato_flash_success", None)
+    warning = st.session_state.pop("extrato_flash_warning", None)
+    if success:
+        st.success(success)
+    if warning:
+        st.warning(warning)
+
+
 def _format_currency(value: float | None) -> str:
     if value is None:
         return "—"
@@ -115,6 +130,8 @@ mode = st.radio(
     ["Adicionar extrato", "Listar extratos"],
     horizontal=True,
 )
+
+_show_flash_messages()
 
 if mode == "Adicionar extrato":
     st.subheader("Novo extrato")
@@ -222,7 +239,10 @@ if mode == "Adicionar extrato":
                             saved_caixinha_path.unlink(missing_ok=True)
                         st.error("Já existe um extrato salvo para esse período.")
                     else:
-                        st.success("Extrato salvo.")
+                        _set_flash_messages(
+                            "Extrato salvo.",
+                            "Confira os dados extraídos antes de usar. A leitura do PDF é feita por IA e pode precisar de revisão.",
+                        )
                         st.rerun()
             except Exception as exc:
                 st.error(f"Erro ao processar o PDF: {exc}")
@@ -352,7 +372,10 @@ else:
                         extrato_entries_json=json.dumps(parsed_extrato.entries),
                     )
                     if ok:
-                        st.success("Extrato atualizado.")
+                        _set_flash_messages(
+                            "Extrato atualizado.",
+                            "Confira os dados extraídos antes de usar. A leitura do PDF é feita por IA e pode precisar de revisão.",
+                        )
                         st.rerun()
                     else:
                         st.error("Já existe outro extrato salvo para esse período.")
@@ -390,7 +413,10 @@ else:
                         caixinha_entries_json=json.dumps(parsed_caixinha.entries),
                     )
                     if ok:
-                        st.success("Caixinha atualizada.")
+                        _set_flash_messages(
+                            "Caixinha atualizada.",
+                            "Confira os dados extraídos antes de usar. A leitura do PDF é feita por IA e pode precisar de revisão.",
+                        )
                         st.rerun()
                     else:
                         st.error("Extrato não encontrado.")
