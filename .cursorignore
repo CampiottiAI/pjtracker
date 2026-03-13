@@ -1,0 +1,4 @@
+.token
+images/*
+pdfs/*
+*.db

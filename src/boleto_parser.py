@@ -1,5 +1,4 @@
-"""Boleto PDF parser: extract value (R$) and dates (DD/MM/YYYY) from boleto PDF text.
-Receipt image parser: extract receipt date (DD MMM YYYY - HH:MM:SS) from receipt image via EasyOCR."""
+"""Boleto extraction with LLM-first parsing and OCR fallback."""
 
 import re
 from dataclasses import dataclass
@@ -11,6 +10,14 @@ import easyocr
 from pdf2image import convert_from_bytes
 from PIL import Image
 
+from src.llm_extraction import (
+    extract_boleto_pdf,
+    extract_boleto_receipt,
+    normalize_dd_mm_yyyy,
+    normalize_digits,
+    normalize_payment_datetime,
+)
+
 
 @dataclass
 class BoletoParsed:
@@ -19,6 +26,20 @@ class BoletoParsed:
     value: float | None
     emission_date: str | None  # DD/MM/YYYY
     deadline_date: str | None  # DD/MM/YYYY
+    codigo_barras_raw: str | None = None
+    codigo_barras_digits: str | None = None
+    source: str = "fallback"
+
+
+@dataclass
+class ReceiptParsed:
+    """Extracted fields from a payment receipt image."""
+
+    value: float | None
+    payment_datetime: str | None  # DD/MM/YYYY HH:MM:SS
+    codigo_barras_raw: str | None = None
+    codigo_barras_digits: str | None = None
+    source: str = "fallback"
 
 
 def _normalize_br_number(s: str) -> float:
@@ -67,9 +88,15 @@ def boleto_text_extractor(pdf_bytes: bytes):
     return full_text
 
 
-def parse_boleto_pdf(pdf_bytes: bytes) -> BoletoParsed:
-    """Extract value and emission/deadline dates from boleto PDF. Dates are sorted:
-    first = emission_date, second = deadline_date."""
+def _clean_text_field(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _parse_boleto_pdf_with_ocr(pdf_bytes: bytes) -> BoletoParsed:
+    """Extract value and emission/deadline dates from boleto PDF OCR text."""
     text = boleto_text_extractor(pdf_bytes)
     value: float | None = None
     emission_date: str | None = None
@@ -106,10 +133,63 @@ def parse_boleto_pdf(pdf_bytes: bytes) -> BoletoParsed:
         emission_date = parsed_dates[0][0]
         deadline_date = None
 
+    return BoletoParsed(value=value, emission_date=emission_date, deadline_date=deadline_date)
+
+
+def parse_boleto_pdf(pdf_bytes: bytes, filename: str = "boleto.pdf") -> BoletoParsed:
+    """Extract boleto fields using the LLM first and OCR as fallback."""
+    llm_attempt = extract_boleto_pdf(pdf_bytes, filename=filename)
+    llm_data = llm_attempt.data
+    fallback = _parse_boleto_pdf_with_ocr(pdf_bytes)
+
+    llm_value = getattr(llm_data, "valor", None) if llm_data else None
+    llm_emission_date = normalize_dd_mm_yyyy(
+        getattr(llm_data, "data_emissao", None) if llm_data else None
+    )
+    llm_deadline_date = normalize_dd_mm_yyyy(
+        getattr(llm_data, "data_vencimento", None) if llm_data else None
+    )
+    llm_codigo_barras = _clean_text_field(
+        getattr(llm_data, "codigo_barras", None) if llm_data else None
+    )
+
+    used_fallback = False
+    value = llm_value
+    if value is None:
+        value = fallback.value
+        used_fallback = used_fallback or value is not None
+
+    emission_date = llm_emission_date
+    if emission_date is None:
+        emission_date = fallback.emission_date
+        used_fallback = used_fallback or emission_date is not None
+
+    deadline_date = llm_deadline_date
+    if deadline_date is None:
+        deadline_date = fallback.deadline_date
+        used_fallback = used_fallback or deadline_date is not None
+
+    has_llm_data = any(
+        (
+            llm_value is not None,
+            llm_emission_date is not None,
+            llm_deadline_date is not None,
+            llm_codigo_barras is not None,
+        )
+    )
+    source = "fallback"
+    if has_llm_data and used_fallback:
+        source = "merged"
+    elif has_llm_data:
+        source = "llm"
+
     return BoletoParsed(
         value=value,
         emission_date=emission_date,
         deadline_date=deadline_date,
+        codigo_barras_raw=llm_codigo_barras,
+        codigo_barras_digits=normalize_digits(llm_codigo_barras),
+        source=source,
     )
 
 
@@ -167,7 +247,56 @@ def parse_receipt_date_from_text(text: str) -> str | None:
     return None
 
 
-def parse_receipt_image(image_bytes: bytes) -> str | None:
-    """Extract text from receipt image with EasyOCR and parse date (e.g. 03 MAR 2026 - 18:40:12). Returns 'DD/MM/YYYY HH:MM:SS' or None."""
+def _parse_receipt_datetime_with_ocr(image_bytes: bytes) -> str | None:
+    """Extract payment datetime from receipt image using OCR only."""
     text = receipt_text_extractor(image_bytes)
     return parse_receipt_date_from_text(text)
+
+
+def parse_receipt_image(
+    image_bytes: bytes,
+    *,
+    filename: str = "comprovante.png",
+    mime_type: str = "image/png",
+) -> ReceiptParsed:
+    """Extract receipt fields using the LLM first and OCR as fallback."""
+    llm_attempt = extract_boleto_receipt(
+        image_bytes,
+        filename=filename,
+        mime_type=mime_type,
+    )
+    llm_data = llm_attempt.data
+    llm_value = getattr(llm_data, "valor", None) if llm_data else None
+    llm_payment_datetime = normalize_payment_datetime(
+        getattr(llm_data, "data_pagamento", None) if llm_data else None
+    )
+    llm_codigo_barras = _clean_text_field(
+        getattr(llm_data, "codigo_barras", None) if llm_data else None
+    )
+
+    payment_datetime = llm_payment_datetime
+    used_fallback = False
+    if payment_datetime is None:
+        payment_datetime = _parse_receipt_datetime_with_ocr(image_bytes)
+        used_fallback = payment_datetime is not None
+
+    has_llm_data = any(
+        (
+            llm_value is not None,
+            llm_payment_datetime is not None,
+            llm_codigo_barras is not None,
+        )
+    )
+    source = "fallback"
+    if has_llm_data and used_fallback:
+        source = "merged"
+    elif has_llm_data:
+        source = "llm"
+
+    return ReceiptParsed(
+        value=llm_value,
+        payment_datetime=payment_datetime,
+        codigo_barras_raw=llm_codigo_barras,
+        codigo_barras_digits=normalize_digits(llm_codigo_barras),
+        source=source,
+    )

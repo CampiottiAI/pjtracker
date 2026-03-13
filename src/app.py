@@ -75,6 +75,18 @@ def init_db() -> None:
             conn.execute("ALTER TABLE boletos ADD COLUMN content_hash TEXT")
         except sqlite3.OperationalError:
             pass  # column already exists
+        for statement in (
+            "ALTER TABLE boletos ADD COLUMN codigo_barras TEXT",
+            "ALTER TABLE boletos ADD COLUMN codigo_barras_digits TEXT",
+            "ALTER TABLE boletos ADD COLUMN receipt_value REAL",
+            "ALTER TABLE boletos ADD COLUMN receipt_codigo_barras TEXT",
+            "ALTER TABLE boletos ADD COLUMN receipt_codigo_barras_digits TEXT",
+            "ALTER TABLE boletos ADD COLUMN receipt_match_status TEXT",
+        ):
+            try:
+                conn.execute(statement)
+            except sqlite3.OperationalError:
+                pass
         conn.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_boletos_content_hash
             ON boletos (content_hash) WHERE content_hash IS NOT NULL
@@ -98,6 +110,18 @@ def init_db() -> None:
             conn.execute("ALTER TABLE darfs ADD COLUMN content_hash TEXT")
         except sqlite3.OperationalError:
             pass  # column already exists
+        for statement in (
+            "ALTER TABLE darfs ADD COLUMN codigo_barras TEXT",
+            "ALTER TABLE darfs ADD COLUMN codigo_barras_digits TEXT",
+            "ALTER TABLE darfs ADD COLUMN receipt_value REAL",
+            "ALTER TABLE darfs ADD COLUMN receipt_codigo_barras TEXT",
+            "ALTER TABLE darfs ADD COLUMN receipt_codigo_barras_digits TEXT",
+            "ALTER TABLE darfs ADD COLUMN receipt_match_status TEXT",
+        ):
+            try:
+                conn.execute(statement)
+            except sqlite3.OperationalError:
+                pass
         conn.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_darfs_content_hash
             ON darfs (content_hash) WHERE content_hash IS NOT NULL
@@ -308,8 +332,14 @@ def save_boleto_entry(
     value: float | None = None,
     emission_date: str | None = None,
     deadline_date: str | None = None,
+    codigo_barras: str | None = None,
+    codigo_barras_digits: str | None = None,
     receipt_path: str | None = None,
     receipt_date: str | None = None,
+    receipt_value: float | None = None,
+    receipt_codigo_barras: str | None = None,
+    receipt_codigo_barras_digits: str | None = None,
+    receipt_match_status: str | None = None,
 ) -> tuple[bool, int | None]:
     """Insert one boleto row. Returns (inserted, id): (True, id) on success, (False, None) if duplicate (same value + dates)."""
     content_hash = compute_boleto_content_hash(value, emission_date, deadline_date)
@@ -320,10 +350,28 @@ def save_boleto_entry(
                 """
                 INSERT INTO boletos (
                     pdf_path, receipt_path, value, emission_date, deadline_date,
-                    receipt_date, created_at, updated_at, content_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    codigo_barras, codigo_barras_digits, receipt_date, receipt_value,
+                    receipt_codigo_barras, receipt_codigo_barras_digits, receipt_match_status,
+                    created_at, updated_at, content_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (pdf_path, receipt_path, value, emission_date, deadline_date, receipt_date, now, now, content_hash),
+                (
+                    pdf_path,
+                    receipt_path,
+                    value,
+                    emission_date,
+                    deadline_date,
+                    codigo_barras,
+                    codigo_barras_digits,
+                    receipt_date,
+                    receipt_value,
+                    receipt_codigo_barras,
+                    receipt_codigo_barras_digits,
+                    receipt_match_status,
+                    now,
+                    now,
+                    content_hash,
+                ),
             )
             return (True, cur.lastrowid)
     except sqlite3.IntegrityError:
@@ -364,6 +412,9 @@ def update_boleto_pdf(
     value: float | None,
     emission_date: str | None,
     deadline_date: str | None,
+    codigo_barras: str | None,
+    codigo_barras_digits: str | None,
+    receipt_match_status: str | None,
 ) -> bool:
     """Replace boleto PDF and update parsed fields. Keeps receipt_path/receipt_date unchanged.
     Returns True on success, False if another boleto already has the same (value, emission_date, deadline_date)."""
@@ -384,23 +435,60 @@ def update_boleto_pdf(
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute(
                 """
-                UPDATE boletos SET pdf_path = ?, value = ?, emission_date = ?, deadline_date = ?, content_hash = ?, updated_at = ?
+                UPDATE boletos
+                SET pdf_path = ?, value = ?, emission_date = ?, deadline_date = ?,
+                    codigo_barras = ?, codigo_barras_digits = ?, receipt_match_status = ?,
+                    content_hash = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (path_str, value, emission_date, deadline_date, content_hash, now, boleto_id),
+                (
+                    path_str,
+                    value,
+                    emission_date,
+                    deadline_date,
+                    codigo_barras,
+                    codigo_barras_digits,
+                    receipt_match_status,
+                    content_hash,
+                    now,
+                    boleto_id,
+                ),
             )
         return True
     except sqlite3.IntegrityError:
         return False
 
 
-def update_boleto_receipt(boleto_id: int, receipt_path: str, receipt_date: str | None) -> None:
+def update_boleto_receipt(
+    boleto_id: int,
+    receipt_path: str,
+    receipt_date: str | None,
+    receipt_value: float | None = None,
+    receipt_codigo_barras: str | None = None,
+    receipt_codigo_barras_digits: str | None = None,
+    receipt_match_status: str | None = None,
+) -> None:
     """Set receipt path and date for a boleto."""
     now = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
-            "UPDATE boletos SET receipt_path = ?, receipt_date = ?, updated_at = ? WHERE id = ?",
-            (receipt_path, receipt_date, now, boleto_id),
+            """
+            UPDATE boletos
+            SET receipt_path = ?, receipt_date = ?, receipt_value = ?,
+                receipt_codigo_barras = ?, receipt_codigo_barras_digits = ?,
+                receipt_match_status = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                receipt_path,
+                receipt_date,
+                receipt_value,
+                receipt_codigo_barras,
+                receipt_codigo_barras_digits,
+                receipt_match_status,
+                now,
+                boleto_id,
+            ),
         )
 
 
@@ -483,8 +571,14 @@ def save_darf_entry(
     value: float | None = None,
     emission_date: str | None = None,
     deadline_date: str | None = None,
+    codigo_barras: str | None = None,
+    codigo_barras_digits: str | None = None,
     receipt_path: str | None = None,
     receipt_date: str | None = None,
+    receipt_value: float | None = None,
+    receipt_codigo_barras: str | None = None,
+    receipt_codigo_barras_digits: str | None = None,
+    receipt_match_status: str | None = None,
 ) -> tuple[bool, int | None]:
     """Insert one DARF row. Returns (inserted, id): (True, id) on success, (False, None) on duplicate."""
     content_hash = compute_darf_content_hash(value, emission_date, deadline_date)
@@ -495,10 +589,28 @@ def save_darf_entry(
                 """
                 INSERT INTO darfs (
                     pdf_path, receipt_path, value, emission_date, deadline_date,
-                    receipt_date, created_at, updated_at, content_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    codigo_barras, codigo_barras_digits, receipt_date, receipt_value,
+                    receipt_codigo_barras, receipt_codigo_barras_digits, receipt_match_status,
+                    created_at, updated_at, content_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (pdf_path, receipt_path, value, emission_date, deadline_date, receipt_date, now, now, content_hash),
+                (
+                    pdf_path,
+                    receipt_path,
+                    value,
+                    emission_date,
+                    deadline_date,
+                    codigo_barras,
+                    codigo_barras_digits,
+                    receipt_date,
+                    receipt_value,
+                    receipt_codigo_barras,
+                    receipt_codigo_barras_digits,
+                    receipt_match_status,
+                    now,
+                    now,
+                    content_hash,
+                ),
             )
             return (True, cur.lastrowid)
     except sqlite3.IntegrityError:
@@ -530,6 +642,9 @@ def update_darf_pdf(
     value: float | None,
     emission_date: str | None,
     deadline_date: str | None,
+    codigo_barras: str | None,
+    codigo_barras_digits: str | None,
+    receipt_match_status: str | None,
 ) -> bool:
     """Replace DARF PDF and update parsed fields. Keeps receipt_path/receipt_date unchanged."""
     PDF_DIR.mkdir(parents=True, exist_ok=True)
@@ -549,23 +664,60 @@ def update_darf_pdf(
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute(
                 """
-                UPDATE darfs SET pdf_path = ?, value = ?, emission_date = ?, deadline_date = ?, content_hash = ?, updated_at = ?
+                UPDATE darfs
+                SET pdf_path = ?, value = ?, emission_date = ?, deadline_date = ?,
+                    codigo_barras = ?, codigo_barras_digits = ?, receipt_match_status = ?,
+                    content_hash = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (path_str, value, emission_date, deadline_date, content_hash, now, darf_id),
+                (
+                    path_str,
+                    value,
+                    emission_date,
+                    deadline_date,
+                    codigo_barras,
+                    codigo_barras_digits,
+                    receipt_match_status,
+                    content_hash,
+                    now,
+                    darf_id,
+                ),
             )
         return True
     except sqlite3.IntegrityError:
         return False
 
 
-def update_darf_receipt(darf_id: int, receipt_path: str, receipt_date: str | None) -> None:
+def update_darf_receipt(
+    darf_id: int,
+    receipt_path: str,
+    receipt_date: str | None,
+    receipt_value: float | None = None,
+    receipt_codigo_barras: str | None = None,
+    receipt_codigo_barras_digits: str | None = None,
+    receipt_match_status: str | None = None,
+) -> None:
     """Set receipt path and date for a DARF."""
     now = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
-            "UPDATE darfs SET receipt_path = ?, receipt_date = ?, updated_at = ? WHERE id = ?",
-            (receipt_path, receipt_date, now, darf_id),
+            """
+            UPDATE darfs
+            SET receipt_path = ?, receipt_date = ?, receipt_value = ?,
+                receipt_codigo_barras = ?, receipt_codigo_barras_digits = ?,
+                receipt_match_status = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                receipt_path,
+                receipt_date,
+                receipt_value,
+                receipt_codigo_barras,
+                receipt_codigo_barras_digits,
+                receipt_match_status,
+                now,
+                darf_id,
+            ),
         )
 
 

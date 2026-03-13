@@ -1,4 +1,4 @@
-"""DARF PDF parser: extract total amount, period, and due date from DARF OCR text."""
+"""DARF extraction with LLM-first parsing and OCR fallback."""
 
 import re
 import unicodedata
@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from src.boleto_parser import boleto_text_extractor
+from src.llm_extraction import (
+    extract_darf_pdf,
+    normalize_dd_mm_yyyy,
+    normalize_digits,
+    normalize_mm_yyyy,
+)
 
 
 @dataclass
@@ -16,6 +22,9 @@ class DarfParsed:
     value: float | None
     emission_date: str | None  # MM/YYYY
     deadline_date: str | None  # DD/MM/YYYY
+    codigo_barras_raw: str | None = None
+    codigo_barras_digits: str | None = None
+    source: str = "fallback"
 
 
 def _normalize_br_number(s: str) -> float:
@@ -153,7 +162,14 @@ def _parse_deadline_date(text: str) -> str | None:
     return candidates[0][2]
 
 
-def parse_darf_pdf(pdf_bytes: bytes) -> DarfParsed:
+def _clean_text_field(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _parse_darf_pdf_with_ocr(pdf_bytes: bytes) -> DarfParsed:
     """Extract total amount, period, and due date from DARF PDF OCR text."""
     text = boleto_text_extractor(pdf_bytes)
     value: float | None = None
@@ -174,4 +190,61 @@ def parse_darf_pdf(pdf_bytes: bytes) -> DarfParsed:
         value=value,
         emission_date=_parse_period_from_text(text),
         deadline_date=_parse_deadline_date(text),
+    )
+
+
+def parse_darf_pdf(pdf_bytes: bytes, filename: str = "darf.pdf") -> DarfParsed:
+    """Extract DARF fields using the LLM first and OCR as fallback."""
+    llm_attempt = extract_darf_pdf(pdf_bytes, filename=filename)
+    llm_data = llm_attempt.data
+    fallback = _parse_darf_pdf_with_ocr(pdf_bytes)
+
+    llm_value = getattr(llm_data, "valor", None) if llm_data else None
+    llm_period = normalize_mm_yyyy(
+        getattr(llm_data, "periodo_apuracao", None) if llm_data else None
+    )
+    llm_deadline_date = normalize_dd_mm_yyyy(
+        getattr(llm_data, "data_vencimento", None) if llm_data else None
+    )
+    llm_codigo_barras = _clean_text_field(
+        getattr(llm_data, "codigo_barras", None) if llm_data else None
+    )
+
+    used_fallback = False
+    value = llm_value
+    if value is None:
+        value = fallback.value
+        used_fallback = used_fallback or value is not None
+
+    emission_date = llm_period
+    if emission_date is None:
+        emission_date = fallback.emission_date
+        used_fallback = used_fallback or emission_date is not None
+
+    deadline_date = llm_deadline_date
+    if deadline_date is None:
+        deadline_date = fallback.deadline_date
+        used_fallback = used_fallback or deadline_date is not None
+
+    has_llm_data = any(
+        (
+            llm_value is not None,
+            llm_period is not None,
+            llm_deadline_date is not None,
+            llm_codigo_barras is not None,
+        )
+    )
+    source = "fallback"
+    if has_llm_data and used_fallback:
+        source = "merged"
+    elif has_llm_data:
+        source = "llm"
+
+    return DarfParsed(
+        value=value,
+        emission_date=emission_date,
+        deadline_date=deadline_date,
+        codigo_barras_raw=llm_codigo_barras,
+        codigo_barras_digits=normalize_digits(llm_codigo_barras),
+        source=source,
     )

@@ -6,6 +6,12 @@ from io import BytesIO
 
 from pypdf import PdfReader
 
+from src.llm_extraction import (
+    extract_nf_pdf,
+    normalize_payment_datetime,
+    normalize_payment_via,
+)
+
 # Markers for the service description block
 START_MARKER = (
     "DESCRIÇÃO DO SERVIÇO PRESTADO (EM ACORDO COM A CNAE/CBO IDENTIFICADA NO CAMPO SERVIÇO "
@@ -38,6 +44,21 @@ class BRLResult:
 
     brl_no_spread: float
     brl_with_spread: float
+
+
+@dataclass
+class NFParsed:
+    """Normalized NF fields used by the app."""
+
+    company: str | None
+    usd: float | None
+    rate: float | None
+    spread: float
+    spread_was_default: bool
+    nf_date: str | None
+    verification_code: str | None
+    payment_via: str | None
+    source: str = "fallback"
 
 
 def _normalize_br_number(s: str) -> float:
@@ -230,3 +251,124 @@ def compute_brl(usd: float, rate: float, spread: float) -> BRLResult:
     effective_rate = rate * (1 - spread / 1000)  # spread 3 → 0.3% off the rate
     brl_with_spread = round(usd * effective_rate, 2)  # smaller: rate after spread deduction
     return BRLResult(brl_no_spread=brl_no_spread, brl_with_spread=brl_with_spread)
+
+
+def _clean_text_field(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _parse_nf_pdf_with_text(pdf_bytes: bytes) -> NFParsed:
+    """Fallback NF parsing using the current PDF text logic."""
+    full_text = extract_text_from_pdf(pdf_bytes)
+    block = get_description_block(full_text) if full_text else None
+    parsed = parse_description_block(block) if block else ParsedFields(
+        company=None,
+        usd=None,
+        rate=None,
+        spread=DEFAULT_SPREAD,
+        spread_was_default=True,
+    )
+    return NFParsed(
+        company=parsed.company,
+        usd=parsed.usd,
+        rate=parsed.rate,
+        spread=parsed.spread,
+        spread_was_default=parsed.spread_was_default,
+        nf_date=get_date_from_pdf(full_text),
+        verification_code=get_verification_code(full_text),
+        payment_via=get_payment_via(full_text),
+        source="fallback",
+    )
+
+
+def parse_nf_pdf(pdf_bytes: bytes, filename: str = "nota_fiscal.pdf") -> NFParsed:
+    """Extract NF fields using the LLM first and the text parser as fallback."""
+    llm_attempt = extract_nf_pdf(pdf_bytes, filename=filename)
+    llm_data = llm_attempt.data
+    fallback = _parse_nf_pdf_with_text(pdf_bytes)
+
+    llm_company = _clean_text_field(getattr(llm_data, "empresa", None) if llm_data else None)
+    llm_usd = getattr(llm_data, "valor_usd", None) if llm_data else None
+    llm_rate = getattr(llm_data, "cotacao", None) if llm_data else None
+    llm_spread = getattr(llm_data, "spread", None) if llm_data else None
+    llm_nf_date = normalize_payment_datetime(
+        getattr(llm_data, "data_emissao", None) if llm_data else None
+    )
+    llm_verification_code = _clean_text_field(
+        getattr(llm_data, "codigo_verificacao", None) if llm_data else None
+    )
+    llm_payment_via = normalize_payment_via(
+        getattr(llm_data, "pagamento_via", None) if llm_data else None
+    )
+
+    used_fallback = False
+
+    company = llm_company
+    if company is None:
+        company = fallback.company
+        used_fallback = used_fallback or company is not None
+
+    usd = llm_usd
+    if usd is None:
+        usd = fallback.usd
+        used_fallback = used_fallback or usd is not None
+
+    rate = llm_rate
+    if rate is None:
+        rate = fallback.rate
+        used_fallback = used_fallback or rate is not None
+
+    if llm_spread is None:
+        spread = fallback.spread
+        spread_was_default = fallback.spread_was_default
+        used_fallback = True
+    else:
+        spread = llm_spread
+        spread_was_default = False
+
+    nf_date = llm_nf_date
+    if nf_date is None:
+        nf_date = fallback.nf_date
+        used_fallback = used_fallback or nf_date is not None
+
+    verification_code = llm_verification_code
+    if verification_code is None:
+        verification_code = fallback.verification_code
+        used_fallback = used_fallback or verification_code is not None
+
+    payment_via = llm_payment_via
+    if payment_via is None:
+        payment_via = fallback.payment_via
+        used_fallback = used_fallback or payment_via is not None
+
+    has_llm_data = any(
+        (
+            llm_company is not None,
+            llm_usd is not None,
+            llm_rate is not None,
+            llm_spread is not None,
+            llm_nf_date is not None,
+            llm_verification_code is not None,
+            llm_payment_via is not None,
+        )
+    )
+    source = "fallback"
+    if has_llm_data and used_fallback:
+        source = "merged"
+    elif has_llm_data:
+        source = "llm"
+
+    return NFParsed(
+        company=company,
+        usd=usd,
+        rate=rate,
+        spread=spread,
+        spread_was_default=spread_was_default,
+        nf_date=nf_date,
+        verification_code=verification_code,
+        payment_via=payment_via,
+        source=source,
+    )
