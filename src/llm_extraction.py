@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -106,6 +107,77 @@ class NfPdfExtraida(BaseModel):
     pagamento_via: str | None = Field(
         default=None,
         description="Nome da plataforma de pagamento, como Wise ou Higlobe.",
+    )
+
+
+class ExtratoEntryExtraida(BaseModel):
+    data: str = Field(description="Data da transacao no formato DD/MM/YYYY.")
+    nome: str = Field(description="Nome resumido da transacao.")
+    descricao: str = Field(description="Descricao complementar da transacao.")
+    valor: float = Field(description="Valor da transacao em reais.")
+    tipo: Literal["entrada", "saida"] = Field(
+        description="Tipo da transacao: entrada ou saida."
+    )
+
+
+class ExtratoPdfExtraido(BaseModel):
+    entries: list[ExtratoEntryExtraida] = Field(
+        description="Lista de transacoes presentes no extrato."
+    )
+    saldo_inicial: float | None = Field(
+        default=None,
+        description="Saldo inicial do periodo em reais.",
+    )
+    rendimento: float | None = Field(
+        default=None,
+        description="Rendimento liquido do periodo em reais.",
+    )
+    total_entradas: float | None = Field(
+        default=None,
+        description="Total de entradas do periodo em reais.",
+    )
+    total_saidas: float | None = Field(
+        default=None,
+        description="Total de saidas do periodo em reais.",
+    )
+    saldo_final: float | None = Field(
+        default=None,
+        description="Saldo final do periodo em reais.",
+    )
+
+
+class CaixinhaEntryExtraida(BaseModel):
+    data: str = Field(description="Data da movimentacao no formato DD/MM/YYYY.")
+    movimentacao: str = Field(description="Descricao da movimentacao da caixinha.")
+    rendimento: float | None = Field(
+        default=None,
+        description="Rendimento da movimentacao em reais.",
+    )
+    valor_bruto: float | None = Field(
+        default=None,
+        description="Valor bruto da movimentacao em reais.",
+    )
+    imposto: float | None = Field(
+        default=None,
+        description="Imposto da movimentacao em reais.",
+    )
+    iof: float | None = Field(
+        default=None,
+        description="IOF da movimentacao em reais.",
+    )
+    valor_liquido: float | None = Field(
+        default=None,
+        description="Valor liquido da movimentacao em reais.",
+    )
+
+
+class CaixinhaPdfExtraido(BaseModel):
+    entries: list[CaixinhaEntryExtraida] = Field(
+        description="Lista de movimentacoes presentes no extrato de caixinha."
+    )
+    saldo_final: float | None = Field(
+        default=None,
+        description="Saldo final do periodo em reais.",
     )
 
 
@@ -345,6 +417,49 @@ def extract_darf_receipt(
             "do DARF pago."
         ),
         schema=ComprovanteExtraido,
+    )
+
+
+def extract_extrato_pdf(
+    file_bytes: bytes,
+    filename: str = "extrato.pdf",
+) -> LLMExtractionResult:
+    return _extract_structured_data(
+        file_bytes=file_bytes,
+        filename=filename,
+        mime_type="application/pdf",
+        system_prompt=(
+            "Voce e um sistema de extracao de dados de extratos bancarios. "
+            "Seja preciso e objetivo."
+        ),
+        user_prompt=(
+            "Extraia os dados do extrato no formato JSON. "
+            "Preciso da lista de transacoes com data, nome, descricao, valor e tipo, "
+            "alem de saldo inicial, rendimento, total de entradas, total de saidas "
+            "e saldo final."
+        ),
+        schema=ExtratoPdfExtraido,
+    )
+
+
+def extract_caixinha_pdf(
+    file_bytes: bytes,
+    filename: str = "caixinha.pdf",
+) -> LLMExtractionResult:
+    return _extract_structured_data(
+        file_bytes=file_bytes,
+        filename=filename,
+        mime_type="application/pdf",
+        system_prompt=(
+            "Voce e um sistema de extracao de dados de extratos bancarios de caixinha. "
+            "Seja preciso e objetivo."
+        ),
+        user_prompt=(
+            "Extraia os dados do extrato da caixinha no formato JSON. "
+            "Preciso da lista de movimentacoes com data, movimentacao, rendimento, "
+            "valor bruto, imposto, iof e valor liquido, alem do saldo final do periodo."
+        ),
+        schema=CaixinhaPdfExtraido,
     )
 
 

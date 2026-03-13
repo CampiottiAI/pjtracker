@@ -126,6 +126,50 @@ def init_db() -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_darfs_content_hash
             ON darfs (content_hash) WHERE content_hash IS NOT NULL
         """)
+        # Extratos: main statement PDF + optional caixinha PDF
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS extratos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                extrato_pdf_path TEXT NOT NULL,
+                caixinha_pdf_path TEXT,
+                period_start TEXT,
+                period_end TEXT,
+                saldo_inicial REAL,
+                rendimento REAL,
+                total_entradas REAL,
+                total_saidas REAL,
+                saldo_final REAL,
+                caixinha_saldo_final REAL,
+                extrato_entries_json TEXT,
+                caixinha_entries_json TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                content_hash TEXT
+            )
+        """)
+        for statement in (
+            "ALTER TABLE extratos ADD COLUMN caixinha_pdf_path TEXT",
+            "ALTER TABLE extratos ADD COLUMN period_start TEXT",
+            "ALTER TABLE extratos ADD COLUMN period_end TEXT",
+            "ALTER TABLE extratos ADD COLUMN saldo_inicial REAL",
+            "ALTER TABLE extratos ADD COLUMN rendimento REAL",
+            "ALTER TABLE extratos ADD COLUMN total_entradas REAL",
+            "ALTER TABLE extratos ADD COLUMN total_saidas REAL",
+            "ALTER TABLE extratos ADD COLUMN saldo_final REAL",
+            "ALTER TABLE extratos ADD COLUMN caixinha_saldo_final REAL",
+            "ALTER TABLE extratos ADD COLUMN extrato_entries_json TEXT",
+            "ALTER TABLE extratos ADD COLUMN caixinha_entries_json TEXT",
+            "ALTER TABLE extratos ADD COLUMN updated_at TEXT",
+            "ALTER TABLE extratos ADD COLUMN content_hash TEXT",
+        ):
+            try:
+                conn.execute(statement)
+            except sqlite3.OperationalError:
+                pass
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_extratos_content_hash
+            ON extratos (content_hash) WHERE content_hash IS NOT NULL
+        """)
 
 
 def _sanitize_filename(s: str) -> str:
@@ -738,4 +782,268 @@ def delete_darf(darf_id: int) -> bool:
             p.unlink(missing_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("DELETE FROM darfs WHERE id = ?", (darf_id,))
+    return True
+
+
+# --- Extratos ---
+
+
+def compute_extrato_content_hash(
+    period_start: str | None,
+    period_end: str | None,
+) -> str | None:
+    """Deterministic hash from the statement period."""
+    start = (period_start or "").strip()
+    end = (period_end or "").strip()
+    payload = f"{start}|{end}"
+    if payload == "|":
+        return None
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def save_extrato_pdf(
+    pdf_bytes: bytes,
+    period_start: str | None = None,
+    period_end: str | None = None,
+) -> Path:
+    """Save extrato PDF to pdfs/ with a unique name. Returns path."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    safe_start = _sanitize_filename((period_start or "").replace("/", "-"))[:20] or "nodate"
+    safe_end = _sanitize_filename((period_end or "").replace("/", "-"))[:20] or "nodate"
+    base = f"extrato_{safe_start}_{safe_end}"
+    path = PDF_DIR / f"{base}.pdf"
+    counter = 0
+    while path.exists():
+        counter += 1
+        path = PDF_DIR / f"{base}_{counter}.pdf"
+    path.write_bytes(pdf_bytes)
+    return path
+
+
+def save_caixinha_pdf(
+    pdf_bytes: bytes,
+    period_start: str | None = None,
+    period_end: str | None = None,
+) -> Path:
+    """Save caixinha PDF to pdfs/ with a unique name. Returns path."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    safe_start = _sanitize_filename((period_start or "").replace("/", "-"))[:20] or "nodate"
+    safe_end = _sanitize_filename((period_end or "").replace("/", "-"))[:20] or "nodate"
+    base = f"caixinha_{safe_start}_{safe_end}"
+    path = PDF_DIR / f"{base}.pdf"
+    counter = 0
+    while path.exists():
+        counter += 1
+        path = PDF_DIR / f"{base}_{counter}.pdf"
+    path.write_bytes(pdf_bytes)
+    return path
+
+
+def save_extrato_entry(
+    *,
+    extrato_pdf_path: str,
+    period_start: str | None = None,
+    period_end: str | None = None,
+    saldo_inicial: float | None = None,
+    rendimento: float | None = None,
+    total_entradas: float | None = None,
+    total_saidas: float | None = None,
+    saldo_final: float | None = None,
+    extrato_entries_json: str | None = None,
+    caixinha_pdf_path: str | None = None,
+    caixinha_saldo_final: float | None = None,
+    caixinha_entries_json: str | None = None,
+) -> tuple[bool, int | None]:
+    """Insert one extrato row. Returns (inserted, id)."""
+    content_hash = compute_extrato_content_hash(period_start, period_end)
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO extratos (
+                    extrato_pdf_path, caixinha_pdf_path, period_start, period_end,
+                    saldo_inicial, rendimento, total_entradas, total_saidas, saldo_final,
+                    caixinha_saldo_final, extrato_entries_json, caixinha_entries_json,
+                    created_at, updated_at, content_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    extrato_pdf_path,
+                    caixinha_pdf_path,
+                    period_start,
+                    period_end,
+                    saldo_inicial,
+                    rendimento,
+                    total_entradas,
+                    total_saidas,
+                    saldo_final,
+                    caixinha_saldo_final,
+                    extrato_entries_json,
+                    caixinha_entries_json,
+                    now,
+                    now,
+                    content_hash,
+                ),
+            )
+            return (True, cur.lastrowid)
+    except sqlite3.IntegrityError:
+        return (False, None)
+
+
+def get_extratos() -> list[dict]:
+    """Return all extratos, newest first."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute("SELECT * FROM extratos ORDER BY created_at DESC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_extrato_by_id(extrato_id: int) -> dict | None:
+    """Return one extrato by id or None."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute("SELECT * FROM extratos WHERE id = ?", (extrato_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def update_extrato_pdf(
+    extrato_id: int,
+    pdf_bytes: bytes,
+    *,
+    period_start: str | None,
+    period_end: str | None,
+    saldo_inicial: float | None,
+    rendimento: float | None,
+    total_entradas: float | None,
+    total_saidas: float | None,
+    saldo_final: float | None,
+    extrato_entries_json: str | None,
+) -> bool:
+    """Replace the main extrato PDF and update parsed fields."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    row = get_extrato_by_id(extrato_id)
+    if not row:
+        return False
+    old_path = row.get("extrato_pdf_path")
+    if old_path:
+        full_old = Path(DB_PATH).resolve().parent / old_path if not Path(old_path).is_absolute() else Path(old_path)
+        if full_old.exists():
+            full_old.unlink(missing_ok=True)
+    new_path = save_extrato_pdf(pdf_bytes, period_start, period_end)
+    content_hash = compute_extrato_content_hash(period_start, period_end)
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                """
+                UPDATE extratos
+                SET extrato_pdf_path = ?, period_start = ?, period_end = ?,
+                    saldo_inicial = ?, rendimento = ?, total_entradas = ?,
+                    total_saidas = ?, saldo_final = ?, extrato_entries_json = ?,
+                    content_hash = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    str(new_path),
+                    period_start,
+                    period_end,
+                    saldo_inicial,
+                    rendimento,
+                    total_entradas,
+                    total_saidas,
+                    saldo_final,
+                    extrato_entries_json,
+                    content_hash,
+                    now,
+                    extrato_id,
+                ),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def update_caixinha_pdf(
+    extrato_id: int,
+    pdf_bytes: bytes,
+    *,
+    period_start: str | None,
+    period_end: str | None,
+    caixinha_saldo_final: float | None,
+    caixinha_entries_json: str | None,
+) -> bool:
+    """Replace the caixinha PDF and update parsed fields."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    row = get_extrato_by_id(extrato_id)
+    if not row:
+        return False
+    old_path = row.get("caixinha_pdf_path")
+    if old_path:
+        full_old = Path(DB_PATH).resolve().parent / old_path if not Path(old_path).is_absolute() else Path(old_path)
+        if full_old.exists():
+            full_old.unlink(missing_ok=True)
+    new_path = save_caixinha_pdf(pdf_bytes, period_start, period_end)
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            UPDATE extratos
+            SET caixinha_pdf_path = ?, caixinha_saldo_final = ?,
+                caixinha_entries_json = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                str(new_path),
+                caixinha_saldo_final,
+                caixinha_entries_json,
+                now,
+                extrato_id,
+            ),
+        )
+    return True
+
+
+def remove_caixinha_pdf(extrato_id: int) -> bool:
+    """Delete the stored caixinha PDF and clear its parsed fields."""
+    row = get_extrato_by_id(extrato_id)
+    if not row:
+        return False
+    old_path = row.get("caixinha_pdf_path")
+    if old_path:
+        full_old = Path(DB_PATH).resolve().parent / old_path if not Path(old_path).is_absolute() else Path(old_path)
+        if full_old.exists():
+            full_old.unlink(missing_ok=True)
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            UPDATE extratos
+            SET caixinha_pdf_path = NULL, caixinha_saldo_final = NULL,
+                caixinha_entries_json = NULL, updated_at = ?
+            WHERE id = ?
+            """,
+            (now, extrato_id),
+        )
+    return True
+
+
+def delete_extrato(extrato_id: int) -> bool:
+    """Delete extrato row and its PDFs. Returns True if deleted, False if not found."""
+    row = get_extrato_by_id(extrato_id)
+    if not row:
+        return False
+    project_root = Path(DB_PATH).resolve().parent
+    for path_key in ("extrato_pdf_path", "caixinha_pdf_path"):
+        raw = row.get(path_key)
+        if not raw or (isinstance(raw, str) and not raw.strip()):
+            continue
+        p = Path(raw)
+        if not p.is_absolute():
+            p = project_root / raw
+        if p.exists():
+            p.unlink(missing_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM extratos WHERE id = ?", (extrato_id,))
     return True
