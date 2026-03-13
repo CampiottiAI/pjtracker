@@ -16,8 +16,12 @@ if "graf_applied_date_from" not in st.session_state:
 if "graf_applied_date_to" not in st.session_state:
     st.session_state.graf_applied_date_to = date.today()
 
-date_from = st.date_input("De", value=st.session_state.graf_applied_date_from, format="DD/MM/YYYY")
-date_to = st.date_input("Até", value=st.session_state.graf_applied_date_to, format="DD/MM/YYYY")
+date_from = st.date_input(
+    "De", value=st.session_state.graf_applied_date_from, format="DD/MM/YYYY"
+)
+date_to = st.date_input(
+    "Até", value=st.session_state.graf_applied_date_to, format="DD/MM/YYYY"
+)
 
 if date_from > date_to:
     st.warning("A data 'De' deve ser anterior ou igual à data 'Até'.")
@@ -42,15 +46,17 @@ for row in entries:
         continue
     rate = row.get("rate") or 0
     spread = row.get("spread") or 0
-    effective_rate = rate * (1 - spread / 1000)
-    chart_rows.append({
-        "date": d,
-        "usd": row.get("usd") or 0,
-        "brl_no_spread": row.get("brl_no_spread") or 0,
-        "brl_with_spread": row.get("brl_with_spread") or 0,
-        "rate": rate,
-        "effective_rate": effective_rate,
-    })
+    effective_rate = rate * (1 - spread / 100)
+    chart_rows.append(
+        {
+            "date": d,
+            "usd": row.get("usd") or 0,
+            "brl_no_spread": row.get("brl_no_spread") or 0,
+            "brl_with_spread": row.get("brl_with_spread") or 0,
+            "rate": rate,
+            "effective_rate": effective_rate,
+        }
+    )
 chart_rows.sort(key=lambda r: r["date"])
 
 if not chart_rows:
@@ -61,7 +67,11 @@ dates = [r["date"] for r in chart_rows]
 
 # Graph 1 – Values in USD
 fig_usd = go.Figure()
-fig_usd.add_trace(go.Scatter(x=dates, y=[r["usd"] for r in chart_rows], mode="lines+markers", name="USD"))
+fig_usd.add_trace(
+    go.Scatter(
+        x=dates, y=[r["usd"] for r in chart_rows], mode="lines+markers", name="USD"
+    )
+)
 fig_usd.update_layout(
     title="Valor das NFs em USD",
     xaxis_title="Data",

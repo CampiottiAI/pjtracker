@@ -149,7 +149,9 @@ def _get_description_block_from_verification_section(full_text: str) -> str | No
     """
     if not full_text or CODIGO_VERIFICACAO_LABEL not in full_text:
         return None
-    start_idx = full_text.index(CODIGO_VERIFICACAO_LABEL) + len(CODIGO_VERIFICACAO_LABEL)
+    start_idx = full_text.index(CODIGO_VERIFICACAO_LABEL) + len(
+        CODIGO_VERIFICACAO_LABEL
+    )
     if RETENCOES_MARKER not in full_text[start_idx:]:
         return None
     end_idx = full_text.index(RETENCOES_MARKER, start_idx)
@@ -248,8 +250,10 @@ def compute_brl(usd: float, rate: float, spread: float) -> BRLResult:
     Spread is applied to the rate: e.g. spread 3 means 0.3% deducted from the base rate
     (R$ 5.2011 - 0.30% = R$ 5.1854). So spread value is in tenths of percent."""
     brl_no_spread = round(usd * rate, 2)  # highest: full rate (e.g. 5.2011)
-    effective_rate = rate * (1 - spread / 1000)  # spread 3 → 0.3% off the rate
-    brl_with_spread = round(usd * effective_rate, 2)  # smaller: rate after spread deduction
+    effective_rate = rate * (1 - spread / 100)  # spread 3 → 0.3% off the rate
+    brl_with_spread = round(
+        usd * effective_rate, 2
+    )  # smaller: rate after spread deduction
     return BRLResult(brl_no_spread=brl_no_spread, brl_with_spread=brl_with_spread)
 
 
@@ -264,12 +268,16 @@ def _parse_nf_pdf_with_text(pdf_bytes: bytes) -> NFParsed:
     """Fallback NF parsing using the current PDF text logic."""
     full_text = extract_text_from_pdf(pdf_bytes)
     block = get_description_block(full_text) if full_text else None
-    parsed = parse_description_block(block) if block else ParsedFields(
-        company=None,
-        usd=None,
-        rate=None,
-        spread=DEFAULT_SPREAD,
-        spread_was_default=True,
+    parsed = (
+        parse_description_block(block)
+        if block
+        else ParsedFields(
+            company=None,
+            usd=None,
+            rate=None,
+            spread=DEFAULT_SPREAD,
+            spread_was_default=True,
+        )
     )
     return NFParsed(
         company=parsed.company,
@@ -290,7 +298,9 @@ def parse_nf_pdf(pdf_bytes: bytes, filename: str = "nota_fiscal.pdf") -> NFParse
     llm_data = llm_attempt.data
     fallback = _parse_nf_pdf_with_text(pdf_bytes)
 
-    llm_company = _clean_text_field(getattr(llm_data, "empresa", None) if llm_data else None)
+    llm_company = _clean_text_field(
+        getattr(llm_data, "empresa", None) if llm_data else None
+    )
     llm_usd = getattr(llm_data, "valor_usd", None) if llm_data else None
     llm_rate = getattr(llm_data, "cotacao", None) if llm_data else None
     llm_spread = getattr(llm_data, "spread", None) if llm_data else None
