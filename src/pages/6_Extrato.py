@@ -7,7 +7,10 @@ import streamlit as st
 
 from src.app import (
     DB_PATH,
+    default_fiscal_mes_date,
     delete_extrato,
+    format_fiscal_mes,
+    fiscal_mes_to_date,
     get_extrato_by_id,
     get_extratos,
     init_db,
@@ -16,6 +19,7 @@ from src.app import (
     save_extrato_entry,
     save_extrato_pdf,
     update_caixinha_pdf,
+    update_extrato_fiscal_mes,
     update_extrato_pdf,
 )
 from src.extrato_parser import parse_caixinha_pdf, parse_extrato_pdf
@@ -196,54 +200,68 @@ if mode == "Adicionar extrato":
                         )
 
                 st.divider()
+                fiscal_mes_date = st.date_input(
+                    "Fiscal Mês (mês/ano)",
+                    value=default_fiscal_mes_date(),
+                    format="DD/MM/YYYY",
+                    key="extrato_fiscal_mes",
+                )
                 if st.button("Salvar extrato", key="save_extrato"):
-                    extrato_pdf_path = save_extrato_pdf(
-                        extrato_bytes,
-                        period_start=parsed_extrato.period_start,
-                        period_end=parsed_extrato.period_end,
+                    fiscal_mes = (
+                        fiscal_mes_date.replace(day=1).strftime("%Y-%m")
+                        if fiscal_mes_date else None
                     )
-                    caixinha_pdf_path = None
-                    if caixinha_bytes is not None and parsed_caixinha is not None:
-                        caixinha_pdf_path = save_caixinha_pdf(
-                            caixinha_bytes,
-                            period_start=parsed_caixinha.period_start or parsed_extrato.period_start,
-                            period_end=parsed_caixinha.period_end or parsed_extrato.period_end,
-                        )
-
-                    inserted, _ = save_extrato_entry(
-                        extrato_pdf_path=str(extrato_pdf_path),
-                        period_start=parsed_extrato.period_start,
-                        period_end=parsed_extrato.period_end,
-                        saldo_inicial=parsed_extrato.saldo_inicial,
-                        rendimento=parsed_extrato.rendimento,
-                        total_entradas=parsed_extrato.total_entradas,
-                        total_saidas=parsed_extrato.total_saidas,
-                        saldo_final=parsed_extrato.saldo_final,
-                        extrato_entries_json=json.dumps(parsed_extrato.entries),
-                        caixinha_pdf_path=str(caixinha_pdf_path) if caixinha_pdf_path else None,
-                        caixinha_saldo_final=(
-                            parsed_caixinha.saldo_final if parsed_caixinha else None
-                        ),
-                        caixinha_entries_json=(
-                            json.dumps(parsed_caixinha.entries) if parsed_caixinha else None
-                        ),
-                    )
-                    if not inserted:
-                        extrato_path = _resolve_path(str(extrato_pdf_path))
-                        if extrato_path and extrato_path.exists():
-                            extrato_path.unlink(missing_ok=True)
-                        saved_caixinha_path = (
-                            _resolve_path(str(caixinha_pdf_path)) if caixinha_pdf_path else None
-                        )
-                        if saved_caixinha_path and saved_caixinha_path.exists():
-                            saved_caixinha_path.unlink(missing_ok=True)
-                        st.error("Já existe um extrato salvo para esse período.")
+                    if not fiscal_mes:
+                        st.error("Selecione o Fiscal Mês (mês/ano).")
                     else:
-                        _set_flash_messages(
-                            "Extrato salvo.",
-                            "Confira os dados extraídos antes de usar. A leitura do PDF é feita por IA e pode precisar de revisão.",
+                        extrato_pdf_path = save_extrato_pdf(
+                            extrato_bytes,
+                            period_start=parsed_extrato.period_start,
+                            period_end=parsed_extrato.period_end,
                         )
-                        st.rerun()
+                        caixinha_pdf_path = None
+                        if caixinha_bytes is not None and parsed_caixinha is not None:
+                            caixinha_pdf_path = save_caixinha_pdf(
+                                caixinha_bytes,
+                                period_start=parsed_caixinha.period_start or parsed_extrato.period_start,
+                                period_end=parsed_caixinha.period_end or parsed_extrato.period_end,
+                            )
+
+                        inserted, _ = save_extrato_entry(
+                            extrato_pdf_path=str(extrato_pdf_path),
+                            period_start=parsed_extrato.period_start,
+                            period_end=parsed_extrato.period_end,
+                            saldo_inicial=parsed_extrato.saldo_inicial,
+                            rendimento=parsed_extrato.rendimento,
+                            total_entradas=parsed_extrato.total_entradas,
+                            total_saidas=parsed_extrato.total_saidas,
+                            saldo_final=parsed_extrato.saldo_final,
+                            extrato_entries_json=json.dumps(parsed_extrato.entries),
+                            caixinha_pdf_path=str(caixinha_pdf_path) if caixinha_pdf_path else None,
+                            caixinha_saldo_final=(
+                                parsed_caixinha.saldo_final if parsed_caixinha else None
+                            ),
+                            caixinha_entries_json=(
+                                json.dumps(parsed_caixinha.entries) if parsed_caixinha else None
+                            ),
+                            fiscal_mes=fiscal_mes,
+                        )
+                        if not inserted:
+                            extrato_path = _resolve_path(str(extrato_pdf_path))
+                            if extrato_path and extrato_path.exists():
+                                extrato_path.unlink(missing_ok=True)
+                            saved_caixinha_path = (
+                                _resolve_path(str(caixinha_pdf_path)) if caixinha_pdf_path else None
+                            )
+                            if saved_caixinha_path and saved_caixinha_path.exists():
+                                saved_caixinha_path.unlink(missing_ok=True)
+                            st.error("Já existe um extrato salvo para esse período.")
+                        else:
+                            _set_flash_messages(
+                                "Extrato salvo.",
+                                "Confira os dados extraídos antes de usar. A leitura do PDF é feita por IA e pode precisar de revisão.",
+                            )
+                            st.rerun()
             except Exception as exc:
                 st.error(f"Erro ao processar o PDF: {exc}")
 
@@ -289,6 +307,22 @@ else:
         "Transações salvas do extrato",
         _load_entries(row.get("extrato_entries_json")),
     )
+
+    st.divider()
+    st.markdown("**Fiscal Mês**")
+    st.caption(f"Atual: {format_fiscal_mes(row.get('fiscal_mes'))}")
+    extrato_fiscal_default = fiscal_mes_to_date(row.get("fiscal_mes")) or default_fiscal_mes_date()
+    extrato_fiscal_mes_date = st.date_input(
+        "Alterar Fiscal Mês (mês/ano)",
+        value=extrato_fiscal_default,
+        format="DD/MM/YYYY",
+        key="extrato_detail_fiscal_mes",
+    )
+    if st.button("Atualizar fiscal mês", key="extrato_update_fiscal_mes"):
+        new_fiscal_mes = extrato_fiscal_mes_date.replace(day=1).strftime("%Y-%m") if extrato_fiscal_mes_date else None
+        update_extrato_fiscal_mes(extrato_id, new_fiscal_mes)
+        st.success("Fiscal mês atualizado.")
+        st.rerun()
 
     extrato_path = _resolve_path(row.get("extrato_pdf_path"))
     if extrato_path and extrato_path.exists():

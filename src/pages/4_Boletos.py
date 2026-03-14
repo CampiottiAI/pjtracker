@@ -10,12 +10,16 @@ from st_img_pastebutton import paste
 
 from src.app import (
     DB_PATH,
+    default_fiscal_mes_date,
     delete_boleto,
+    format_fiscal_mes,
+    fiscal_mes_to_date,
     get_boletos,
     init_db,
     save_boleto_entry,
     save_boleto_pdf,
     save_boleto_receipt,
+    update_boleto_fiscal_mes,
     update_boleto_pdf,
     update_boleto_receipt,
 )
@@ -311,58 +315,72 @@ if mode == "Adicionar boleto":
                         receipt_date_str = None
 
                 st.divider()
+                fiscal_mes_date = st.date_input(
+                    "Fiscal Mês (mês/ano)",
+                    value=default_fiscal_mes_date(),
+                    format="DD/MM/YYYY",
+                    key="boleto_fiscal_mes",
+                )
                 if st.button("Salvar boleto"):
                     if pending_receipt and receipt_date_str is None:
                         st.error("Informe ou extraia a data do comprovante.")
                     else:
-                        pdf_path = save_boleto_pdf(
-                            pdf_bytes,
-                            emission_date=parsed.emission_date,
-                            value=parsed.value,
+                        fiscal_mes = (
+                            fiscal_mes_date.replace(day=1).strftime("%Y-%m")
+                            if fiscal_mes_date else None
                         )
-                        inserted, boleto_id = save_boleto_entry(
-                            pdf_path=str(pdf_path),
-                            value=parsed.value,
-                            emission_date=parsed.emission_date,
-                            deadline_date=parsed.deadline_date,
-                            codigo_barras=parsed.codigo_barras_raw,
-                            codigo_barras_digits=parsed.codigo_barras_digits,
-                            receipt_path=None,
-                            receipt_date=None,
-                        )
-                        if not inserted:
-                            p = Path(pdf_path)
-                            if not p.is_absolute():
-                                p = project_root / pdf_path
-                            if p.exists():
-                                p.unlink(missing_ok=True)
-                            st.error("Já existe um boleto com esses dados (valor e datas).")
+                        if not fiscal_mes:
+                            st.error("Selecione o Fiscal Mês (mês/ano).")
                         else:
-                            if pending_receipt and boleto_id:
-                                receipt_payload = _get_receipt_payload("boleto_receipt")
-                                receipt_path = save_boleto_receipt(
-                                    boleto_id,
-                                    pending_receipt["bytes"],
-                                    pending_receipt["mime"],
-                                )
-                                update_boleto_receipt(
-                                    boleto_id,
-                                    str(receipt_path),
-                                    receipt_date_str,
-                                    receipt_value=receipt_payload["value"],
-                                    receipt_codigo_barras=receipt_payload["codigo_barras"],
-                                    receipt_codigo_barras_digits=receipt_payload[
-                                        "codigo_barras_digits"
-                                    ],
-                                    receipt_match_status=_compute_match_status(
-                                        parsed.codigo_barras_digits,
-                                        receipt_payload["codigo_barras_digits"],
-                                    ),
-                                )
-                            st.session_state["pending_boleto_receipt"] = None
-                            st.session_state["pending_boleto_receipt_pdf_key"] = None
-                            st.success("Boleto salvo.")
-                            st.rerun()
+                            pdf_path = save_boleto_pdf(
+                                pdf_bytes,
+                                emission_date=parsed.emission_date,
+                                value=parsed.value,
+                            )
+                            inserted, boleto_id = save_boleto_entry(
+                                pdf_path=str(pdf_path),
+                                value=parsed.value,
+                                emission_date=parsed.emission_date,
+                                deadline_date=parsed.deadline_date,
+                                codigo_barras=parsed.codigo_barras_raw,
+                                codigo_barras_digits=parsed.codigo_barras_digits,
+                                receipt_path=None,
+                                receipt_date=None,
+                                fiscal_mes=fiscal_mes,
+                            )
+                            if not inserted:
+                                p = Path(pdf_path)
+                                if not p.is_absolute():
+                                    p = project_root / pdf_path
+                                if p.exists():
+                                    p.unlink(missing_ok=True)
+                                st.error("Já existe um boleto com esses dados (valor e datas).")
+                            else:
+                                if pending_receipt and boleto_id:
+                                    receipt_payload = _get_receipt_payload("boleto_receipt")
+                                    receipt_path = save_boleto_receipt(
+                                        boleto_id,
+                                        pending_receipt["bytes"],
+                                        pending_receipt["mime"],
+                                    )
+                                    update_boleto_receipt(
+                                        boleto_id,
+                                        str(receipt_path),
+                                        receipt_date_str,
+                                        receipt_value=receipt_payload["value"],
+                                        receipt_codigo_barras=receipt_payload["codigo_barras"],
+                                        receipt_codigo_barras_digits=receipt_payload[
+                                            "codigo_barras_digits"
+                                        ],
+                                        receipt_match_status=_compute_match_status(
+                                            parsed.codigo_barras_digits,
+                                            receipt_payload["codigo_barras_digits"],
+                                        ),
+                                    )
+                                st.session_state["pending_boleto_receipt"] = None
+                                st.session_state["pending_boleto_receipt_pdf_key"] = None
+                                st.success("Boleto salvo.")
+                                st.rerun()
             except Exception as e:
                 st.error(f"Erro ao processar o PDF: {e}")
 
@@ -444,6 +462,22 @@ else:
         st.warning("O código de barras do comprovante não corresponde ao do boleto.")
     else:
         st.info("Ainda não foi possível comparar os códigos de barras salvos.")
+
+    st.divider()
+    st.markdown("**Fiscal Mês**")
+    st.caption(f"Atual: {format_fiscal_mes(row.get('fiscal_mes'))}")
+    boleto_fiscal_default = fiscal_mes_to_date(row.get("fiscal_mes")) or default_fiscal_mes_date()
+    boleto_fiscal_mes_date = st.date_input(
+        "Alterar Fiscal Mês (mês/ano)",
+        value=boleto_fiscal_default,
+        format="DD/MM/YYYY",
+        key="boleto_detail_fiscal_mes",
+    )
+    if st.button("Atualizar fiscal mês", key="boleto_update_fiscal_mes"):
+        new_fiscal_mes = boleto_fiscal_mes_date.replace(day=1).strftime("%Y-%m") if boleto_fiscal_mes_date else None
+        update_boleto_fiscal_mes(boleto_id, new_fiscal_mes)
+        st.success("Fiscal mês atualizado.")
+        st.rerun()
 
     pdf_path_raw = row.get("pdf_path")
     if pdf_path_raw:

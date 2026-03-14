@@ -41,6 +41,11 @@ def init_db() -> None:
             conn.execute("ALTER TABLE nf_entries ADD COLUMN pdf_path TEXT")
         except sqlite3.OperationalError:
             pass  # column already exists
+        # Migration: add fiscal_mes (month/year as YYYY-MM)
+        try:
+            conn.execute("ALTER TABLE nf_entries ADD COLUMN fiscal_mes TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         # Uniqueness: one row per NF (NULLs normalized to '' for index)
         conn.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_nf_entries_unique
@@ -91,6 +96,10 @@ def init_db() -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_boletos_content_hash
             ON boletos (content_hash) WHERE content_hash IS NOT NULL
         """)
+        try:
+            conn.execute("ALTER TABLE boletos ADD COLUMN fiscal_mes TEXT")
+        except sqlite3.OperationalError:
+            pass
         # DARFs: DARF PDF + optional receipt image
         conn.execute("""
             CREATE TABLE IF NOT EXISTS darfs (
@@ -126,6 +135,10 @@ def init_db() -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_darfs_content_hash
             ON darfs (content_hash) WHERE content_hash IS NOT NULL
         """)
+        try:
+            conn.execute("ALTER TABLE darfs ADD COLUMN fiscal_mes TEXT")
+        except sqlite3.OperationalError:
+            pass
         # Extratos: main statement PDF + optional caixinha PDF
         conn.execute("""
             CREATE TABLE IF NOT EXISTS extratos (
@@ -170,11 +183,63 @@ def init_db() -> None:
             CREATE UNIQUE INDEX IF NOT EXISTS idx_extratos_content_hash
             ON extratos (content_hash) WHERE content_hash IS NOT NULL
         """)
+        try:
+            conn.execute("ALTER TABLE extratos ADD COLUMN fiscal_mes TEXT")
+        except sqlite3.OperationalError:
+            pass
 
 
 def _sanitize_filename(s: str) -> str:
     """Replace characters that are unsafe in filenames."""
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in s)
+
+
+# --- Fiscal Mês (month/year) helpers ---
+
+FISCAL_MES_MONTH_NAMES = (
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+)
+
+
+def format_fiscal_mes(value: str | None) -> str:
+    """Format fiscal_mes 'YYYY-MM' for display, e.g. 'Março 2025'. Returns '—' if None or invalid."""
+    if not value or not value.strip():
+        return "—"
+    parts = value.strip().split("-")
+    if len(parts) != 2:
+        return value
+    try:
+        year = int(parts[0])
+        month = int(parts[1])
+        if 1 <= month <= 12:
+            return f"{FISCAL_MES_MONTH_NAMES[month - 1]} {year}"
+    except ValueError:
+        pass
+    return value
+
+
+def fiscal_mes_to_date(fiscal_mes: str | None) -> date | None:
+    """Parse fiscal_mes 'YYYY-MM' to first day of that month. Returns None if invalid."""
+    if not fiscal_mes or not fiscal_mes.strip():
+        return None
+    parts = fiscal_mes.strip().split("-")
+    if len(parts) != 2:
+        return None
+    try:
+        year = int(parts[0])
+        month = int(parts[1])
+        if 1 <= month <= 12:
+            return date(year, month, 1)
+    except ValueError:
+        pass
+    return None
+
+
+def default_fiscal_mes_date() -> date:
+    """First day of current month, for fiscal month picker default."""
+    today = date.today()
+    return today.replace(day=1)
 
 
 def save_pdf(pdf_bytes: bytes, verification_code: str, nf_date: str | None, usd: float) -> Path:
@@ -243,6 +308,7 @@ def save_nf_entry(
     verification_code: str | None,
     payment_via: str | None,
     pdf_path: str | None = None,
+    fiscal_mes: str | None = None,
 ) -> tuple[bool, int]:
     """Insert one NF entry; skip if (nf_date, verification_code, usd) already exists.
     Returns (inserted, nf_id): inserted is True if a new row was added, nf_id is the row id in both cases."""
@@ -251,8 +317,8 @@ def save_nf_entry(
             """
             INSERT OR IGNORE INTO nf_entries (
                 company, usd, rate, spread, brl_no_spread, brl_with_spread,
-                nf_date, verification_code, payment_via, pdf_path, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                nf_date, verification_code, payment_via, pdf_path, fiscal_mes, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 company,
@@ -265,6 +331,7 @@ def save_nf_entry(
                 verification_code,
                 payment_via,
                 pdf_path,
+                fiscal_mes,
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
@@ -358,6 +425,15 @@ def delete_nf(nf_id: int) -> bool:
     return True
 
 
+def update_nf_fiscal_mes(nf_id: int, fiscal_mes: str | None) -> None:
+    """Update fiscal_mes for an NF entry."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE nf_entries SET fiscal_mes = ? WHERE id = ?",
+            (fiscal_mes, nf_id),
+        )
+
+
 # --- Boletos ---
 
 
@@ -423,6 +499,7 @@ def save_boleto_entry(
     receipt_codigo_barras: str | None = None,
     receipt_codigo_barras_digits: str | None = None,
     receipt_match_status: str | None = None,
+    fiscal_mes: str | None = None,
 ) -> tuple[bool, int | None]:
     """Insert one boleto row. Returns (inserted, id): (True, id) on success, (False, None) if duplicate (same value + dates)."""
     content_hash = compute_boleto_content_hash(value, emission_date, deadline_date)
@@ -435,8 +512,8 @@ def save_boleto_entry(
                     pdf_path, receipt_path, value, emission_date, deadline_date,
                     codigo_barras, codigo_barras_digits, receipt_date, receipt_value,
                     receipt_codigo_barras, receipt_codigo_barras_digits, receipt_match_status,
-                    created_at, updated_at, content_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, updated_at, content_hash, fiscal_mes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     pdf_path,
@@ -454,6 +531,7 @@ def save_boleto_entry(
                     now,
                     now,
                     content_hash,
+                    fiscal_mes,
                 ),
             )
             return (True, cur.lastrowid)
@@ -575,6 +653,16 @@ def update_boleto_receipt(
         )
 
 
+def update_boleto_fiscal_mes(boleto_id: int, fiscal_mes: str | None) -> None:
+    """Update fiscal_mes for a boleto."""
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE boletos SET fiscal_mes = ?, updated_at = ? WHERE id = ?",
+            (fiscal_mes, now, boleto_id),
+        )
+
+
 def delete_boleto(boleto_id: int) -> bool:
     """Delete boleto row and its PDF and receipt files. Returns True if deleted, False if not found."""
     row = get_boleto_by_id(boleto_id)
@@ -662,6 +750,7 @@ def save_darf_entry(
     receipt_codigo_barras: str | None = None,
     receipt_codigo_barras_digits: str | None = None,
     receipt_match_status: str | None = None,
+    fiscal_mes: str | None = None,
 ) -> tuple[bool, int | None]:
     """Insert one DARF row. Returns (inserted, id): (True, id) on success, (False, None) on duplicate."""
     content_hash = compute_darf_content_hash(value, emission_date, deadline_date)
@@ -674,8 +763,8 @@ def save_darf_entry(
                     pdf_path, receipt_path, value, emission_date, deadline_date,
                     codigo_barras, codigo_barras_digits, receipt_date, receipt_value,
                     receipt_codigo_barras, receipt_codigo_barras_digits, receipt_match_status,
-                    created_at, updated_at, content_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, updated_at, content_hash, fiscal_mes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     pdf_path,
@@ -693,6 +782,7 @@ def save_darf_entry(
                     now,
                     now,
                     content_hash,
+                    fiscal_mes,
                 ),
             )
             return (True, cur.lastrowid)
@@ -804,6 +894,16 @@ def update_darf_receipt(
         )
 
 
+def update_darf_fiscal_mes(darf_id: int, fiscal_mes: str | None) -> None:
+    """Update fiscal_mes for a DARF."""
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE darfs SET fiscal_mes = ?, updated_at = ? WHERE id = ?",
+            (fiscal_mes, now, darf_id),
+        )
+
+
 def delete_darf(darf_id: int) -> bool:
     """Delete DARF row and its PDF and receipt files. Returns True if deleted, False if not found."""
     row = get_darf_by_id(darf_id)
@@ -892,6 +992,7 @@ def save_extrato_entry(
     caixinha_pdf_path: str | None = None,
     caixinha_saldo_final: float | None = None,
     caixinha_entries_json: str | None = None,
+    fiscal_mes: str | None = None,
 ) -> tuple[bool, int | None]:
     """Insert one extrato row. Returns (inserted, id)."""
     content_hash = compute_extrato_content_hash(period_start, period_end)
@@ -904,8 +1005,8 @@ def save_extrato_entry(
                     extrato_pdf_path, caixinha_pdf_path, period_start, period_end,
                     saldo_inicial, rendimento, total_entradas, total_saidas, saldo_final,
                     caixinha_saldo_final, extrato_entries_json, caixinha_entries_json,
-                    created_at, updated_at, content_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, updated_at, content_hash, fiscal_mes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     extrato_pdf_path,
@@ -923,6 +1024,7 @@ def save_extrato_entry(
                     now,
                     now,
                     content_hash,
+                    fiscal_mes,
                 ),
             )
             return (True, cur.lastrowid)
@@ -1066,6 +1168,16 @@ def remove_caixinha_pdf(extrato_id: int) -> bool:
             (now, extrato_id),
         )
     return True
+
+
+def update_extrato_fiscal_mes(extrato_id: int, fiscal_mes: str | None) -> None:
+    """Update fiscal_mes for an extrato."""
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE extratos SET fiscal_mes = ?, updated_at = ? WHERE id = ?",
+            (fiscal_mes, now, extrato_id),
+        )
 
 
 def delete_extrato(extrato_id: int) -> bool:

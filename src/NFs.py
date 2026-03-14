@@ -10,7 +10,10 @@ from st_img_pastebutton import paste
 
 from src.app import (
     DB_PATH,
+    default_fiscal_mes_date,
     delete_nf,
+    format_fiscal_mes,
+    fiscal_mes_to_date,
     get_nf_entries,
     get_nf_images,
     init_db,
@@ -18,6 +21,7 @@ from src.app import (
     save_nf_entry,
     save_nf_image,
     save_pdf,
+    update_nf_fiscal_mes,
 )
 from src.nf_parser import (
     compute_brl,
@@ -33,7 +37,9 @@ tab_nf, tab_historico = st.tabs(["NF", "Histórico"])
 
 # --- Tab NF: upload, parse, save ---
 with tab_nf:
-    uploaded = st.file_uploader("Envie o PDF da Nota Fiscal", type=["pdf"], key="nf_upload")
+    uploaded = st.file_uploader(
+        "Envie o PDF da Nota Fiscal", type=["pdf"], key="nf_upload"
+    )
 
     if uploaded is not None:
         pdf_bytes = uploaded.read()
@@ -41,7 +47,9 @@ with tab_nf:
             st.error("Arquivo vazio.")
         else:
             try:
-                parsed = parse_nf_pdf(pdf_bytes, filename=uploaded.name or "nota_fiscal.pdf")
+                parsed = parse_nf_pdf(
+                    pdf_bytes, filename=uploaded.name or "nota_fiscal.pdf"
+                )
                 if parsed.usd is None or parsed.rate is None:
                     st.error(
                         "Não foi possível extrair Valor em Dólar e/ou Cotação do documento. "
@@ -132,8 +140,16 @@ with tab_nf:
                                 key = (f.name, f.size)
                                 if key not in added_uploads:
                                     data = f.read()
-                                    ext = (Path(f.name).suffix or ".png").lstrip(".").lower()
-                                    mime = ext if ext in ("png", "jpg", "jpeg", "gif", "webp") else "png"
+                                    ext = (
+                                        (Path(f.name).suffix or ".png")
+                                        .lstrip(".")
+                                        .lower()
+                                    )
+                                    mime = (
+                                        ext
+                                        if ext in ("png", "jpg", "jpeg", "gif", "webp")
+                                        else "png"
+                                    )
                                     if mime == "jpg":
                                         mime = "jpeg"
                                     pending.append({"bytes": data, "mime": mime})
@@ -149,7 +165,11 @@ with tab_nf:
                                     header, encoded = image_data.split(",", 1)
                                     mime = "png"
                                     if "image/" in header:
-                                        mime = header.split("image/", 1)[-1].split(";")[0].strip()
+                                        mime = (
+                                            header.split("image/", 1)[-1]
+                                            .split(";")[0]
+                                            .strip()
+                                        )
                                 else:
                                     encoded = image_data
                                     mime = "png"
@@ -161,44 +181,67 @@ with tab_nf:
                             except Exception:
                                 pass  # ignore malformed paste
                     if pending:
-                        st.caption(f"{len(pending)} imagem(ns) anexada(s) — serão salvas com a NF.")
+                        st.caption(
+                            f"{len(pending)} imagem(ns) anexada(s) — serão salvas com a NF."
+                        )
 
                     st.divider()
+                    fiscal_mes_date = st.date_input(
+                        "Fiscal Mês (mês/ano)",
+                        value=default_fiscal_mes_date(),
+                        format="DD/MM/YYYY",
+                        key="nf_fiscal_mes",
+                    )
                     if st.button("Aceitar e salvar", key="accept_save_nf"):
-                        pdf_path_obj = save_pdf(
-                            pdf_bytes, verification_code, nf_date, parsed.usd
+                        fiscal_mes = (
+                            fiscal_mes_date.replace(day=1).strftime("%Y-%m")
+                            if fiscal_mes_date
+                            else None
                         )
-                        pdf_path_str = str(pdf_path_obj)
-                        inserted, nf_id = save_nf_entry(
-                            company=parsed.company,
-                            usd=parsed.usd,
-                            rate=parsed.rate,
-                            spread=parsed.spread,
-                            brl_no_spread=brl.brl_no_spread,
-                            brl_with_spread=brl.brl_with_spread,
-                            nf_date=nf_date,
-                            verification_code=verification_code,
-                            payment_via=payment_via,
-                            pdf_path=pdf_path_str,
-                        )
-                        if inserted:
-                            st.success("Dados e PDF salvos.")
+                        if not fiscal_mes:
+                            st.error("Selecione o Fiscal Mês (mês/ano).")
                         else:
-                            pdf_path_obj.unlink(missing_ok=True)  # remove orphan PDF
-                            st.info("Estes dados já foram salvos anteriormente.")
-                        project_root = Path(DB_PATH).resolve().parent
-                        for item in pending:
-                            try:
-                                path_obj = save_image(item["bytes"], nf_id, item["mime"])
-                                rel_path = path_obj.relative_to(project_root)
-                                save_nf_image(nf_id, str(rel_path))
-                            except Exception:
-                                pass  # log and continue
-                        st.session_state["last_saved_nf_id"] = nf_id
-                        st.session_state["pending_nf_images"] = []
-                        st.session_state["pending_nf_images_added_uploads"] = set()
-                        st.session_state["pending_nf_images_added_paste_hashes"] = set()
-                        st.rerun()
+                            pdf_path_obj = save_pdf(
+                                pdf_bytes, verification_code, nf_date, parsed.usd
+                            )
+                            pdf_path_str = str(pdf_path_obj)
+                            inserted, nf_id = save_nf_entry(
+                                company=parsed.company,
+                                usd=parsed.usd,
+                                rate=parsed.rate,
+                                spread=parsed.spread,
+                                brl_no_spread=brl.brl_no_spread,
+                                brl_with_spread=brl.brl_with_spread,
+                                nf_date=nf_date,
+                                verification_code=verification_code,
+                                payment_via=payment_via,
+                                pdf_path=pdf_path_str,
+                                fiscal_mes=fiscal_mes,
+                            )
+                            if inserted:
+                                st.success("Dados e PDF salvos.")
+                            else:
+                                pdf_path_obj.unlink(
+                                    missing_ok=True
+                                )  # remove orphan PDF
+                                st.info("Estes dados já foram salvos anteriormente.")
+                            project_root = Path(DB_PATH).resolve().parent
+                            for item in pending:
+                                try:
+                                    path_obj = save_image(
+                                        item["bytes"], nf_id, item["mime"]
+                                    )
+                                    rel_path = path_obj.relative_to(project_root)
+                                    save_nf_image(nf_id, str(rel_path))
+                                except Exception:
+                                    pass  # log and continue
+                            st.session_state["last_saved_nf_id"] = nf_id
+                            st.session_state["pending_nf_images"] = []
+                            st.session_state["pending_nf_images_added_uploads"] = set()
+                            st.session_state["pending_nf_images_added_paste_hashes"] = (
+                                set()
+                            )
+                            st.rerun()
 
             except Exception as e:
                 st.error(f"Erro ao processar o PDF: {e}")
@@ -220,8 +263,18 @@ with tab_historico:
     if "hist_applied_date_to" not in st.session_state:
         st.session_state.hist_applied_date_to = date.today()
 
-    date_from = st.date_input("De", value=st.session_state.hist_applied_date_from, format="DD/MM/YYYY", key="hist_date_from")
-    date_to = st.date_input("Até", value=st.session_state.hist_applied_date_to, format="DD/MM/YYYY", key="hist_date_to")
+    date_from = st.date_input(
+        "De",
+        value=st.session_state.hist_applied_date_from,
+        format="DD/MM/YYYY",
+        key="hist_date_from",
+    )
+    date_to = st.date_input(
+        "Até",
+        value=st.session_state.hist_applied_date_to,
+        format="DD/MM/YYYY",
+        key="hist_date_to",
+    )
 
     if date_from > date_to:
         st.warning("A data 'De' deve ser anterior ou igual à data 'Até'.")
@@ -307,6 +360,30 @@ with tab_historico:
             )
 
         st.divider()
+        st.markdown("**Fiscal Mês**")
+        st.caption(f"Atual: {format_fiscal_mes(row.get('fiscal_mes'))}")
+        hist_fiscal_default = (
+            fiscal_mes_to_date(row.get("fiscal_mes")) or default_fiscal_mes_date()
+        )
+        hist_fiscal_mes_date = st.date_input(
+            "Alterar Fiscal Mês (mês/ano)",
+            value=hist_fiscal_default,
+            format="DD/MM/YYYY",
+            key="hist_nf_fiscal_mes",
+        )
+        if st.button("Atualizar fiscal mês", key="hist_update_fiscal_mes"):
+            new_fiscal_mes = (
+                hist_fiscal_mes_date.replace(day=1).strftime("%Y-%m")
+                if hist_fiscal_mes_date
+                else None
+            )
+            hist_nf_id = row.get("id")
+            if hist_nf_id is not None:
+                update_nf_fiscal_mes(hist_nf_id, new_fiscal_mes)
+                st.success("Fiscal mês atualizado.")
+                st.rerun()
+
+        st.divider()
         pdf_path_raw = row.get("pdf_path")
         if pdf_path_raw:
             p = Path(pdf_path_raw)
@@ -363,6 +440,10 @@ with tab_historico:
                 )
                 for i, (img, p, img_bytes) in enumerate(displayable):
                     try:
-                        st.image(img_bytes, caption=f"Anexo {i + 1}", use_container_width=True)
+                        st.image(
+                            img_bytes,
+                            caption=f"Anexo {i + 1}",
+                            use_container_width=True,
+                        )
                     except Exception:
                         st.caption(f"Anexo {i + 1}: não foi possível exibir a imagem.")
