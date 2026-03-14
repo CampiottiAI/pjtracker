@@ -77,6 +77,20 @@ st.caption(
     "2 NFs, 1 Boleto com comprovante, 1 DARF com comprovante, 1 Extrato com caixinha."
 )
 
+def _month_incomplete(fm: str) -> bool:
+    c = _check_month(fm)
+    return not (c["nfs_ok"] and c["boletos_ok"] and c["darfs_ok"] and c["extratos_ok"])
+
+st.write("**Meses a verificar:**")
+for fm in fiscal_months:
+    label = format_fiscal_mes(fm)
+    if _month_incomplete(fm):
+        st.write(f"{label} ⚠️")
+    else:
+        st.write(label)
+
+st.divider()
+
 selected = st.selectbox(
     "Selecione o mês",
     options=fiscal_months,
