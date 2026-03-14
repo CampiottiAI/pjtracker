@@ -82,7 +82,7 @@ class DarfPdfExtraido(BaseModel):
 class NfPdfExtraida(BaseModel):
     empresa: str | None = Field(
         default=None,
-        description="Nome da empresa da nota fiscal.",
+        description="Nome da empresa para qual o serviço foi prestado, não o nome da empresa emissora da nota fiscal",
     )
     valor_usd: float | None = Field(
         default=None,
@@ -340,7 +340,9 @@ def _extract_structured_data(
     return LLMExtractionResult(data=parsed)
 
 
-def extract_boleto_pdf(file_bytes: bytes, filename: str = "boleto.pdf") -> LLMExtractionResult:
+def extract_boleto_pdf(
+    file_bytes: bytes, filename: str = "boleto.pdf"
+) -> LLMExtractionResult:
     return _extract_structured_data(
         file_bytes=file_bytes,
         filename=filename,
@@ -380,14 +382,15 @@ def extract_boleto_receipt(
     )
 
 
-def extract_darf_pdf(file_bytes: bytes, filename: str = "darf.pdf") -> LLMExtractionResult:
+def extract_darf_pdf(
+    file_bytes: bytes, filename: str = "darf.pdf"
+) -> LLMExtractionResult:
     return _extract_structured_data(
         file_bytes=file_bytes,
         filename=filename,
         mime_type="application/pdf",
         system_prompt=(
-            "Voce e um sistema de extracao de dados de DARF. "
-            "Seja preciso e objetivo."
+            "Voce e um sistema de extracao de dados de DARF. Seja preciso e objetivo."
         ),
         user_prompt=(
             "Extraia os dados do DARF no formato JSON. "
@@ -463,7 +466,9 @@ def extract_caixinha_pdf(
     )
 
 
-def extract_nf_pdf(file_bytes: bytes, filename: str = "nota_fiscal.pdf") -> LLMExtractionResult:
+def extract_nf_pdf(
+    file_bytes: bytes, filename: str = "nota_fiscal.pdf"
+) -> LLMExtractionResult:
     return _extract_structured_data(
         file_bytes=file_bytes,
         filename=filename,
