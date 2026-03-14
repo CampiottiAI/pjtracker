@@ -361,29 +361,35 @@ def parse_nf_date_to_date(nf_date: str | None) -> date | None:
 def get_nf_entries(
     date_from: date | None = None,
     date_to: date | None = None,
+    fiscal_mes: str | None = None,
 ) -> list[dict]:
-    """Return NF entries, optionally filtered by nf_date range. Newest first. Each row is a dict."""
+    """Return NF entries, optionally filtered by nf_date range and/or fiscal_mes. Newest first. Each row is a dict."""
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
-        cur = conn.execute(
-            "SELECT * FROM nf_entries ORDER BY created_at DESC",
-        )
+        if fiscal_mes is not None:
+            cur = conn.execute(
+                "SELECT * FROM nf_entries WHERE fiscal_mes = ? ORDER BY created_at DESC",
+                (fiscal_mes,),
+            )
+        else:
+            cur = conn.execute(
+                "SELECT * FROM nf_entries ORDER BY created_at DESC",
+            )
         rows = [dict(r) for r in cur.fetchall()]
 
-    if date_from is None and date_to is None:
-        return rows
-
-    filtered = []
-    for row in rows:
-        d = parse_nf_date_to_date(row.get("nf_date"))
-        if d is None:
-            continue
-        if date_from is not None and d < date_from:
-            continue
-        if date_to is not None and d > date_to:
-            continue
-        filtered.append(row)
-    return filtered
+    if date_from is not None or date_to is not None:
+        filtered = []
+        for row in rows:
+            d = parse_nf_date_to_date(row.get("nf_date"))
+            if d is None:
+                continue
+            if date_from is not None and d < date_from:
+                continue
+            if date_to is not None and d > date_to:
+                continue
+            filtered.append(row)
+        rows = filtered
+    return rows
 
 
 def get_nf_by_id(nf_id: int) -> dict | None:
@@ -548,13 +554,19 @@ def boleto_exists_with_hash(content_hash: str | None) -> bool:
         return cur.fetchone() is not None
 
 
-def get_boletos() -> list[dict]:
-    """Return all boletos, newest first."""
+def get_boletos(fiscal_mes: str | None = None) -> list[dict]:
+    """Return all boletos, optionally filtered by fiscal_mes. Newest first."""
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
-        cur = conn.execute(
-            "SELECT * FROM boletos ORDER BY created_at DESC",
-        )
+        if fiscal_mes is not None:
+            cur = conn.execute(
+                "SELECT * FROM boletos WHERE fiscal_mes = ? ORDER BY created_at DESC",
+                (fiscal_mes,),
+            )
+        else:
+            cur = conn.execute(
+                "SELECT * FROM boletos ORDER BY created_at DESC",
+            )
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -790,13 +802,19 @@ def save_darf_entry(
         return (False, None)
 
 
-def get_darfs() -> list[dict]:
-    """Return all DARFs, newest first."""
+def get_darfs(fiscal_mes: str | None = None) -> list[dict]:
+    """Return all DARFs, optionally filtered by fiscal_mes. Newest first."""
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
-        cur = conn.execute(
-            "SELECT * FROM darfs ORDER BY created_at DESC",
-        )
+        if fiscal_mes is not None:
+            cur = conn.execute(
+                "SELECT * FROM darfs WHERE fiscal_mes = ? ORDER BY created_at DESC",
+                (fiscal_mes,),
+            )
+        else:
+            cur = conn.execute(
+                "SELECT * FROM darfs ORDER BY created_at DESC",
+            )
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -1032,11 +1050,17 @@ def save_extrato_entry(
         return (False, None)
 
 
-def get_extratos() -> list[dict]:
-    """Return all extratos, newest first."""
+def get_extratos(fiscal_mes: str | None = None) -> list[dict]:
+    """Return all extratos, optionally filtered by fiscal_mes. Newest first."""
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
-        cur = conn.execute("SELECT * FROM extratos ORDER BY created_at DESC")
+        if fiscal_mes is not None:
+            cur = conn.execute(
+                "SELECT * FROM extratos WHERE fiscal_mes = ? ORDER BY created_at DESC",
+                (fiscal_mes,),
+            )
+        else:
+            cur = conn.execute("SELECT * FROM extratos ORDER BY created_at DESC")
         return [dict(r) for r in cur.fetchall()]
 
 
