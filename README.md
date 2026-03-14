@@ -20,7 +20,7 @@ Upload a PDF of a Nota Fiscal (NF-e). The app will:
 ### Run the app
 
 ```bash
-uv run streamlit run src/Home.py
+uv run streamlit run src/NFs.py
 ```
 
 Then open the URL shown in the terminal (usually http://localhost:8501).

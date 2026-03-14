@@ -1,4 +1,4 @@
-"""Nota Fiscal Tracker – shared DB and helpers (Home and pages import from here)."""
+"""Nota Fiscal Tracker – shared DB and helpers (NFs and pages import from here)."""
 
 import hashlib
 import sqlite3
@@ -317,6 +317,45 @@ def get_nf_entries(
             continue
         filtered.append(row)
     return filtered
+
+
+def get_nf_by_id(nf_id: int) -> dict | None:
+    """Return the NF entry row for the given id, or None if not found."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute("SELECT * FROM nf_entries WHERE id = ?", (nf_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def delete_nf(nf_id: int) -> bool:
+    """Delete NF row, its PDF, and all nf_images. Returns True if deleted, False if not found."""
+    row = get_nf_by_id(nf_id)
+    if not row:
+        return False
+    project_root = Path(DB_PATH).resolve().parent
+    # Delete image files and nf_images rows
+    for img in get_nf_images(nf_id):
+        raw = img.get("image_path")
+        if raw and str(raw).strip():
+            p = Path(raw)
+            if not p.is_absolute():
+                p = project_root / raw
+            if p.exists():
+                p.unlink(missing_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM nf_images WHERE nf_id = ?", (nf_id,))
+    # Delete PDF file
+    pdf_path_raw = row.get("pdf_path")
+    if pdf_path_raw and str(pdf_path_raw).strip():
+        p = Path(pdf_path_raw)
+        if not p.is_absolute():
+            p = project_root / pdf_path_raw
+        if p.exists():
+            p.unlink(missing_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM nf_entries WHERE id = ?", (nf_id,))
+    return True
 
 
 # --- Boletos ---
