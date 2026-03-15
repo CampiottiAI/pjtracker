@@ -16,6 +16,7 @@ from src.app import (
     fiscal_mes_to_date,
     get_darfs,
     init_db,
+    open_pdf_link,
     save_darf_entry,
     save_darf_pdf,
     save_darf_receipt,
@@ -481,13 +482,7 @@ else:
             p = project_root / pdf_path_raw
         if p.exists():
             pdf_bytes = p.read_bytes()
-            st.download_button(
-                "Baixar PDF do DARF",
-                data=pdf_bytes,
-                file_name=p.name,
-                mime="application/pdf",
-                key="dl_darf_pdf",
-            )
+            open_pdf_link(pdf_bytes, "Abrir PDF do DARF", unique_key=f"darf_{row.get('id')}")
         else:
             st.caption("PDF não encontrado.")
 

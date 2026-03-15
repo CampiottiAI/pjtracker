@@ -14,6 +14,7 @@ from src.app import (
     get_extrato_by_id,
     get_extratos,
     init_db,
+    open_pdf_link,
     remove_caixinha_pdf,
     save_caixinha_pdf,
     save_extrato_entry,
@@ -326,12 +327,10 @@ else:
 
     extrato_path = _resolve_path(row.get("extrato_pdf_path"))
     if extrato_path and extrato_path.exists():
-        st.download_button(
-            "Baixar PDF do extrato",
-            data=extrato_path.read_bytes(),
-            file_name=extrato_path.name,
-            mime="application/pdf",
-            key=f"download_extrato_pdf_{extrato_id}",
+        open_pdf_link(
+            extrato_path.read_bytes(),
+            "Abrir PDF do extrato",
+            unique_key=f"extrato_{extrato_id}",
         )
     else:
         st.caption("PDF do extrato não encontrado.")
@@ -349,12 +348,10 @@ else:
         )
         caixinha_path = _resolve_path(row.get("caixinha_pdf_path"))
         if caixinha_path and caixinha_path.exists():
-            st.download_button(
-                "Baixar PDF da caixinha",
-                data=caixinha_path.read_bytes(),
-                file_name=caixinha_path.name,
-                mime="application/pdf",
-                key=f"download_caixinha_pdf_{extrato_id}",
+            open_pdf_link(
+                caixinha_path.read_bytes(),
+                "Abrir PDF da caixinha",
+                unique_key=f"extrato_{extrato_id}_caixinha",
             )
         else:
             st.caption("PDF da caixinha não encontrado.")

@@ -17,6 +17,7 @@ from src.app import (
     get_nf_entries,
     get_nf_images,
     init_db,
+    open_pdf_link,
     save_image,
     save_nf_entry,
     save_nf_image,
@@ -391,13 +392,8 @@ with tab_historico:
                 p = Path(DB_PATH).resolve().parent / pdf_path_raw
             if p.exists():
                 pdf_bytes = p.read_bytes()
-                st.download_button(
-                    "Baixar PDF",
-                    data=pdf_bytes,
-                    file_name=p.name,
-                    mime="application/pdf",
-                    key="hist_download_pdf",
-                )
+                nf_id = row.get("id")
+                open_pdf_link(pdf_bytes, "Abrir PDF", unique_key=f"nf_{nf_id}")
             else:
                 st.info("PDF não disponível para esta NF.")
         else:

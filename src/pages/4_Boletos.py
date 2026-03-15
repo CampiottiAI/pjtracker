@@ -16,6 +16,7 @@ from src.app import (
     fiscal_mes_to_date,
     get_boletos,
     init_db,
+    open_pdf_link,
     save_boleto_entry,
     save_boleto_pdf,
     save_boleto_receipt,
@@ -486,13 +487,8 @@ else:
             p = project_root / pdf_path_raw
         if p.exists():
             pdf_bytes = p.read_bytes()
-            st.download_button(
-                "Baixar PDF do boleto",
-                data=pdf_bytes,
-                file_name=p.name,
-                mime="application/pdf",
-                key="dl_boleto_pdf",
-            )
+            boleto_id = row.get("id")
+            open_pdf_link(pdf_bytes, "Abrir PDF do boleto", unique_key=f"boleto_{boleto_id}")
         else:
             st.caption("PDF não encontrado.")
 
