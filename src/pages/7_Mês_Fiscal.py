@@ -16,6 +16,7 @@ st.title("Mês Fiscal")
 
 init_db()
 
+
 # Descobrir todos os meses fiscais presentes nos dados
 def _collect_fiscal_months() -> list[str]:
     months = set()
@@ -41,7 +42,9 @@ def _collect_fiscal_months() -> list[str]:
 fiscal_months = _collect_fiscal_months()
 
 if not fiscal_months:
-    st.info("Nenhum mês fiscal encontrado. Cadastre NFs, boletos, DARFs ou extratos com Fiscal Mês definido.")
+    st.info(
+        "Nenhum mês fiscal encontrado. Cadastre NFs, boletos, DARFs ou extratos com Fiscal Mês definido."
+    )
     st.stop()
 
 # Regras de completude por mês
@@ -77,9 +80,11 @@ st.caption(
     "2 NFs, 1 Boleto com comprovante, 1 DARF com comprovante, 1 Extrato com caixinha."
 )
 
+
 def _month_incomplete(fm: str) -> bool:
     c = _check_month(fm)
     return not (c["nfs_ok"] and c["boletos_ok"] and c["darfs_ok"] and c["extratos_ok"])
+
 
 st.write("**Meses a verificar:**")
 for fm in fiscal_months:
@@ -87,7 +92,7 @@ for fm in fiscal_months:
     if _month_incomplete(fm):
         st.write(f"{label} ⚠️")
     else:
-        st.write(label)
+        st.write(f"{label} ✅")
 
 st.divider()
 
@@ -113,19 +118,25 @@ if selected:
 
     # Boleto com comprovante
     boleto_status = "OK" if check["boletos_ok"] else "Faltando"
-    st.write(f"**Boleto com comprovante:** {check['boletos_with_receipt_count']} / {REQUIRED_BOLETO_WITH_RECEIPT} — {boleto_status}")
+    st.write(
+        f"**Boleto com comprovante:** {check['boletos_with_receipt_count']} / {REQUIRED_BOLETO_WITH_RECEIPT} — {boleto_status}"
+    )
     if not check["boletos_ok"]:
         st.warning("Falta 1 Boleto com comprovante para fechar o mês.")
 
     # DARF com comprovante
     darf_status = "OK" if check["darfs_ok"] else "Faltando"
-    st.write(f"**DARF com comprovante:** {check['darfs_with_receipt_count']} / {REQUIRED_DARF_WITH_RECEIPT} — {darf_status}")
+    st.write(
+        f"**DARF com comprovante:** {check['darfs_with_receipt_count']} / {REQUIRED_DARF_WITH_RECEIPT} — {darf_status}"
+    )
     if not check["darfs_ok"]:
         st.warning("Falta 1 DARF com comprovante para fechar o mês.")
 
     # Extrato com caixinha
     extrato_status = "OK" if check["extratos_ok"] else "Faltando"
-    st.write(f"**Extrato com caixinha:** {check['extratos_caixinha_count']} / {REQUIRED_EXTRATO_COM_CAIXINHA} — {extrato_status}")
+    st.write(
+        f"**Extrato com caixinha:** {check['extratos_caixinha_count']} / {REQUIRED_EXTRATO_COM_CAIXINHA} — {extrato_status}"
+    )
     if not check["extratos_ok"]:
         st.warning("Falta 1 Extrato com caixinha para fechar o mês.")
 
