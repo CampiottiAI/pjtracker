@@ -24,6 +24,7 @@ from src.app import (
     update_darf_pdf,
     update_darf_receipt,
 )
+from src.barcode_diff import format_barcode_diff
 from src.boleto_parser import parse_receipt_image
 from src.darf_parser import parse_darf_pdf
 
@@ -126,16 +127,25 @@ def _show_receipt_feedback(base_key: str, document_digits: str | None) -> None:
 
     codigo_barras = st.session_state.get(f"{base_key}_codigo_barras")
     codigo_barras_digits = st.session_state.get(f"{base_key}_codigo_barras_digits")
-    if codigo_barras:
-        st.caption(f"Código de barras do comprovante: {codigo_barras}")
-    if codigo_barras_digits and codigo_barras_digits != codigo_barras:
-        st.caption(f"Código normalizado do comprovante: {codigo_barras_digits}")
+    display_barcode = codigo_barras_digits or codigo_barras
+    if display_barcode:
+        st.caption(f"Código de barras do comprovante: {display_barcode}")
 
     match_status = _compute_match_status(document_digits, codigo_barras_digits)
     if match_status == "match":
         st.success("O código de barras do comprovante corresponde ao do DARF.")
     elif match_status == "mismatch":
         st.warning("O código de barras do comprovante não corresponde ao do DARF.")
+        if document_digits and codigo_barras_digits:
+            with st.expander("Ver diferença entre os códigos"):
+                st.code(
+                    format_barcode_diff(
+                        document_digits,
+                        codigo_barras_digits,
+                        "DARF (documento)",
+                        "Comprovante",
+                    )
+                )
     elif document_digits or codigo_barras_digits:
         st.info("Ainda não foi possível comparar os códigos de barras.")
 
@@ -183,7 +193,7 @@ if mode == "Adicionar DARF":
                     st.metric("Período de apuração", parsed.emission_date or "—")
                 with col2:
                     st.metric("Data de vencimento", parsed.deadline_date or "—")
-                    st.metric("Código de barras", parsed.codigo_barras_raw or "—")
+                    st.metric("Código de barras", parsed.codigo_barras_digits or parsed.codigo_barras_raw or "—")
                 st.caption(f"Fonte da extração: {parsed.source}")
                 if (
                     parsed.codigo_barras_digits
@@ -428,7 +438,10 @@ else:
             f"R$ {row['value']:,.2f}" if row.get("value") is not None else "—",
         )
         st.metric("Período de apuração", row.get("emission_date") or "—")
-        st.metric("Código de barras", row.get("codigo_barras") or "—")
+        st.metric(
+            "Código de barras",
+            row.get("codigo_barras_digits") or row.get("codigo_barras") or "—",
+        )
     with col2:
         st.metric("Data de vencimento", row.get("deadline_date") or "—")
         st.metric("Data do comprovante", row.get("receipt_date") or "—")
@@ -441,21 +454,27 @@ else:
         "codigo_barras"
     ):
         st.caption(f"Código normalizado do DARF: {row.get('codigo_barras_digits')}")
-    if row.get("receipt_codigo_barras"):
-        st.caption(
-            f"Código de barras do comprovante: {row.get('receipt_codigo_barras')}"
-        )
-    if row.get("receipt_codigo_barras_digits") and row.get(
-        "receipt_codigo_barras_digits"
-    ) != row.get("receipt_codigo_barras"):
-        st.caption(
-            "Código normalizado do comprovante: "
-            f"{row.get('receipt_codigo_barras_digits')}"
-        )
+    receipt_barcode = row.get("receipt_codigo_barras_digits") or row.get(
+        "receipt_codigo_barras"
+    )
+    if receipt_barcode:
+        st.caption(f"Código de barras do comprovante: {receipt_barcode}")
     if row.get("receipt_match_status") == "match":
         st.success("O código de barras do comprovante corresponde ao do DARF.")
     elif row.get("receipt_match_status") == "mismatch":
         st.warning("O código de barras do comprovante não corresponde ao do DARF.")
+        doc_d = row.get("codigo_barras_digits")
+        rec_d = row.get("receipt_codigo_barras_digits")
+        if doc_d and rec_d:
+            with st.expander("Ver diferença entre os códigos"):
+                st.code(
+                    format_barcode_diff(
+                        doc_d,
+                        rec_d,
+                        "DARF (documento)",
+                        "Comprovante",
+                    )
+                )
     else:
         st.info("Ainda não foi possível comparar os códigos de barras salvos.")
 
@@ -514,7 +533,9 @@ else:
                     f"Vencimento {parsed.deadline_date or '—'}"
                 )
                 st.caption(f"Fonte da extração: {parsed.source}")
-                st.caption(f"Código de barras: {parsed.codigo_barras_raw or '—'}")
+                st.caption(
+                    f"Código de barras: {parsed.codigo_barras_digits or parsed.codigo_barras_raw or '—'}"
+                )
                 if st.button("Aplicar e salvar novo PDF", key="apply_update_darf_pdf"):
                     ok = update_darf_pdf(
                         darf_id,

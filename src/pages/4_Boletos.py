@@ -24,6 +24,7 @@ from src.app import (
     update_boleto_pdf,
     update_boleto_receipt,
 )
+from src.barcode_diff import format_barcode_diff
 from src.boleto_parser import parse_boleto_pdf, parse_receipt_image
 
 st.set_page_config(page_title="Boletos", layout="centered")
@@ -125,16 +126,25 @@ def _show_receipt_feedback(base_key: str, document_digits: str | None) -> None:
 
     codigo_barras = st.session_state.get(f"{base_key}_codigo_barras")
     codigo_barras_digits = st.session_state.get(f"{base_key}_codigo_barras_digits")
-    if codigo_barras:
-        st.caption(f"Código de barras do comprovante: {codigo_barras}")
-    if codigo_barras_digits and codigo_barras_digits != codigo_barras:
-        st.caption(f"Código normalizado do comprovante: {codigo_barras_digits}")
+    display_barcode = codigo_barras_digits or codigo_barras
+    if display_barcode:
+        st.caption(f"Código de barras do comprovante: {display_barcode}")
 
     match_status = _compute_match_status(document_digits, codigo_barras_digits)
     if match_status == "match":
         st.success("O código de barras do comprovante corresponde ao do boleto.")
     elif match_status == "mismatch":
         st.warning("O código de barras do comprovante não corresponde ao do boleto.")
+        if document_digits and codigo_barras_digits:
+            with st.expander("Ver diferença entre os códigos"):
+                st.code(
+                    format_barcode_diff(
+                        document_digits,
+                        codigo_barras_digits,
+                        "Boleto (documento)",
+                        "Comprovante",
+                    )
+                )
     elif document_digits or codigo_barras_digits:
         st.info("Ainda não foi possível comparar os códigos de barras.")
 
@@ -446,21 +456,27 @@ else:
         st.caption(
             f"Código normalizado do boleto: {row.get('codigo_barras_digits')}"
         )
-    if row.get("receipt_codigo_barras"):
-        st.caption(
-            f"Código de barras do comprovante: {row.get('receipt_codigo_barras')}"
-        )
-    if row.get("receipt_codigo_barras_digits") and row.get(
-        "receipt_codigo_barras_digits"
-    ) != row.get("receipt_codigo_barras"):
-        st.caption(
-            "Código normalizado do comprovante: "
-            f"{row.get('receipt_codigo_barras_digits')}"
-        )
+    receipt_barcode = row.get("receipt_codigo_barras_digits") or row.get(
+        "receipt_codigo_barras"
+    )
+    if receipt_barcode:
+        st.caption(f"Código de barras do comprovante: {receipt_barcode}")
     if row.get("receipt_match_status") == "match":
         st.success("O código de barras do comprovante corresponde ao do boleto.")
     elif row.get("receipt_match_status") == "mismatch":
         st.warning("O código de barras do comprovante não corresponde ao do boleto.")
+        doc_d = row.get("codigo_barras_digits")
+        rec_d = row.get("receipt_codigo_barras_digits")
+        if doc_d and rec_d:
+            with st.expander("Ver diferença entre os códigos"):
+                st.code(
+                    format_barcode_diff(
+                        doc_d,
+                        rec_d,
+                        "Boleto (documento)",
+                        "Comprovante",
+                    )
+                )
     else:
         st.info("Ainda não foi possível comparar os códigos de barras salvos.")
 
