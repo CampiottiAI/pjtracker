@@ -1,4 +1,4 @@
-// place files you want to import through the `$lib` alias in this folder.
-
 export * from './api/client';
 export * from './api/types';
+export * from './utils';
+export * from './utils/format';

@@ -1,4 +1,21 @@
-import type { FastApiErrorBody, HealthResponse, ReadyResponse } from './types';
+import type {
+	FastApiErrorBody,
+	HealthResponse,
+	ReadyResponse,
+	NfEntry,
+	NfPreview,
+	NfImage,
+	BoletoEntry,
+	BoletoPreview,
+	DarfEntry,
+	DarfPreview,
+	ReceiptPreview,
+	ExtratoEntry,
+	ExtratoPreview,
+	FiscalMonthsResponse,
+	CompletenessResponse,
+	NfSeriesResponse
+} from './types';
 
 /**
  * Base URL for API calls, without trailing slash.
@@ -128,4 +145,311 @@ export async function getHealth(): Promise<HealthResponse> {
 
 export async function getReady(): Promise<ReadyResponse> {
 	return apiJson<ReadyResponse>('/ready');
+}
+
+// ---------------------------------------------------------------------------
+// NFs
+// ---------------------------------------------------------------------------
+
+export async function nfParsePreview(file: File): Promise<NfPreview> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<NfPreview>('/nfs/parse-preview', form);
+}
+
+export async function createNf(file: File, fiscalMes: string, images?: File[]): Promise<NfEntry> {
+	const form = new FormData();
+	form.append('file', file);
+	form.append('fiscal_mes', fiscalMes);
+	if (images) images.forEach((img) => form.append('images', img));
+	return apiForm<NfEntry>('/nfs', form);
+}
+
+export async function listNfs(params?: {
+	fiscal_mes?: string;
+	date_from?: string;
+	date_to?: string;
+}): Promise<NfEntry[]> {
+	const qs = new URLSearchParams();
+	if (params?.fiscal_mes) qs.set('fiscal_mes', params.fiscal_mes);
+	if (params?.date_from) qs.set('date_from', params.date_from);
+	if (params?.date_to) qs.set('date_to', params.date_to);
+	const q = qs.toString();
+	return apiJson<NfEntry[]>(`/nfs${q ? `?${q}` : ''}`);
+}
+
+export async function getNf(id: number): Promise<NfEntry> {
+	return apiJson<NfEntry>(`/nfs/${id}`);
+}
+
+export async function patchNfFiscalMes(id: number, fiscalMes: string | null): Promise<NfEntry> {
+	return apiJson<NfEntry>(`/nfs/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ fiscal_mes: fiscalMes })
+	});
+}
+
+export async function deleteNf(id: number): Promise<void> {
+	await apiJson(`/nfs/${id}`, { method: 'DELETE' });
+}
+
+export async function getNfImages(nfId: number): Promise<NfImage[]> {
+	return apiJson<NfImage[]>(`/nfs/${nfId}/images`);
+}
+
+// ---------------------------------------------------------------------------
+// Boletos
+// ---------------------------------------------------------------------------
+
+export async function boletoParsePreview(file: File): Promise<BoletoPreview> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<BoletoPreview>('/boletos/parse-preview', form);
+}
+
+export async function receiptParsePreview(file: File): Promise<ReceiptPreview> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<ReceiptPreview>('/receipts/parse-preview', form);
+}
+
+export async function createBoleto(
+	file: File,
+	fiscalMes: string,
+	receipt?: File,
+	receiptDate?: string,
+	receiptTime?: string
+): Promise<BoletoEntry> {
+	const form = new FormData();
+	form.append('file', file);
+	form.append('fiscal_mes', fiscalMes);
+	if (receipt) form.append('receipt', receipt);
+	if (receiptDate) form.append('receipt_date', receiptDate);
+	if (receiptTime) form.append('receipt_time', receiptTime);
+	return apiForm<BoletoEntry>('/boletos', form);
+}
+
+export async function listBoletos(fiscalMes?: string): Promise<BoletoEntry[]> {
+	const q = fiscalMes ? `?fiscal_mes=${fiscalMes}` : '';
+	return apiJson<BoletoEntry[]>(`/boletos${q}`);
+}
+
+export async function getBoleto(id: number): Promise<BoletoEntry> {
+	return apiJson<BoletoEntry>(`/boletos/${id}`);
+}
+
+export async function patchBoletoFiscalMes(
+	id: number,
+	fiscalMes: string | null
+): Promise<BoletoEntry> {
+	return apiJson<BoletoEntry>(`/boletos/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ fiscal_mes: fiscalMes })
+	});
+}
+
+export async function updateBoletoPdf(id: number, file: File): Promise<BoletoEntry> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<BoletoEntry>(`/boletos/${id}/pdf`, form, 'PUT');
+}
+
+export async function updateBoletoReceipt(
+	id: number,
+	receipt: File,
+	receiptDate?: string,
+	receiptTime?: string
+): Promise<BoletoEntry> {
+	const form = new FormData();
+	form.append('receipt', receipt);
+	if (receiptDate) form.append('receipt_date', receiptDate);
+	if (receiptTime) form.append('receipt_time', receiptTime);
+	return apiForm<BoletoEntry>(`/boletos/${id}/receipt`, form, 'PUT');
+}
+
+export async function deleteBoleto(id: number): Promise<void> {
+	await apiJson(`/boletos/${id}`, { method: 'DELETE' });
+}
+
+export async function getBoletoBarcodeDiff(id: number): Promise<string> {
+	const { blob } = await downloadBlob(`/boletos/${id}/barcode-diff`);
+	return blob.text();
+}
+
+// ---------------------------------------------------------------------------
+// DARFs
+// ---------------------------------------------------------------------------
+
+export async function darfParsePreview(file: File): Promise<DarfPreview> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<DarfPreview>('/darfs/parse-preview', form);
+}
+
+export async function createDarf(
+	file: File,
+	fiscalMes: string,
+	receipt?: File,
+	receiptDate?: string,
+	receiptTime?: string
+): Promise<DarfEntry> {
+	const form = new FormData();
+	form.append('file', file);
+	form.append('fiscal_mes', fiscalMes);
+	if (receipt) form.append('receipt', receipt);
+	if (receiptDate) form.append('receipt_date', receiptDate);
+	if (receiptTime) form.append('receipt_time', receiptTime);
+	return apiForm<DarfEntry>('/darfs', form);
+}
+
+export async function listDarfs(fiscalMes?: string): Promise<DarfEntry[]> {
+	const q = fiscalMes ? `?fiscal_mes=${fiscalMes}` : '';
+	return apiJson<DarfEntry[]>(`/darfs${q}`);
+}
+
+export async function getDarf(id: number): Promise<DarfEntry> {
+	return apiJson<DarfEntry>(`/darfs/${id}`);
+}
+
+export async function patchDarfFiscalMes(
+	id: number,
+	fiscalMes: string | null
+): Promise<DarfEntry> {
+	return apiJson<DarfEntry>(`/darfs/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ fiscal_mes: fiscalMes })
+	});
+}
+
+export async function updateDarfPdf(id: number, file: File): Promise<DarfEntry> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<DarfEntry>(`/darfs/${id}/pdf`, form, 'PUT');
+}
+
+export async function updateDarfReceipt(
+	id: number,
+	receipt: File,
+	receiptDate?: string,
+	receiptTime?: string
+): Promise<DarfEntry> {
+	const form = new FormData();
+	form.append('receipt', receipt);
+	if (receiptDate) form.append('receipt_date', receiptDate);
+	if (receiptTime) form.append('receipt_time', receiptTime);
+	return apiForm<DarfEntry>(`/darfs/${id}/receipt`, form, 'PUT');
+}
+
+export async function deleteDarf(id: number): Promise<void> {
+	await apiJson(`/darfs/${id}`, { method: 'DELETE' });
+}
+
+export async function getDarfBarcodeDiff(id: number): Promise<string> {
+	const { blob } = await downloadBlob(`/darfs/${id}/barcode-diff`);
+	return blob.text();
+}
+
+// ---------------------------------------------------------------------------
+// Extratos
+// ---------------------------------------------------------------------------
+
+export async function extratoParsePreview(
+	extrato: File,
+	caixinha?: File,
+	higlobe?: File
+): Promise<ExtratoPreview> {
+	const form = new FormData();
+	form.append('extrato', extrato);
+	if (caixinha) form.append('caixinha', caixinha);
+	if (higlobe) form.append('higlobe', higlobe);
+	return apiForm<ExtratoPreview>('/extratos/parse-preview', form);
+}
+
+export async function createExtrato(
+	extrato: File,
+	fiscalMes: string,
+	caixinha?: File,
+	higlobe?: File
+): Promise<ExtratoEntry> {
+	const form = new FormData();
+	form.append('extrato', extrato);
+	form.append('fiscal_mes', fiscalMes);
+	if (caixinha) form.append('caixinha', caixinha);
+	if (higlobe) form.append('higlobe', higlobe);
+	return apiForm<ExtratoEntry>('/extratos', form);
+}
+
+export async function listExtratos(fiscalMes?: string): Promise<ExtratoEntry[]> {
+	const q = fiscalMes ? `?fiscal_mes=${fiscalMes}` : '';
+	return apiJson<ExtratoEntry[]>(`/extratos${q}`);
+}
+
+export async function getExtrato(id: number): Promise<ExtratoEntry> {
+	return apiJson<ExtratoEntry>(`/extratos/${id}`);
+}
+
+export async function patchExtratoFiscalMes(
+	id: number,
+	fiscalMes: string | null
+): Promise<ExtratoEntry> {
+	return apiJson<ExtratoEntry>(`/extratos/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ fiscal_mes: fiscalMes })
+	});
+}
+
+export async function deleteExtrato(id: number): Promise<void> {
+	await apiJson(`/extratos/${id}`, { method: 'DELETE' });
+}
+
+export async function updateExtratoPdf(id: number, file: File): Promise<ExtratoEntry> {
+	const form = new FormData();
+	form.append('extrato', file);
+	return apiForm<ExtratoEntry>(`/extratos/${id}/extrato-pdf`, form, 'PUT');
+}
+
+export async function updateCaixinhaPdf(id: number, file: File): Promise<ExtratoEntry> {
+	const form = new FormData();
+	form.append('caixinha', file);
+	return apiForm<ExtratoEntry>(`/extratos/${id}/caixinha`, form, 'PUT');
+}
+
+export async function deleteCaixinha(id: number): Promise<void> {
+	await apiJson(`/extratos/${id}/caixinha`, { method: 'DELETE' });
+}
+
+export async function updateHiglobePdf(id: number, file: File): Promise<ExtratoEntry> {
+	const form = new FormData();
+	form.append('higlobe', file);
+	return apiForm<ExtratoEntry>(`/extratos/${id}/higlobe`, form, 'PUT');
+}
+
+export async function deleteHiglobe(id: number): Promise<void> {
+	await apiJson(`/extratos/${id}/higlobe`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// Fiscal months
+// ---------------------------------------------------------------------------
+
+export async function listFiscalMonths(): Promise<FiscalMonthsResponse> {
+	return apiJson<FiscalMonthsResponse>('/fiscal-months');
+}
+
+export async function getCompleteness(fiscalMes: string): Promise<CompletenessResponse> {
+	return apiJson<CompletenessResponse>(`/fiscal-months/${fiscalMes}/completeness`);
+}
+
+// ---------------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------------
+
+export async function getNfSeries(dateFrom: string, dateTo: string): Promise<NfSeriesResponse> {
+	return apiJson<NfSeriesResponse>(
+		`/analytics/nf-series?date_from=${dateFrom}&date_to=${dateTo}`
+	);
 }

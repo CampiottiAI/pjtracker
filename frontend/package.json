@@ -15,9 +15,24 @@
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/kit": "^2.50.2",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
+		"@tailwindcss/vite": "^4.2.2",
 		"svelte": "^5.51.0",
 		"svelte-check": "^4.4.2",
+		"tailwindcss": "^4.2.2",
 		"typescript": "^5.9.3",
 		"vite": "^7.3.1"
+	},
+	"dependencies": {
+		"bits-ui": "^2.16.3",
+		"clsx": "^2.1.1",
+		"d3-array": "^3.2.4",
+		"d3-scale": "^4.0.2",
+		"d3-shape": "^3.2.0",
+		"layerchart": "^1.0.13",
+		"lucide-svelte": "^0.577.0",
+		"sonner": "^2.0.7",
+		"svelte-sonner": "^1.1.0",
+		"tailwind-merge": "^3.5.0",
+		"tailwind-variants": "^3.2.2"
 	}
 }
