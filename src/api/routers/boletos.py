@@ -77,6 +77,30 @@ async def create_boleto(
         raise HTTPException(status_code=422, detail="Empty PDF")
 
     parsed = parse_boleto_pdf(pdf_bytes, filename=file.filename or "boleto.pdf")
+    receipt_bytes = await receipt.read() if receipt else None
+    receipt_payload: dict | None = None
+    receipt_date_str: str | None = None
+
+    if receipt_bytes:
+        rec_name = (receipt.filename if receipt else None) or "comprovante.png"
+        mime_header = (receipt.content_type if receipt else None) or "image/png"
+        rec_parsed = parse_receipt_image(
+            receipt_bytes,
+            filename=rec_name,
+            mime_type=mime_header,
+        )
+        receipt_payload = _receipt_payload_from_parsed(rec_parsed)
+        if receipt_date and receipt_date.strip():
+            time_part = (receipt_time or "").strip() or "00:00:00"
+            receipt_date_str = f"{receipt_date.strip()} {time_part}"
+        elif rec_parsed.payment_datetime:
+            receipt_date_str = rec_parsed.payment_datetime
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail="Receipt image requires receipt_date or extractable payment datetime",
+            )
+
     pdf_path = save_boleto_pdf(
         pdf_bytes,
         emission_date=parsed.emission_date,
@@ -104,28 +128,7 @@ async def create_boleto(
             "A boleto with the same value and dates already exists.",
         )
 
-    receipt_bytes = await receipt.read() if receipt else None
-
-    if receipt_bytes:
-        rec_name = (receipt.filename if receipt else None) or "comprovante.png"
-        mime_header = (receipt.content_type if receipt else None) or "image/png"
-        rec_parsed = parse_receipt_image(
-            receipt_bytes,
-            filename=rec_name,
-            mime_type=mime_header,
-        )
-        receipt_payload = _receipt_payload_from_parsed(rec_parsed)
-        if receipt_date and receipt_date.strip():
-            time_part = (receipt_time or "").strip() or "00:00:00"
-            receipt_date_str = f"{receipt_date.strip()} {time_part}"
-        elif rec_parsed.payment_datetime:
-            receipt_date_str = rec_parsed.payment_datetime
-        else:
-            raise HTTPException(
-                status_code=422,
-                detail="Receipt image requires receipt_date or extractable payment datetime",
-            )
-
+    if receipt_bytes and receipt_payload is not None and receipt_date_str is not None:
         ext = rec_name.rsplit(".", 1)[-1].lower() if "." in rec_name else "png"
         if ext not in ("png", "jpg", "jpeg", "gif", "webp"):
             ext = "png"

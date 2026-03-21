@@ -30,7 +30,7 @@ def ready() -> dict[str, bool | str]:
         llm_configured = _read_api_key() is not None
     except OSError:
         llm_configured = False
-    ok = db_ok and llm_configured
+    ok = db_ok
     return {
         "ready": ok,
         "database": db_ok,
