@@ -8,6 +8,27 @@ Company management tools for Brazil. Currently includes a **Nota Fiscal tracker*
 uv sync
 ```
 
+## API (FastAPI)
+
+```bash
+uv run uvicorn src.api.main:app --reload
+```
+
+- Base URL: `http://127.0.0.1:8000/api/v1`
+- Docs: [docs/api/README.md](docs/api/README.md)
+
+## Frontend (SvelteKit)
+
+The web UI lives in [`src/frontend`](src/frontend). Use Node/npm there; Python tooling stays on `uv` at the repo root.
+
+```bash
+cd src/frontend
+npm install
+npm run dev
+```
+
+Run the FastAPI server in another terminal (see above). See [`src/frontend/README.md`](src/frontend/README.md) for env vars and the dev proxy.
+
 ## Nota Fiscal Tracker
 
 Upload a PDF of a Nota Fiscal (NF-e). The app will:

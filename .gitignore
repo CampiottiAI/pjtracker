@@ -16,4 +16,9 @@ wheels/
 pdfs/
 images/
 .token
-static/
+# Streamlit / app temp assets (do not ignore SvelteKit `src/frontend/static/`)
+src/static/
+
+# SvelteKit (also see src/frontend/.gitignore)
+src/frontend/node_modules/
+src/frontend/.svelte-kit/
