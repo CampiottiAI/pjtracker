@@ -315,13 +315,14 @@
 		}
 	}
 
-	function matchStatusLabel(status: string | null): {
-		status: 'success' | 'warning' | 'error' | 'neutral';
-		label: string;
-	} {
-		if (status === 'match') return { status: 'success', label: 'Match' };
-		if (status === 'mismatch') return { status: 'error', label: 'Mismatch' };
-		return { status: 'neutral', label: 'No receipt' };
+	function receiptStatusDisplay(
+		receiptPath: string | null,
+		matchStatus: string | null
+	): { status: 'success' | 'warning' | 'error' | 'neutral'; label: string } {
+		if (!receiptPath) return { status: 'neutral', label: 'No receipt' };
+		if (matchStatus === 'match') return { status: 'success', label: 'Match' };
+		if (matchStatus === 'mismatch') return { status: 'error', label: 'Mismatch' };
+		return { status: 'warning', label: 'Unverified' };
 	}
 </script>
 
@@ -381,7 +382,7 @@
 				</Table.TableHeader>
 				<Table.TableBody>
 					{#each sortedItems() as item (item.id)}
-						{@const ms = matchStatusLabel(item.receipt_match_status)}
+						{@const ms = receiptStatusDisplay(item.receipt_path, item.receipt_match_status)}
 						<Table.TableRow>
 							<Table.TableCell class="tabular-nums">{formatBrl(item.value)}</Table.TableCell>
 							<Table.TableCell class="tabular-nums">{formatDateBr(item.emission_date)}</Table.TableCell>
@@ -586,7 +587,7 @@
 				<div>
 					<h4 class="text-sm font-medium mb-3">Receipt</h4>
 					{#if detailItem.receipt_path}
-						{@const ms = matchStatusLabel(detailItem.receipt_match_status)}
+						{@const ms = receiptStatusDisplay(detailItem.receipt_path, detailItem.receipt_match_status)}
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
 							<dt class="text-muted-foreground">Status</dt>
 							<dd><StatusBadge status={ms.status} label={ms.label} /></dd>
