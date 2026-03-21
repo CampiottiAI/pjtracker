@@ -17,7 +17,6 @@ from src.app import (
     get_nf_entries,
     get_nf_images,
     init_db,
-    open_pdf_link,
     save_image,
     save_nf_entry,
     save_nf_image,
@@ -28,6 +27,7 @@ from src.nf_parser import (
     compute_brl,
     parse_nf_pdf,
 )
+from src.streamlit_pdf_link import open_pdf_link
 
 st.set_page_config(page_title="Nota Fiscal Tracker", layout="centered")
 st.title("NFs")

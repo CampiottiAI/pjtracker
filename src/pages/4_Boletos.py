@@ -16,7 +16,6 @@ from src.app import (
     fiscal_mes_to_date,
     get_boletos,
     init_db,
-    open_pdf_link,
     save_boleto_entry,
     save_boleto_pdf,
     save_boleto_receipt,
@@ -26,6 +25,7 @@ from src.app import (
 )
 from src.barcode_diff import format_barcode_diff
 from src.boleto_parser import parse_boleto_pdf, parse_receipt_image
+from src.streamlit_pdf_link import open_pdf_link
 
 st.set_page_config(page_title="Boletos", layout="centered")
 st.title("Boletos")

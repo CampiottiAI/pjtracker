@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "easyocr>=1.7.2",
+    "fastapi>=0.135.1",
+    "httpx>=0.28.1",
     "ipykernel>=7.2.0",
     "openai>=2.26.0",
     "opencv-contrib-python>=4.13.0.92",
@@ -13,9 +15,12 @@ dependencies = [
     "plotly>=5.24.0",
     "pydantic>=2.12.5",
     "pypdf>=6.7.4",
+    "pytest>=9.0.2",
+    "python-multipart>=0.0.22",
     "rich>=14.3.3",
     "st-img-pastebutton>=0.0.6",
     "streamlit>=1.54.0",
+    "uvicorn[standard]>=0.42.0",
 ]
 
 [build-system]

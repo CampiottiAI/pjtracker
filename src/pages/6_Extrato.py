@@ -14,7 +14,6 @@ from src.app import (
     get_extrato_by_id,
     get_extratos,
     init_db,
-    open_pdf_link,
     remove_caixinha_pdf,
     remove_higlobe_pdf,
     save_caixinha_pdf,
@@ -27,6 +26,7 @@ from src.app import (
     update_extrato_pdf,
 )
 from src.extrato_parser import parse_caixinha_pdf, parse_extrato_pdf, parse_higlobe_pdf
+from src.streamlit_pdf_link import open_pdf_link
 
 st.set_page_config(page_title="Extrato", layout="centered")
 st.title("Extrato")

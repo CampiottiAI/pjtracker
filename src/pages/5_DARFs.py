@@ -16,7 +16,6 @@ from src.app import (
     fiscal_mes_to_date,
     get_darfs,
     init_db,
-    open_pdf_link,
     save_darf_entry,
     save_darf_pdf,
     save_darf_receipt,
@@ -27,6 +26,7 @@ from src.app import (
 from src.barcode_diff import format_barcode_diff
 from src.boleto_parser import parse_receipt_image
 from src.darf_parser import parse_darf_pdf
+from src.streamlit_pdf_link import open_pdf_link
 
 st.set_page_config(page_title="DARFs", layout="centered")
 st.title("DARFs")
