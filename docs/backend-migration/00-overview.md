@@ -15,7 +15,7 @@ Brazil-focused company tooling bundled in this repo:
 
 ## Storage and layout
 
-Defined in [`src/app.py`](../../src/app.py):
+Defined in [`src/pjtracker/app.py`](../../src/pjtracker/app.py):
 
 | Artifact | Location |
 |----------|----------|
@@ -27,14 +27,14 @@ Defined in [`src/app.py`](../../src/app.py):
 
 ## LLM / extraction runtime
 
-Shared client and models live in [`src/llm_extraction.py`](../../src/llm_extraction.py):
+Shared client and models live in [`src/pjtracker/llm_extraction.py`](../../src/pjtracker/llm_extraction.py):
 
 - **Base URL**: `MARITACA_BASE_URL` (default `https://chat.maritaca.ai/api`).
 - **Model**: `MARITACA_MODEL` (default `sabiazinho-4`).
 - **API key**: `MARITACA_API_KEY` environment variable, else first line of project-root `.token` (`TOKEN_PATH` in `llm_extraction`).
 - Client: OpenAI-compatible `OpenAI(..., base_url=DEFAULT_BASE_URL)` via `_get_client()`.
 
-Heavy OCR (boleto fallback, receipt OCR) uses **EasyOCR** and **pdf2image** in [`src/boleto_parser.py`](../../src/boleto_parser.py).
+Heavy OCR (boleto fallback, receipt OCR) uses **EasyOCR** and **pdf2image** in [`src/pjtracker/parsers/boleto_parser.py`](../../src/pjtracker/parsers/boleto_parser.py).
 
 ## Non-goals for this documentation
 

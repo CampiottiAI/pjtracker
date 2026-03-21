@@ -1,6 +1,6 @@
 # pjtracker frontend (SvelteKit)
 
-Standalone SvelteKit app for the pjtracker FastAPI backend (`src/api/`). UI is intentionally minimal; this folder bootstraps the toolchain and API helpers.
+Standalone SvelteKit app for the pjtracker FastAPI backend (`src/pjtracker/api/`). UI is intentionally minimal; this folder bootstraps the toolchain and API helpers.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ Standalone SvelteKit app for the pjtracker FastAPI backend (`src/api/`). UI is i
 ## Setup
 
 ```bash
-cd src/frontend
+cd frontend
 npm install
 cp .env.example .env   # optional; default empty PUBLIC_API_BASE_URL uses `/api/v1` + dev proxy
 ```
@@ -26,12 +26,12 @@ cp .env.example .env   # optional; default empty PUBLIC_API_BASE_URL uses `/api/
 **Terminal 1 — FastAPI** (repo root):
 
 ```bash
-uv run uvicorn src.api.main:app --reload
+uv run uvicorn pjtracker.api.main:app --reload
 ```
 
 API: `http://127.0.0.1:8000/api/v1` · Swagger: `http://127.0.0.1:8000/docs`
 
-**Terminal 2 — SvelteKit** (`src/frontend`):
+**Terminal 2 — SvelteKit** (`frontend`):
 
 ```bash
 npm run dev
@@ -58,5 +58,5 @@ Full contract: [docs/api/README.md](../../docs/api/README.md).
 ## Recreate this scaffold
 
 ```bash
-npx sv@0.12.8 create --template minimal --types ts --no-install src/frontend
+npx sv@0.12.8 create --template minimal --types ts --no-install frontend
 ```

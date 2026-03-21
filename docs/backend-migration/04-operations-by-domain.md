@@ -1,6 +1,6 @@
 # Operations by domain
 
-Stateless description of what the current app **does** (files [`src/app.py`](../../src/app.py), pages under [`src/`](../../src/)). Replace browser-specific behavior with equivalent API semantics.
+Stateless description of what the current app **does** (files [`src/pjtracker/app.py`](../../src/pjtracker/app.py), pages under [`src/pjtracker/streamlit/pages/`](../../src/pjtracker/streamlit/pages/)). Replace browser-specific behavior with equivalent API semantics.
 
 ---
 
@@ -8,19 +8,19 @@ Stateless description of what the current app **does** (files [`src/app.py`](../
 
 **Parse**
 
-- Input: NF PDF bytes → `parse_nf_pdf()` — [`src/nf_parser.py`](../../src/nf_parser.py).
+- Input: NF PDF bytes → `parse_nf_pdf()` — [`src/pjtracker/parsers/nf_parser.py`](../../src/pjtracker/parsers/nf_parser.py).
 - If `usd` or `rate` is missing, treat as failed extraction (cannot compute BRL).
 - Else `compute_brl(usd, rate, spread)`.
 
 **Save**
 
 - Require **`fiscal_mes`** (`YYYY-MM`).
-- `save_pdf()` writes under `pdfs/` — [`src/app.py`](../../src/app.py).
-- `save_nf_entry(...)` with all monetary + metadata fields; handle duplicate (no insert) and delete orphan PDF — pattern in [`src/NFs.py`](../../src/NFs.py).
+- `save_pdf()` writes under `pdfs/` — [`src/pjtracker/app.py`](../../src/pjtracker/app.py).
+- `save_nf_entry(...)` with all monetary + metadata fields; handle duplicate (no insert) and delete orphan PDF — pattern in [`src/pjtracker/streamlit/NFs.py`](../../src/pjtracker/streamlit/NFs.py).
 
 **Images (optional, multiple)**
 
-- After row exists, for each attachment: `save_image()` → `save_nf_image(nf_id, relative_path)` — [`src/app.py`](../../src/app.py). Paths stored relative to project root when possible.
+- After row exists, for each attachment: `save_image()` → `save_nf_image(nf_id, relative_path)` — [`src/pjtracker/app.py`](../../src/pjtracker/app.py). Paths stored relative to project root when possible.
 
 **List / filter**
 
@@ -48,7 +48,7 @@ Stateless description of what the current app **does** (files [`src/app.py`](../
 
 **Parse boleto PDF**
 
-- `parse_boleto_pdf()` — [`src/boleto_parser.py`](../../src/boleto_parser.py).
+- `parse_boleto_pdf()` — [`src/pjtracker/parsers/boleto_parser.py`](../../src/pjtracker/parsers/boleto_parser.py).
 
 **Parse receipt (optional)**
 
@@ -61,7 +61,7 @@ Stateless description of what the current app **does** (files [`src/app.py`](../
 **Save**
 
 - `save_boleto_pdf()` then `save_boleto_entry()`; on duplicate hash, delete new PDF.
-- If receipt: `save_boleto_receipt()` then `update_boleto_receipt()` with `receipt_match_status` — [`src/app.py`](../../src/app.py). If receipt present, **receipt_date** must be set (validation in [`src/pages/4_Boletos.py`](../../src/pages/4_Boletos.py)).
+- If receipt: `save_boleto_receipt()` then `update_boleto_receipt()` with `receipt_match_status` — [`src/pjtracker/app.py`](../../src/pjtracker/app.py). If receipt present, **receipt_date** must be set (validation in [`src/pjtracker/streamlit/pages/4_Boletos.py`](../../src/pjtracker/streamlit/pages/4_Boletos.py)).
 
 **List**
 
@@ -89,10 +89,10 @@ Stateless description of what the current app **does** (files [`src/app.py`](../
 
 Same operation set as boletos with DARF-specific parsers and persistence:
 
-- Parse: `parse_darf_pdf()` — [`src/darf_parser.py`](../../src/darf_parser.py).
+- Parse: `parse_darf_pdf()` — [`src/pjtracker/parsers/darf_parser.py`](../../src/pjtracker/parsers/darf_parser.py).
 - Receipt: `parse_receipt_image()` (shared).
-- Persistence: `save_darf_pdf`, `save_darf_entry`, `save_darf_receipt`, `update_darf_pdf`, `update_darf_receipt`, `update_darf_fiscal_mes`, `get_darfs`, `get_darf_by_id`, `delete_darf` — [`src/app.py`](../../src/app.py).
-- Business rules mirrored in [`src/pages/5_DARFs.py`](../../src/pages/5_DARFs.py).
+- Persistence: `save_darf_pdf`, `save_darf_entry`, `save_darf_receipt`, `update_darf_pdf`, `update_darf_receipt`, `update_darf_fiscal_mes`, `get_darfs`, `get_darf_by_id`, `delete_darf` — [`src/pjtracker/app.py`](../../src/pjtracker/app.py).
+- Business rules mirrored in [`src/pjtracker/streamlit/pages/5_DARFs.py`](../../src/pjtracker/streamlit/pages/5_DARFs.py).
 
 ---
 
@@ -101,17 +101,17 @@ Same operation set as boletos with DARF-specific parsers and persistence:
 **Parse**
 
 - Main: `parse_extrato_pdf()` (required for bundle).
-- Optional: `parse_caixinha_pdf()`, `parse_higlobe_pdf()` — each can raise `RuntimeError` on LLM failure — [`src/extrato_parser.py`](../../src/extrato_parser.py).
+- Optional: `parse_caixinha_pdf()`, `parse_higlobe_pdf()` — each can raise `RuntimeError` on LLM failure — [`src/pjtracker/parsers/extrato_parser.py`](../../src/pjtracker/parsers/extrato_parser.py).
 
 **Save**
 
 - Save PDF(s) with `save_extrato_pdf`, optionally `save_caixinha_pdf`, `save_higlobe_pdf`.
-- `save_extrato_entry()` with JSON-serialized `entries` lists — [`src/app.py`](../../src/app.py).
-- On duplicate `content_hash`, delete written PDFs for that attempt — [`src/pages/6_Extrato.py`](../../src/pages/6_Extrato.py).
+- `save_extrato_entry()` with JSON-serialized `entries` lists — [`src/pjtracker/app.py`](../../src/pjtracker/app.py).
+- On duplicate `content_hash`, delete written PDFs for that attempt — [`src/pjtracker/streamlit/pages/6_Extrato.py`](../../src/pjtracker/streamlit/pages/6_Extrato.py).
 
 **Product risk**
 
-- Extraction is LLM-dependent; downstream consumers should treat fields as **review-needed**. The app surfaces a warning message after successful save/update in [`src/pages/6_Extrato.py`](../../src/pages/6_Extrato.py) — preserve as operational guidance, not UI text.
+- Extraction is LLM-dependent; downstream consumers should treat fields as **review-needed**. The app surfaces a warning message after successful save/update in [`src/pjtracker/streamlit/pages/6_Extrato.py`](../../src/pjtracker/streamlit/pages/6_Extrato.py) — preserve as operational guidance, not UI text.
 
 **Update**
 
@@ -138,7 +138,7 @@ Same operation set as boletos with DARF-specific parsers and persistence:
 
 ## Analytics: NF charts (data only)
 
-Source logic: [`src/pages/3_Gráficos.py`](../../src/pages/3_Gráficos.py).
+Source logic: [`src/pjtracker/streamlit/pages/3_Gráficos.py`](../../src/pjtracker/streamlit/pages/3_Gráficos.py).
 
 **Input**
 
@@ -168,13 +168,13 @@ Source logic: [`src/pages/3_Gráficos.py`](../../src/pages/3_Gráficos.py).
 
 1. `usd` vs date.
 2. `brl_no_spread` and `brl_with_spread` vs date.
-3. `rate` and `effective_rate` vs date — **numbers** follow the formulas above (legacy chart labels referred to these as with/without spread on the rate axis; see [`src/pages/3_Gráficos.py`](../../src/pages/3_Gráficos.py)).
+3. `rate` and `effective_rate` vs date — **numbers** follow the formulas above (legacy chart labels referred to these as with/without spread on the rate axis; see [`src/pjtracker/streamlit/pages/3_Gráficos.py`](../../src/pjtracker/streamlit/pages/3_Gráficos.py)).
 
 ---
 
 ## Fiscal month completeness
 
-Source: [`src/pages/7_Mês_Fiscal.py`](../../src/pages/7_Mês_Fiscal.py).
+Source: [`src/pjtracker/streamlit/pages/7_Mês_Fiscal.py`](../../src/pjtracker/streamlit/pages/7_Mês_Fiscal.py).
 
 **Discover months**
 

@@ -1,4 +1,4 @@
-"""FastAPI app — run with: uv run uvicorn src.api.main:app --reload"""
+"""FastAPI app — run with: uv run uvicorn pjtracker.api.main:app --reload"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from src.app import init_db
+from pjtracker.app import init_db
 
 from .routers import (
     analytics,

@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.llm_extraction import (
+from pjtracker.llm_extraction import (
     extract_caixinha_pdf,
     extract_extrato_pdf,
     extract_higlobe_transactions_pdf,

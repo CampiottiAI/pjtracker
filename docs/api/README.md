@@ -1,6 +1,6 @@
 # Frontend Integration Guide
 
-This document is for frontend engineers integrating with the FastAPI app in `src/api/`.
+This document is for frontend engineers integrating with the FastAPI app in `src/pjtracker/api/`.
 
 The goal is not just to list routes, but to explain how the API behaves so you can design forms, request flows, optimistic updates, error states, and file-download actions without reading the backend code first.
 
@@ -15,7 +15,7 @@ uv sync
 Run the API from the project root:
 
 ```bash
-uv run uvicorn src.api.main:app --reload
+uv run uvicorn pjtracker.api.main:app --reload
 ```
 
 Useful local URLs:
@@ -30,7 +30,7 @@ Swagger is the fastest way to inspect the exact live request and response schema
 
 ### No auth yet
 
-There is currently no authentication or authorization layer in `src/api/main.py`. Frontend requests do not need tokens or session headers today.
+There is currently no authentication or authorization layer in `src/pjtracker/api/main.py`. Frontend requests do not need tokens or session headers today.
 
 ### Two kinds of routes
 

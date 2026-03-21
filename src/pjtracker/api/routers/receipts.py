@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from src.boleto_parser import parse_receipt_image
+from pjtracker.parsers.boleto_parser import parse_receipt_image
 
 router = APIRouter(tags=["receipts"])
 

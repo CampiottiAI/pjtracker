@@ -6,8 +6,8 @@ import sqlite3
 
 from fastapi import APIRouter
 
-from src.app import DB_PATH
-from src.llm_extraction import TOKEN_PATH, _read_api_key
+from pjtracker.app import DB_PATH
+from pjtracker.llm_extraction import TOKEN_PATH, _read_api_key
 
 router = APIRouter(tags=["health"])
 

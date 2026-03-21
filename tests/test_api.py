@@ -10,10 +10,10 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from src import app as app_module
-from src.api.main import app
-from src.app import init_db, save_nf_entry, save_pdf
-from src.nf_parser import NFParsed
+import pjtracker.app as app_module
+from pjtracker.api.main import app
+from pjtracker.app import init_db, save_nf_entry, save_pdf
+from pjtracker.parsers.nf_parser import NFParsed
 
 
 @contextmanager
@@ -66,7 +66,7 @@ def test_nf_parse_preview_mocked(client: TestClient):
         payment_via="Higlobe",
         source="test",
     )
-    with patch("src.api.routers.nfs.parse_nf_pdf", return_value=fake):
+    with patch("pjtracker.api.routers.nfs.parse_nf_pdf", return_value=fake):
         r = client.post(
             "/api/v1/nfs/parse-preview",
             files={"file": ("nf.pdf", b"%PDF-1.4 fake", "application/pdf")},
@@ -106,7 +106,7 @@ def test_nf_duplicate_returns_409(client: TestClient):
             payment_via=None,
             source="test",
         )
-        with patch("src.api.routers.nfs.parse_nf_pdf", return_value=fake):
+        with patch("pjtracker.api.routers.nfs.parse_nf_pdf", return_value=fake):
             r = client.post(
                 "/api/v1/nfs",
                 data={"fiscal_mes": "2025-01"},

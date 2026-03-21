@@ -8,10 +8,10 @@ from datetime import date
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
-from src.api.errors import conflict
-from src.api.schemas.common import FISCAL_MES_REGEX, PatchFiscalMes
-from src.api.services.paths import project_root, resolve_stored_path
-from src.app import (
+from pjtracker.api.errors import conflict
+from pjtracker.api.schemas.common import FISCAL_MES_REGEX, PatchFiscalMes
+from pjtracker.api.services.paths import project_root, resolve_stored_path
+from pjtracker.app import (
     delete_nf,
     get_nf_by_id,
     get_nf_entries,
@@ -22,7 +22,7 @@ from src.app import (
     save_pdf,
     update_nf_fiscal_mes,
 )
-from src.nf_parser import compute_brl, parse_nf_pdf
+from pjtracker.parsers.nf_parser import compute_brl, parse_nf_pdf
 
 router = APIRouter(prefix="/nfs", tags=["nfs"])
 

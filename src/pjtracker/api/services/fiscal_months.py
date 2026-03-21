@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.app import get_boletos, get_darfs, get_extratos, get_nf_entries
+from pjtracker.app import get_boletos, get_darfs, get_extratos, get_nf_entries
 
 REQUIRED_NFS = 2
 REQUIRED_BOLETO_WITH_RECEIPT = 1

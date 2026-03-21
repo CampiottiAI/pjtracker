@@ -5,7 +5,7 @@ Sketch for a FastAPI backend. Paths are illustrative; use your own versioning (`
 ## Principles
 
 - **Multipart** for PDFs and images; return **JSON** for metadata and parsed previews.
-- **Binary downloads** for stored PDFs/images (`Content-Type: application/pdf` or image MIME) instead of [`open_pdf_link()`](../../src/app.py) temp static files.
+- **Binary downloads** for stored PDFs/images (`Content-Type: application/pdf` or image MIME) instead of [`open_pdf_link()`](../../src/pjtracker/streamlit/streamlit_pdf_link.py) temp static files.
 - **Idempotency**: surface duplicate-key and content-hash conflicts as **409 Conflict** with a clear body, matching behaviors in [`02-domain-rules-and-formats.md`](02-domain-rules-and-formats.md).
 
 ---
@@ -84,7 +84,7 @@ Mirror boletos with `parse_darf_pdf` and DARF persistence functions — same ver
 
 | Method | Path | Notes |
 |--------|------|--------|
-| GET | `/fiscal-months` | List distinct months (union logic from [`7_Mês_Fiscal.py`](../../src/pages/7_Mês_Fiscal.py)) |
+| GET | `/fiscal-months` | List distinct months (union logic from [`7_Mês_Fiscal.py`](../../src/pjtracker/streamlit/pages/7_Mês_Fiscal.py)) |
 | GET | `/fiscal-months/{yyyy-mm}/completeness` | Returns counts + booleans for NF/boleto/DARF/extrato/Higlobe rules |
 
 ---
@@ -102,4 +102,4 @@ Mirror boletos with `parse_darf_pdf` and DARF persistence functions — same ver
 1. **Preferred**: authenticated GET by entity id + asset role; read path from DB, resolve relative to app-configured **storage root** (project root today).
 2. **Alternative**: signed URLs if storage moves to object storage; DB still stores logical or relative paths.
 
-Do **not** rely on `src/static/temp` from [`open_pdf_link`](../../src/app.py) in production.
+Do **not** rely on `src/pjtracker/static/temp` from [`open_pdf_link`](../../src/pjtracker/streamlit/streamlit_pdf_link.py) in production.

@@ -6,7 +6,7 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.api.services.analytics import nf_series_points
+from pjtracker.api.services.analytics import nf_series_points
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 

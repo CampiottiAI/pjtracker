@@ -6,9 +6,11 @@ import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "pjtracker.db"
-PDF_DIR = Path(__file__).resolve().parent.parent / "pdfs"
-IMAGES_DIR = Path(__file__).resolve().parent.parent / "images"
+# Repo root: src/pjtracker/app.py -> ../.. = repo root
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DB_PATH = PROJECT_ROOT / "pjtracker.db"
+PDF_DIR = PROJECT_ROOT / "pdfs"
+IMAGES_DIR = PROJECT_ROOT / "images"
 
 
 def init_db() -> None:

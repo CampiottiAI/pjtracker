@@ -6,7 +6,7 @@ from io import BytesIO
 
 from pypdf import PdfReader
 
-from src.llm_extraction import (
+from pjtracker.llm_extraction import (
     extract_nf_pdf,
     normalize_payment_datetime,
     normalize_payment_via,

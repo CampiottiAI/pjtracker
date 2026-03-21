@@ -10,7 +10,7 @@ import easyocr
 from pdf2image import convert_from_bytes
 from PIL import Image
 
-from src.llm_extraction import (
+from pjtracker.llm_extraction import (
     extract_boleto_pdf,
     extract_boleto_receipt,
     normalize_dd_mm_yyyy,

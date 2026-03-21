@@ -1,6 +1,6 @@
 # Data model
 
-All tables are created in `init_db()` in [`src/app.py`](../../src/app.py). Column names below match SQLite.
+All tables are created in `init_db()` in [`src/pjtracker/app.py`](../../src/pjtracker/app.py). Column names below match SQLite.
 
 ## `nf_entries`
 
@@ -20,7 +20,7 @@ All tables are created in `init_db()` in [`src/app.py`](../../src/app.py). Colum
 | `fiscal_mes` | TEXT | `YYYY-MM` |
 | `created_at` | TEXT ISO | |
 
-**Uniqueness**: `INSERT OR IGNORE` plus unique index `idx_nf_entries_unique` on `(COALESCE(nf_date, ''), COALESCE(verification_code, ''), usd)` — see `save_nf_entry()` in [`src/app.py`](../../src/app.py).
+**Uniqueness**: `INSERT OR IGNORE` plus unique index `idx_nf_entries_unique` on `(COALESCE(nf_date, ''), COALESCE(verification_code, ''), usd)` — see `save_nf_entry()` in [`src/pjtracker/app.py`](../../src/pjtracker/app.py).
 
 ## `nf_images`
 
@@ -57,7 +57,7 @@ All tables are created in `init_db()` in [`src/app.py`](../../src/app.py). Colum
 
 ## `darfs`
 
-Same shape as `boletos` for PDF/receipt/barcode/hash/fiscal fields (`compute_darf_content_hash()`, `save_darf_entry()`, etc. in [`src/app.py`](../../src/app.py)). Unique index `idx_darfs_content_hash`.
+Same shape as `boletos` for PDF/receipt/barcode/hash/fiscal fields (`compute_darf_content_hash()`, `save_darf_entry()`, etc. in [`src/pjtracker/app.py`](../../src/pjtracker/app.py)). Unique index `idx_darfs_content_hash`.
 
 ## `extratos`
 
@@ -88,9 +88,9 @@ Same shape as `boletos` for PDF/receipt/barcode/hash/fiscal fields (`compute_dar
 ## Path resolution
 
 - Paths in the DB may be **relative to the project root** (parent of `pjtracker.db`).
-- Helpers such as `delete_nf()`, `delete_boleto()`, `delete_darf()`, `delete_extrato()` resolve paths: if not absolute, join with `Path(DB_PATH).resolve().parent` — see [`src/app.py`](../../src/app.py).
+- Helpers such as `delete_nf()`, `delete_boleto()`, `delete_darf()`, `delete_extrato()` resolve paths: if not absolute, join with `Path(DB_PATH).resolve().parent` — see [`src/pjtracker/app.py`](../../src/pjtracker/app.py).
 - `save_pdf`, `save_boleto_pdf`, `save_darf_pdf`, `save_extrato_pdf`, etc. write under `pdfs/` and return `Path` objects; callers often store `str(path)` relative to the working directory.
 
 ## Streamlit-only artifact (not part of domain DB)
 
-`STATIC_TEMP_DIR` in [`src/app.py`](../../src/app.py) (`src/static/temp/`) is used by `open_pdf_link()` for temporary PDFs for browser viewing. A FastAPI app should **serve downloads** or static files instead of this pattern.
+`STATIC_TEMP_DIR` in [`src/pjtracker/streamlit/streamlit_pdf_link.py`](../../src/pjtracker/streamlit/streamlit_pdf_link.py) (`src/pjtracker/static/temp/`) is used by `open_pdf_link()` for temporary PDFs for browser viewing. A FastAPI app should **serve downloads** or static files instead of this pattern.

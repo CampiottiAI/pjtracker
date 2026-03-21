@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from src.app import get_nf_entries, parse_nf_date_to_date
+from pjtracker.app import get_nf_entries, parse_nf_date_to_date
 
 
 def nf_series_points(date_from: date, date_to: date) -> list[dict]:

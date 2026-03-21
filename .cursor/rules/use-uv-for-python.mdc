@@ -29,7 +29,7 @@ uv sync
 # Add and install a new dependency
 uv add requests
 
-# Run the app or tests
-uv run python -m pjtracker
+# Run the API or tests
+uv run uvicorn pjtracker.api.main:app --reload
 uv run pytest
 ```

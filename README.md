@@ -11,7 +11,7 @@ uv sync
 ## API (FastAPI)
 
 ```bash
-uv run uvicorn src.api.main:app --reload
+uv run uvicorn pjtracker.api.main:app --reload
 ```
 
 - Base URL: `http://127.0.0.1:8000/api/v1`
@@ -19,15 +19,15 @@ uv run uvicorn src.api.main:app --reload
 
 ## Frontend (SvelteKit)
 
-The web UI lives in [`src/frontend`](src/frontend). Use Node/npm there; Python tooling stays on `uv` at the repo root.
+The web UI lives in [`frontend`](frontend). Use Node/npm there; Python tooling stays on `uv` at the repo root.
 
 ```bash
-cd src/frontend
+cd frontend
 npm install
 npm run dev
 ```
 
-Run the FastAPI server in another terminal (see above). See [`src/frontend/README.md`](src/frontend/README.md) for env vars and the dev proxy.
+Run the FastAPI server in another terminal (see above). See [`frontend/README.md`](frontend/README.md) for env vars and the dev proxy.
 
 ## Nota Fiscal Tracker
 
@@ -41,7 +41,7 @@ Upload a PDF of a Nota Fiscal (NF-e). The app will:
 ### Run the app
 
 ```bash
-uv run streamlit run src/NFs.py
+uv run streamlit run src/pjtracker/streamlit/NFs.py
 ```
 
 Then open the URL shown in the terminal (usually http://localhost:8501).

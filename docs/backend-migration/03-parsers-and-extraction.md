@@ -2,7 +2,7 @@
 
 Convention: primary input is **`pdf_bytes: bytes`** and optional **`filename: str`** for LLM prompts / logging.
 
-## Nota Fiscal — [`src/nf_parser.py`](../../src/nf_parser.py)
+## Nota Fiscal — [`src/pjtracker/parsers/nf_parser.py`](../../src/pjtracker/parsers/nf_parser.py)
 
 ### Entry point
 
@@ -22,7 +22,7 @@ Convention: primary input is **`pdf_bytes: bytes`** and optional **`filename: st
 
 ### Pipeline
 
-1. `extract_nf_pdf()` from [`src/llm_extraction.py`](../../src/llm_extraction.py).
+1. `extract_nf_pdf()` from [`src/pjtracker/llm_extraction.py`](../../src/pjtracker/llm_extraction.py).
 2. `_parse_nf_pdf_with_text()` — `pypdf` text extraction, description block between markers or Código de Verificação section, `parse_description_block()` for USD/rate/spread/company.
 
 ### BRL
@@ -35,7 +35,7 @@ Convention: primary input is **`pdf_bytes: bytes`** and optional **`filename: st
 
 ---
 
-## Boleto PDF — [`src/boleto_parser.py`](../../src/boleto_parser.py)
+## Boleto PDF — [`src/pjtracker/parsers/boleto_parser.py`](../../src/pjtracker/parsers/boleto_parser.py)
 
 ### Entry point
 
@@ -58,7 +58,7 @@ Convention: primary input is **`pdf_bytes: bytes`** and optional **`filename: st
 
 ---
 
-## Receipt image (boleto + DARF) — [`src/boleto_parser.py`](../../src/boleto_parser.py)
+## Receipt image (boleto + DARF) — [`src/pjtracker/parsers/boleto_parser.py`](../../src/pjtracker/parsers/boleto_parser.py)
 
 ### Entry point
 
@@ -80,7 +80,7 @@ Convention: primary input is **`pdf_bytes: bytes`** and optional **`filename: st
 
 ---
 
-## DARF PDF — [`src/darf_parser.py`](../../src/darf_parser.py)
+## DARF PDF — [`src/pjtracker/parsers/darf_parser.py`](../../src/pjtracker/parsers/darf_parser.py)
 
 ### Entry point
 
@@ -102,7 +102,7 @@ Convention: primary input is **`pdf_bytes: bytes`** and optional **`filename: st
 
 ---
 
-## Extrato / Caixinha / Higlobe — [`src/extrato_parser.py`](../../src/extrato_parser.py)
+## Extrato / Caixinha / Higlobe — [`src/pjtracker/parsers/extrato_parser.py`](../../src/pjtracker/parsers/extrato_parser.py)
 
 All three are **LLM-only** success paths: if `llm_data is None`, `parse_*` raises **`RuntimeError`** with message from `LLMExtractionResult.error`.
 
@@ -124,7 +124,7 @@ All three are **LLM-only** success paths: if `llm_data is None`, `parse_*` raise
 
 ---
 
-## LLM layer — [`src/llm_extraction.py`](../../src/llm_extraction.py)
+## LLM layer — [`src/pjtracker/llm_extraction.py`](../../src/pjtracker/llm_extraction.py)
 
 - **Auth**: `MARITACA_API_KEY` or `.token` file; **base URL** `MARITACA_BASE_URL`; **model** `MARITACA_MODEL`.
 - **Client**: `_get_client()` — raises if no API key configured (Portuguese error message).

@@ -16,9 +16,9 @@ wheels/
 pdfs/
 images/
 .token
-# Streamlit / app temp assets (do not ignore SvelteKit `src/frontend/static/`)
-src/static/
+# Streamlit / app temp PDFs for in-browser viewing (see streamlit_pdf_link)
+src/pjtracker/static/
 
-# SvelteKit (also see src/frontend/.gitignore)
-src/frontend/node_modules/
-src/frontend/.svelte-kit/
+# SvelteKit (also see frontend/.gitignore)
+frontend/node_modules/
+frontend/.svelte-kit/

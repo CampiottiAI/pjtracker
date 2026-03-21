@@ -9,10 +9,10 @@ from typing import Any
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
-from src.api.errors import conflict
-from src.api.schemas.common import FISCAL_MES_REGEX, PatchFiscalMes
-from src.api.services.paths import resolve_stored_path
-from src.app import (
+from pjtracker.api.errors import conflict
+from pjtracker.api.schemas.common import FISCAL_MES_REGEX, PatchFiscalMes
+from pjtracker.api.services.paths import resolve_stored_path
+from pjtracker.app import (
     delete_extrato,
     get_extrato_by_id,
     get_extratos,
@@ -27,7 +27,7 @@ from src.app import (
     update_extrato_pdf,
     update_higlobe_pdf,
 )
-from src.extrato_parser import parse_caixinha_pdf, parse_extrato_pdf, parse_higlobe_pdf
+from pjtracker.parsers.extrato_parser import parse_caixinha_pdf, parse_extrato_pdf, parse_higlobe_pdf
 
 router = APIRouter(prefix="/extratos", tags=["extratos"])
 

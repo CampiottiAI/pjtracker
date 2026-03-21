@@ -5,16 +5,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-from src import app
-from src.boleto_parser import BoletoParsed, ReceiptParsed, parse_boleto_pdf, parse_receipt_image
-from src.darf_parser import DarfParsed, parse_darf_pdf
-from src.llm_extraction import (
+import pjtracker.app as app
+from pjtracker.parsers.boleto_parser import BoletoParsed, ReceiptParsed, parse_boleto_pdf, parse_receipt_image
+from pjtracker.parsers.darf_parser import DarfParsed, parse_darf_pdf
+from pjtracker.llm_extraction import (
     BoletoPdfExtraido,
     ComprovanteExtraido,
     LLMExtractionResult,
     normalize_digits,
 )
-from src.nf_parser import NFParsed, parse_nf_pdf
+from pjtracker.parsers.nf_parser import NFParsed, parse_nf_pdf
 
 
 @contextmanager
@@ -60,8 +60,8 @@ class RefactorTests(unittest.TestCase):
         )
 
         with (
-            patch("src.boleto_parser.extract_boleto_pdf", return_value=llm_result),
-            patch("src.boleto_parser._parse_boleto_pdf_with_ocr", return_value=fallback),
+            patch("pjtracker.parsers.boleto_parser.extract_boleto_pdf", return_value=llm_result),
+            patch("pjtracker.parsers.boleto_parser._parse_boleto_pdf_with_ocr", return_value=fallback),
         ):
             parsed = parse_boleto_pdf(b"fake-pdf")
 
@@ -84,9 +84,9 @@ class RefactorTests(unittest.TestCase):
         )
 
         with (
-            patch("src.boleto_parser.extract_boleto_receipt", return_value=llm_result),
+            patch("pjtracker.parsers.boleto_parser.extract_boleto_receipt", return_value=llm_result),
             patch(
-                "src.boleto_parser._parse_receipt_datetime_with_ocr",
+                "pjtracker.parsers.boleto_parser._parse_receipt_datetime_with_ocr",
                 return_value="03/03/2026 18:40:12",
             ),
         ):
@@ -113,8 +113,8 @@ class RefactorTests(unittest.TestCase):
         llm_result = LLMExtractionResult(data=None, error="sem chave")
 
         with (
-            patch("src.darf_parser.extract_darf_pdf", return_value=llm_result),
-            patch("src.darf_parser._parse_darf_pdf_with_ocr", return_value=fallback),
+            patch("pjtracker.parsers.darf_parser.extract_darf_pdf", return_value=llm_result),
+            patch("pjtracker.parsers.darf_parser._parse_darf_pdf_with_ocr", return_value=fallback),
         ):
             parsed = parse_darf_pdf(b"fake-darf")
 
@@ -138,8 +138,8 @@ class RefactorTests(unittest.TestCase):
         llm_result = LLMExtractionResult(data=None, error="sem chave")
 
         with (
-            patch("src.nf_parser.extract_nf_pdf", return_value=llm_result),
-            patch("src.nf_parser._parse_nf_pdf_with_text", return_value=fallback),
+            patch("pjtracker.parsers.nf_parser.extract_nf_pdf", return_value=llm_result),
+            patch("pjtracker.parsers.nf_parser._parse_nf_pdf_with_text", return_value=fallback),
         ):
             parsed = parse_nf_pdf(b"fake-nf")
 

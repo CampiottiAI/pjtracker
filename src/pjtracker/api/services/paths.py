@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.app import DB_PATH
+from pjtracker.app import PROJECT_ROOT
 
 
 def project_root() -> Path:
-    return Path(DB_PATH).resolve().parent
+    return PROJECT_ROOT.resolve()
 
 
 def resolve_stored_path(raw: str | None) -> Path | None:

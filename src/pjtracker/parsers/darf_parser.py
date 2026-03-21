@@ -6,8 +6,8 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.boleto_parser import boleto_text_extractor
-from src.llm_extraction import (
+from pjtracker.parsers.boleto_parser import boleto_text_extractor
+from pjtracker.llm_extraction import (
     extract_darf_pdf,
     normalize_dd_mm_yyyy,
     normalize_digits,
