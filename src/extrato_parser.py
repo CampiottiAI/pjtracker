@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
 from src.llm_extraction import (
     extract_caixinha_pdf,
     extract_extrato_pdf,
+    extract_higlobe_transactions_pdf,
     normalize_dd_mm_yyyy,
 )
 
@@ -38,6 +40,16 @@ class CaixinhaParsed:
     source: str = "llm"
 
 
+@dataclass
+class HiglobeParsed:
+    """Normalized fields extracted from the optional Higlobe statement PDF."""
+
+    entries: list[dict[str, str | float | None]]
+    period_start: str | None
+    period_end: str | None
+    source: str = "llm"
+
+
 def _clean_text(value: str | None) -> str | None:
     if value is None:
         return None
@@ -52,6 +64,39 @@ def _infer_period(entries: list[dict[str, str | float | None]]) -> tuple[str | N
         if not isinstance(raw_date, str):
             continue
         normalized = normalize_dd_mm_yyyy(raw_date)
+        if not normalized:
+            continue
+        try:
+            parsed = datetime.strptime(normalized, "%d/%m/%Y")
+        except ValueError:
+            continue
+        dates.append(parsed)
+    if not dates:
+        return (None, None)
+    dates.sort()
+    return (
+        dates[0].strftime("%d/%m/%Y"),
+        dates[-1].strftime("%d/%m/%Y"),
+    )
+
+
+def _higlobe_date_to_dd_mm_yyyy(raw: str | None) -> str | None:
+    """Take first DD/MM/YYYY from strings like '30/01/2026 - 08:51'."""
+    if not raw or not isinstance(raw, str):
+        return None
+    m = re.search(r"(\d{2}/\d{2}/\d{4})", raw.strip())
+    if not m:
+        return None
+    return normalize_dd_mm_yyyy(m.group(1))
+
+
+def _infer_period_higlobe(
+    entries: list[dict[str, str | float | None]],
+) -> tuple[str | None, str | None]:
+    dates: list[datetime] = []
+    for entry in entries:
+        raw = entry.get("date")
+        normalized = _higlobe_date_to_dd_mm_yyyy(raw if isinstance(raw, str) else None)
         if not normalized:
             continue
         try:
@@ -131,5 +176,33 @@ def parse_caixinha_pdf(pdf_bytes: bytes, filename: str = "caixinha.pdf") -> Caix
         period_start=period_start,
         period_end=period_end,
         saldo_final=getattr(llm_data, "saldo_final", None),
+        source="llm",
+    )
+
+
+def parse_higlobe_pdf(pdf_bytes: bytes, filename: str = "higlobe.pdf") -> HiglobeParsed:
+    """Extract and normalize Higlobe statement fields from PDF bytes."""
+    llm_attempt = extract_higlobe_transactions_pdf(pdf_bytes, filename=filename)
+    llm_data = llm_attempt.data
+    if llm_data is None:
+        raise RuntimeError(llm_attempt.error or "Falha ao extrair os dados do extrato Higlobe.")
+
+    entries: list[dict[str, str | float | None]] = []
+    for entry in getattr(llm_data, "entries", []):
+        entries.append(
+            {
+                "date": _clean_text(getattr(entry, "date", None)),
+                "type": _clean_text(getattr(entry, "type", None)),
+                "description": _clean_text(getattr(entry, "description", None)),
+                "amount": getattr(entry, "amount", None),
+                "currency": _clean_text(getattr(entry, "currency", None)),
+            }
+        )
+
+    period_start, period_end = _infer_period_higlobe(entries)
+    return HiglobeParsed(
+        entries=entries,
+        period_start=period_start,
+        period_end=period_end,
         source="llm",
     )

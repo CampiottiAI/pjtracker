@@ -1,4 +1,4 @@
-"""Extrato – upload statement PDF and optional caixinha PDF."""
+"""Extrato – upload statement PDF, optional caixinha PDF, optional Higlobe PDF."""
 
 import json
 from pathlib import Path
@@ -16,14 +16,17 @@ from src.app import (
     init_db,
     open_pdf_link,
     remove_caixinha_pdf,
+    remove_higlobe_pdf,
     save_caixinha_pdf,
     save_extrato_entry,
     save_extrato_pdf,
+    save_higlobe_pdf,
     update_caixinha_pdf,
+    update_higlobe_pdf,
     update_extrato_fiscal_mes,
     update_extrato_pdf,
 )
-from src.extrato_parser import parse_caixinha_pdf, parse_extrato_pdf
+from src.extrato_parser import parse_caixinha_pdf, parse_extrato_pdf, parse_higlobe_pdf
 
 st.set_page_config(page_title="Extrato", layout="centered")
 st.title("Extrato")
@@ -122,6 +125,24 @@ def _show_caixinha_summary(
         st.caption(f"Fonte da extração: {source}")
 
 
+def _show_higlobe_summary(
+    *,
+    period_start: str | None,
+    period_end: str | None,
+    source: str | None = None,
+) -> None:
+    st.markdown(
+        '<div style="background: #e8f8f0; color: black; padding: 0.5rem 1rem; border-radius: 8px; '
+        'border-left: 4px solid #2ca02c; margin-bottom: 1rem;">'
+        "<strong>Dados extraídos do extrato Higlobe</strong></div>",
+        unsafe_allow_html=True,
+    )
+    if period_start or period_end:
+        st.caption(f"Período identificado: {period_start or '—'} até {period_end or '—'}")
+    if source:
+        st.caption(f"Fonte da extração: {source}")
+
+
 def _show_entries_table(title: str, entries: list[dict]) -> None:
     st.markdown(f"**{title}**")
     if not entries:
@@ -201,6 +222,36 @@ if mode == "Adicionar extrato":
                         )
 
                 st.divider()
+                st.subheader("Extrato Higlobe (opcional)")
+                uploaded_higlobe = st.file_uploader(
+                    "Envie o PDF do extrato Higlobe",
+                    type=["pdf"],
+                    key="higlobe_pdf_upload",
+                )
+                parsed_higlobe = None
+                higlobe_bytes = None
+
+                if uploaded_higlobe is not None:
+                    higlobe_bytes = uploaded_higlobe.read()
+                    uploaded_higlobe.seek(0)
+                    if not higlobe_bytes:
+                        st.error("Arquivo Higlobe vazio.")
+                    else:
+                        parsed_higlobe = parse_higlobe_pdf(
+                            higlobe_bytes,
+                            filename=uploaded_higlobe.name or "higlobe.pdf",
+                        )
+                        _show_higlobe_summary(
+                            period_start=parsed_higlobe.period_start,
+                            period_end=parsed_higlobe.period_end,
+                            source=parsed_higlobe.source,
+                        )
+                        _show_entries_table(
+                            "Transações Higlobe",
+                            parsed_higlobe.entries,
+                        )
+
+                st.divider()
                 fiscal_mes_date = st.date_input(
                     "Fiscal Mês (mês/ano)",
                     value=default_fiscal_mes_date(),
@@ -228,6 +279,14 @@ if mode == "Adicionar extrato":
                                 period_end=parsed_caixinha.period_end or parsed_extrato.period_end,
                             )
 
+                        higlobe_pdf_path = None
+                        if higlobe_bytes is not None and parsed_higlobe is not None:
+                            higlobe_pdf_path = save_higlobe_pdf(
+                                higlobe_bytes,
+                                period_start=parsed_higlobe.period_start or parsed_extrato.period_start,
+                                period_end=parsed_higlobe.period_end or parsed_extrato.period_end,
+                            )
+
                         inserted, _ = save_extrato_entry(
                             extrato_pdf_path=str(extrato_pdf_path),
                             period_start=parsed_extrato.period_start,
@@ -245,6 +304,10 @@ if mode == "Adicionar extrato":
                             caixinha_entries_json=(
                                 json.dumps(parsed_caixinha.entries) if parsed_caixinha else None
                             ),
+                            higlobe_pdf_path=str(higlobe_pdf_path) if higlobe_pdf_path else None,
+                            higlobe_entries_json=(
+                                json.dumps(parsed_higlobe.entries) if parsed_higlobe else None
+                            ),
                             fiscal_mes=fiscal_mes,
                         )
                         if not inserted:
@@ -256,6 +319,11 @@ if mode == "Adicionar extrato":
                             )
                             if saved_caixinha_path and saved_caixinha_path.exists():
                                 saved_caixinha_path.unlink(missing_ok=True)
+                            saved_higlobe_path = (
+                                _resolve_path(str(higlobe_pdf_path)) if higlobe_pdf_path else None
+                            )
+                            if saved_higlobe_path and saved_higlobe_path.exists():
+                                saved_higlobe_path.unlink(missing_ok=True)
                             st.error("Já existe um extrato salvo para esse período.")
                         else:
                             _set_flash_messages(
@@ -365,6 +433,34 @@ else:
         st.info("Caixinha ausente.")
 
     st.divider()
+    if row.get("higlobe_pdf_path"):
+        _show_higlobe_summary(
+            period_start=row.get("period_start"),
+            period_end=row.get("period_end"),
+        )
+        _show_entries_table(
+            "Transações salvas Higlobe",
+            _load_entries(row.get("higlobe_entries_json")),
+        )
+        higlobe_path = _resolve_path(row.get("higlobe_pdf_path"))
+        if higlobe_path and higlobe_path.exists():
+            open_pdf_link(
+                higlobe_path.read_bytes(),
+                "Abrir PDF do extrato Higlobe",
+                unique_key=f"extrato_{extrato_id}_higlobe",
+            )
+        else:
+            st.caption("PDF do extrato Higlobe não encontrado.")
+        if st.button("Remover extrato Higlobe", key=f"remove_higlobe_{extrato_id}"):
+            if remove_higlobe_pdf(extrato_id):
+                st.success("Extrato Higlobe removido.")
+                st.rerun()
+            else:
+                st.error("Não foi possível remover o extrato Higlobe.")
+    else:
+        st.info("Extrato Higlobe ausente.")
+
+    st.divider()
     st.subheader("Atualizar extrato")
     new_extrato = st.file_uploader(
         "Substituir PDF do extrato (opcional)",
@@ -454,6 +550,47 @@ else:
             except Exception as exc:
                 st.error(f"Erro ao processar a nova caixinha: {exc}")
 
+    st.divider()
+    st.subheader("Atualizar extrato Higlobe")
+    new_higlobe = st.file_uploader(
+        "Substituir PDF do extrato Higlobe (opcional)",
+        type=["pdf"],
+        key="update_higlobe_pdf",
+    )
+    if new_higlobe is not None:
+        new_higlobe_bytes = new_higlobe.read()
+        if new_higlobe_bytes:
+            try:
+                parsed_higlobe = parse_higlobe_pdf(
+                    new_higlobe_bytes,
+                    filename=new_higlobe.name or "higlobe.pdf",
+                )
+                _show_higlobe_summary(
+                    period_start=parsed_higlobe.period_start,
+                    period_end=parsed_higlobe.period_end,
+                    source=parsed_higlobe.source,
+                )
+                if st.button("Aplicar e salvar novo extrato Higlobe", key="apply_update_higlobe"):
+                    ok = update_higlobe_pdf(
+                        extrato_id,
+                        new_higlobe_bytes,
+                        period_start=parsed_higlobe.period_start or row.get("period_start"),
+                        period_end=parsed_higlobe.period_end or row.get("period_end"),
+                        higlobe_entries_json=json.dumps(parsed_higlobe.entries),
+                    )
+                    if ok:
+                        _set_flash_messages(
+                            "Extrato Higlobe atualizado.",
+                            "Confira os dados extraídos antes de usar. A leitura do PDF é feita por IA e pode precisar de revisão.",
+                        )
+                        st.rerun()
+                    else:
+                        st.error("Extrato não encontrado.")
+            except Exception as exc:
+                st.error(f"Erro ao processar o novo extrato Higlobe: {exc}")
+
     refreshed_row = get_extrato_by_id(extrato_id) or row
     if refreshed_row.get("caixinha_pdf_path") is None:
         st.caption("Você também pode adicionar uma caixinha depois, enviando um PDF acima.")
+    if refreshed_row.get("higlobe_pdf_path") is None:
+        st.caption("Você também pode adicionar o extrato Higlobe depois, enviando um PDF acima.")

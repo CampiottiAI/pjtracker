@@ -181,6 +181,36 @@ class CaixinhaPdfExtraido(BaseModel):
     )
 
 
+class HiglobeTransaction(BaseModel):
+    date: str = Field(
+        description=(
+            "Date and time exactly as shown in the PDF, preferably in the format "
+            "DD/MM/YYYY - HH:MM."
+        )
+    )
+    type: str = Field(
+        description=(
+            "Transaction type or status exactly as shown, such as Confirmed, "
+            "Processing, Incoming Funds, Withdrawals or ACH."
+        )
+    )
+    description: str = Field(
+        description="Short transaction description exactly as shown in the PDF."
+    )
+    amount: float = Field(
+        description="Transaction amount as a positive number, without currency symbols."
+    )
+    currency: str = Field(
+        description="Currency code for the transaction, such as USD."
+    )
+
+
+class HiglobeTransactions(BaseModel):
+    entries: list[HiglobeTransaction] = Field(
+        description="List of transactions extracted from the Higlobe PDF."
+    )
+
+
 @dataclass
 class LLMExtractionResult:
     data: BaseModel | None
@@ -463,6 +493,28 @@ def extract_caixinha_pdf(
             "valor bruto, imposto, iof e valor liquido, alem do saldo final do periodo."
         ),
         schema=CaixinhaPdfExtraido,
+    )
+
+
+def extract_higlobe_transactions_pdf(
+    file_bytes: bytes,
+    filename: str = "statement.pdf",
+) -> LLMExtractionResult:
+    return _extract_structured_data(
+        file_bytes=file_bytes,
+        filename=filename,
+        mime_type="application/pdf",
+        system_prompt=(
+            "You extract structured transaction data from Higlobe PDF statements "
+            "and transaction receipts. Be precise and objective."
+        ),
+        user_prompt=(
+            "Extract every transaction row from the PDF into JSON. "
+            "Return a list of entries with date, type, description, amount and currency. "
+            "Use the values exactly as shown in the document whenever possible. "
+            "Amount must be numeric and should not include currency symbols."
+        ),
+        schema=HiglobeTransactions,
     )
 
 

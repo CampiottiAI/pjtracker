@@ -62,6 +62,7 @@ def _check_month(fm: str) -> dict:
     darfs_with_receipt = [d for d in darfs if d.get("receipt_path")]
     extratos = get_extratos(fiscal_mes=fm)
     extratos_com_caixinha = [e for e in extratos if e.get("caixinha_pdf_path")]
+    extratos_com_higlobe = [e for e in extratos if e.get("higlobe_pdf_path")]
 
     return {
         "nfs_count": len(nfs),
@@ -72,12 +73,15 @@ def _check_month(fm: str) -> dict:
         "darfs_ok": len(darfs_with_receipt) >= REQUIRED_DARF_WITH_RECEIPT,
         "extratos_caixinha_count": len(extratos_com_caixinha),
         "extratos_ok": len(extratos_com_caixinha) >= REQUIRED_EXTRATO_COM_CAIXINHA,
+        "extratos_higlobe_count": len(extratos_com_higlobe),
+        "higlobe_ok": len(extratos_com_higlobe) >= 1,
     }
 
 
 st.caption(
     "Para um mês fiscal estar completo são necessários: "
-    "2 NFs, 1 Boleto com comprovante, 1 DARF com comprovante, 1 Extrato com caixinha."
+    "2 NFs, 1 Boleto com comprovante, 1 DARF com comprovante, 1 Extrato com caixinha. "
+    "O extrato Higlobe (USD) é opcional e não substitui a caixinha no fechamento."
 )
 
 
@@ -139,6 +143,11 @@ if selected:
     )
     if not check["extratos_ok"]:
         st.warning("Falta 1 Extrato com caixinha para fechar o mês.")
+
+    higlobe_status = "OK" if check["higlobe_ok"] else "Ausente"
+    st.write(
+        f"**Extrato Higlobe (opcional):** {check['extratos_higlobe_count']} com PDF — {higlobe_status}"
+    )
 
     all_ok = (
         check["nfs_ok"]

@@ -192,6 +192,14 @@ def init_db() -> None:
             conn.execute("ALTER TABLE extratos ADD COLUMN fiscal_mes TEXT")
         except sqlite3.OperationalError:
             pass
+        for statement in (
+            "ALTER TABLE extratos ADD COLUMN higlobe_pdf_path TEXT",
+            "ALTER TABLE extratos ADD COLUMN higlobe_entries_json TEXT",
+        ):
+            try:
+                conn.execute(statement)
+            except sqlite3.OperationalError:
+                pass
 
 
 def _sanitize_filename(s: str) -> str:
@@ -1018,6 +1026,25 @@ def save_caixinha_pdf(
     return path
 
 
+def save_higlobe_pdf(
+    pdf_bytes: bytes,
+    period_start: str | None = None,
+    period_end: str | None = None,
+) -> Path:
+    """Save Higlobe statement PDF to pdfs/ with a unique name. Returns path."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    safe_start = _sanitize_filename((period_start or "").replace("/", "-"))[:20] or "nodate"
+    safe_end = _sanitize_filename((period_end or "").replace("/", "-"))[:20] or "nodate"
+    base = f"higlobe_{safe_start}_{safe_end}"
+    path = PDF_DIR / f"{base}.pdf"
+    counter = 0
+    while path.exists():
+        counter += 1
+        path = PDF_DIR / f"{base}_{counter}.pdf"
+    path.write_bytes(pdf_bytes)
+    return path
+
+
 def save_extrato_entry(
     *,
     extrato_pdf_path: str,
@@ -1032,6 +1059,8 @@ def save_extrato_entry(
     caixinha_pdf_path: str | None = None,
     caixinha_saldo_final: float | None = None,
     caixinha_entries_json: str | None = None,
+    higlobe_pdf_path: str | None = None,
+    higlobe_entries_json: str | None = None,
     fiscal_mes: str | None = None,
 ) -> tuple[bool, int | None]:
     """Insert one extrato row. Returns (inserted, id)."""
@@ -1045,8 +1074,9 @@ def save_extrato_entry(
                     extrato_pdf_path, caixinha_pdf_path, period_start, period_end,
                     saldo_inicial, rendimento, total_entradas, total_saidas, saldo_final,
                     caixinha_saldo_final, extrato_entries_json, caixinha_entries_json,
+                    higlobe_pdf_path, higlobe_entries_json,
                     created_at, updated_at, content_hash, fiscal_mes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     extrato_pdf_path,
@@ -1061,6 +1091,8 @@ def save_extrato_entry(
                     caixinha_saldo_final,
                     extrato_entries_json,
                     caixinha_entries_json,
+                    higlobe_pdf_path,
+                    higlobe_entries_json,
                     now,
                     now,
                     content_hash,
@@ -1192,6 +1224,66 @@ def update_caixinha_pdf(
     return True
 
 
+def update_higlobe_pdf(
+    extrato_id: int,
+    pdf_bytes: bytes,
+    *,
+    period_start: str | None,
+    period_end: str | None,
+    higlobe_entries_json: str | None,
+) -> bool:
+    """Replace the Higlobe PDF and update parsed fields."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    row = get_extrato_by_id(extrato_id)
+    if not row:
+        return False
+    old_path = row.get("higlobe_pdf_path")
+    if old_path:
+        full_old = Path(DB_PATH).resolve().parent / old_path if not Path(old_path).is_absolute() else Path(old_path)
+        if full_old.exists():
+            full_old.unlink(missing_ok=True)
+    new_path = save_higlobe_pdf(pdf_bytes, period_start, period_end)
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            UPDATE extratos
+            SET higlobe_pdf_path = ?, higlobe_entries_json = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                str(new_path),
+                higlobe_entries_json,
+                now,
+                extrato_id,
+            ),
+        )
+    return True
+
+
+def remove_higlobe_pdf(extrato_id: int) -> bool:
+    """Delete the stored Higlobe PDF and clear its parsed fields."""
+    row = get_extrato_by_id(extrato_id)
+    if not row:
+        return False
+    old_path = row.get("higlobe_pdf_path")
+    if old_path:
+        full_old = Path(DB_PATH).resolve().parent / old_path if not Path(old_path).is_absolute() else Path(old_path)
+        if full_old.exists():
+            full_old.unlink(missing_ok=True)
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            UPDATE extratos
+            SET higlobe_pdf_path = NULL, higlobe_entries_json = NULL, updated_at = ?
+            WHERE id = ?
+            """,
+            (now, extrato_id),
+        )
+    return True
+
+
 def remove_caixinha_pdf(extrato_id: int) -> bool:
     """Delete the stored caixinha PDF and clear its parsed fields."""
     row = get_extrato_by_id(extrato_id)
@@ -1232,7 +1324,7 @@ def delete_extrato(extrato_id: int) -> bool:
     if not row:
         return False
     project_root = Path(DB_PATH).resolve().parent
-    for path_key in ("extrato_pdf_path", "caixinha_pdf_path"):
+    for path_key in ("extrato_pdf_path", "caixinha_pdf_path", "higlobe_pdf_path"):
         raw = row.get(path_key)
         if not raw or (isinstance(raw, str) and not raw.strip()):
             continue
