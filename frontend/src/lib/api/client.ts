@@ -198,6 +198,22 @@ export async function getNfImages(nfId: number): Promise<NfImage[]> {
 	return apiJson<NfImage[]>(`/nfs/${nfId}/images`);
 }
 
+export async function updateNfPdf(id: number, file: File): Promise<NfEntry> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<NfEntry>(`/nfs/${id}/pdf`, form, 'PUT');
+}
+
+export async function addNfImages(nfId: number, images: File[]): Promise<NfImage[]> {
+	const form = new FormData();
+	images.forEach((img) => form.append('images', img));
+	return apiForm<NfImage[]>(`/nfs/${nfId}/images`, form);
+}
+
+export async function deleteNfImage(nfId: number, imageId: number): Promise<void> {
+	await apiJson(`/nfs/${nfId}/images/${imageId}`, { method: 'DELETE' });
+}
+
 // ---------------------------------------------------------------------------
 // Boletos
 // ---------------------------------------------------------------------------

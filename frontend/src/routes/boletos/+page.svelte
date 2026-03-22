@@ -6,7 +6,10 @@
 		createBoleto,
 		deleteBoleto,
 		patchBoletoFiscalMes,
-		getBoletoBarcodeDiff
+		getBoletoBarcodeDiff,
+		updateBoletoPdf,
+		updateBoletoReceipt,
+		getBoleto
 	} from '$lib/api/client.js';
 </script>
 
@@ -19,4 +22,7 @@
 	deleteFn={deleteBoleto}
 	patchFiscalMesFn={patchBoletoFiscalMes}
 	getBarcodeDiffFn={getBoletoBarcodeDiff}
+	replacePdfFn={updateBoletoPdf}
+	replaceReceiptFn={updateBoletoReceipt}
+	getFn={getBoleto}
 />

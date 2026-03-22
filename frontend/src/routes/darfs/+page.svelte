@@ -6,7 +6,10 @@
 		createDarf,
 		deleteDarf,
 		patchDarfFiscalMes,
-		getDarfBarcodeDiff
+		getDarfBarcodeDiff,
+		updateDarfPdf,
+		updateDarfReceipt,
+		getDarf
 	} from '$lib/api/client.js';
 </script>
 
@@ -19,4 +22,7 @@
 	deleteFn={deleteDarf}
 	patchFiscalMesFn={patchDarfFiscalMes}
 	getBarcodeDiffFn={getDarfBarcodeDiff}
+	replacePdfFn={updateDarfPdf}
+	replaceReceiptFn={updateDarfReceipt}
+	getFn={getDarf}
 />

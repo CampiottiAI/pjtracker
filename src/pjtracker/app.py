@@ -451,6 +451,73 @@ def update_nf_fiscal_mes(nf_id: int, fiscal_mes: str | None) -> None:
         )
 
 
+def update_nf_pdf(
+    nf_id: int,
+    pdf_bytes: bytes,
+    *,
+    company: str | None,
+    usd: float,
+    rate: float,
+    spread: float,
+    brl_no_spread: float,
+    brl_with_spread: float,
+    nf_date: str | None,
+    verification_code: str | None,
+    payment_via: str | None,
+) -> bool:
+    """Replace NF PDF and update parsed fields. Returns False if NF not found."""
+    row = get_nf_by_id(nf_id)
+    if not row:
+        return False
+    project_root_dir = Path(DB_PATH).resolve().parent
+    old_path = row.get("pdf_path")
+    if old_path:
+        full_old = Path(old_path) if Path(old_path).is_absolute() else project_root_dir / old_path
+        if full_old.exists():
+            full_old.unlink(missing_ok=True)
+    new_path = save_pdf(pdf_bytes, verification_code or "-", nf_date, usd)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            UPDATE nf_entries
+            SET company = ?, usd = ?, rate = ?, spread = ?,
+                brl_no_spread = ?, brl_with_spread = ?,
+                nf_date = ?, verification_code = ?, payment_via = ?,
+                pdf_path = ?
+            WHERE id = ?
+            """,
+            (
+                company, usd, rate, spread,
+                brl_no_spread, brl_with_spread,
+                nf_date, verification_code, payment_via,
+                str(new_path), nf_id,
+            ),
+        )
+    return True
+
+
+def delete_nf_image(nf_id: int, image_id: int) -> bool:
+    """Delete a single NF image row and its file. Returns True if deleted."""
+    project_root_dir = Path(DB_PATH).resolve().parent
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            "SELECT * FROM nf_images WHERE id = ? AND nf_id = ?", (image_id, nf_id)
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+        raw = row["image_path"]
+        if raw and str(raw).strip():
+            p = Path(raw)
+            if not p.is_absolute():
+                p = project_root_dir / raw
+            if p.exists():
+                p.unlink(missing_ok=True)
+        conn.execute("DELETE FROM nf_images WHERE id = ?", (image_id,))
+    return True
+
+
 # --- Boletos ---
 
 

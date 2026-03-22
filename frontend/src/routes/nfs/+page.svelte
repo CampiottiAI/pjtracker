@@ -11,7 +11,11 @@
 		patchNfFiscalMes,
 		nfParsePreview,
 		createNf,
+		getNf,
 		getNfImages,
+		updateNfPdf,
+		addNfImages,
+		deleteNfImage,
 		downloadBlob,
 		triggerDownload
 	} from '$lib/api/client.js';
@@ -35,6 +39,7 @@
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
 	import {
 		Plus,
 		Download,
@@ -42,7 +47,9 @@
 		Eye,
 		Image as ImageIcon,
 		Loader2,
-		ArrowUpDown
+		ArrowUpDown,
+		FileText,
+		RefreshCw
 	} from 'lucide-svelte';
 
 	// ---------------------------------------------------------------------------
@@ -69,6 +76,10 @@
 	let detailOpen = $state(false);
 	let detailNf = $state<NfEntry | null>(null);
 	let detailImages = $state<NfImage[]>([]);
+
+	// Detail replacement state
+	let replacingPdf = $state(false);
+	let addingImages = $state(false);
 
 	// Delete dialog
 	let deleteDialogOpen = $state(false);
@@ -117,7 +128,6 @@
 	}
 
 	$effect(() => {
-		// Re-fetch when filters change (dependencies tracked automatically)
 		void filterMonth;
 		void filterDateFrom;
 		void filterDateTo;
@@ -209,11 +219,23 @@
 	async function openDetail(nf: NfEntry) {
 		detailNf = nf;
 		detailImages = [];
+		replacingPdf = false;
+		addingImages = false;
 		detailOpen = true;
 		try {
 			detailImages = await getNfImages(nf.id);
 		} catch {
 			// images may be empty
+		}
+	}
+
+	async function refreshDetail() {
+		if (!detailNf) return;
+		try {
+			detailNf = await getNf(detailNf.id);
+			detailImages = await getNfImages(detailNf.id);
+		} catch {
+			// silently fail
 		}
 	}
 
@@ -232,6 +254,52 @@
 			triggerDownload(blob, filename ?? `nf_${nfId}_img_${imageId}`);
 		} catch (e) {
 			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Download failed');
+		}
+	}
+
+	// ---------------------------------------------------------------------------
+	// Detail: Replace PDF
+	// ---------------------------------------------------------------------------
+
+	async function handleReplacePdf(files: File[]) {
+		if (!detailNf || files.length === 0) return;
+		replacingPdf = true;
+		try {
+			detailNf = await updateNfPdf(detailNf.id, files[0]);
+			toast.success('NF PDF replaced');
+			await loadNfs();
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Replace failed');
+		} finally {
+			replacingPdf = false;
+		}
+	}
+
+	// ---------------------------------------------------------------------------
+	// Detail: Add/Delete Images
+	// ---------------------------------------------------------------------------
+
+	async function handleAddImages(files: File[]) {
+		if (!detailNf || files.length === 0) return;
+		addingImages = true;
+		try {
+			detailImages = await addNfImages(detailNf.id, files);
+			toast.success(`${files.length} image(s) added`);
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Upload failed');
+		} finally {
+			addingImages = false;
+		}
+	}
+
+	async function handleDeleteImage(imageId: number) {
+		if (!detailNf) return;
+		try {
+			await deleteNfImage(detailNf.id, imageId);
+			detailImages = detailImages.filter((img) => img.id !== imageId);
+			toast.success('Image deleted');
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Delete failed');
 		}
 	}
 
@@ -503,65 +571,140 @@
 
 <!-- Detail Sheet -->
 <Sheet.Sheet bind:open={detailOpen}>
-	<Sheet.SheetContent side="right">
+	<Sheet.SheetContent side="right" class="sm:max-w-lg">
 		<Sheet.SheetHeader>
 			<Sheet.SheetTitle>NF Details</Sheet.SheetTitle>
 			{#if detailNf}
-				<Sheet.SheetDescription>ID: {detailNf.id}</Sheet.SheetDescription>
+				<Sheet.SheetDescription>ID: {detailNf.id} &middot; {formatFiscalMes(detailNf.fiscal_mes)}</Sheet.SheetDescription>
 			{/if}
 		</Sheet.SheetHeader>
 		{#if detailNf}
-			<div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-				<dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-					<dt class="text-muted-foreground">Company</dt>
-					<dd>{detailNf.company ?? '\u2014'}</dd>
-					<dt class="text-muted-foreground">USD</dt>
-					<dd class="tabular-nums">{formatUsd(detailNf.usd)}</dd>
-					<dt class="text-muted-foreground">Rate</dt>
-					<dd class="tabular-nums">{formatNumber(detailNf.rate, 4)}</dd>
-					<dt class="text-muted-foreground">Spread</dt>
-					<dd class="tabular-nums">{formatPercent(detailNf.spread)}</dd>
-					<dt class="text-muted-foreground">BRL (no spread)</dt>
-					<dd class="tabular-nums">{formatBrl(detailNf.brl_no_spread)}</dd>
-					<dt class="text-muted-foreground">BRL (with spread)</dt>
-					<dd class="tabular-nums font-medium">{formatBrl(detailNf.brl_with_spread)}</dd>
-					<dt class="text-muted-foreground">Date</dt>
-					<dd>{formatDateBr(detailNf.nf_date)}</dd>
-					<dt class="text-muted-foreground">Verification Code</dt>
-					<dd class="font-mono text-xs">{detailNf.verification_code ?? '\u2014'}</dd>
-					<dt class="text-muted-foreground">Payment Via</dt>
-					<dd>{detailNf.payment_via ?? '\u2014'}</dd>
-					<dt class="text-muted-foreground">Fiscal Month</dt>
-					<dd>{formatFiscalMes(detailNf.fiscal_mes)}</dd>
-					<dt class="text-muted-foreground">Created</dt>
-					<dd class="text-xs">{detailNf.created_at}</dd>
-				</dl>
-
-				<div class="flex gap-2">
-					<Button variant="outline" size="sm" onclick={() => downloadPdf(detailNf!.id)}>
-						<Download class="h-4 w-4" />
-						Download PDF
-					</Button>
-				</div>
-
-				{#if detailImages.length > 0}
-					<div class="space-y-2">
-						<h4 class="text-sm font-medium flex items-center gap-1.5">
-							<ImageIcon class="h-4 w-4" />
-							Attachments ({detailImages.length})
-						</h4>
-						<div class="grid grid-cols-2 gap-2">
-							{#each detailImages as img}
-								<button
-									class="rounded-md border border-border p-2 text-xs text-muted-foreground hover:bg-accent transition-colors text-left truncate"
-									onclick={() => downloadImage(detailNf!.id, img.id)}
-								>
-									Image #{img.id}
-								</button>
-							{/each}
+			<div class="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+				<!-- NF Data Card -->
+				<Card.Root>
+					<Card.Header class="pb-3">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-2">
+								<FileText class="h-4 w-4 text-muted-foreground" />
+								<Card.Title class="text-sm">Nota Fiscal</Card.Title>
+							</div>
+							<Button
+								variant="outline"
+								size="sm"
+								class="h-7 text-xs"
+								onclick={() => downloadPdf(detailNf!.id)}
+							>
+								<Download class="h-3.5 w-3.5" />
+								PDF
+							</Button>
 						</div>
-					</div>
-				{/if}
+					</Card.Header>
+					<Card.Content class="space-y-4">
+						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+							<dt class="text-muted-foreground">Company</dt>
+							<dd>{detailNf.company ?? '\u2014'}</dd>
+							<dt class="text-muted-foreground">USD</dt>
+							<dd class="tabular-nums font-medium">{formatUsd(detailNf.usd)}</dd>
+							<dt class="text-muted-foreground">Rate</dt>
+							<dd class="tabular-nums">{formatNumber(detailNf.rate, 4)}</dd>
+							<dt class="text-muted-foreground">Spread</dt>
+							<dd class="tabular-nums">{formatPercent(detailNf.spread)}</dd>
+							<dt class="text-muted-foreground">BRL (no spread)</dt>
+							<dd class="tabular-nums">{formatBrl(detailNf.brl_no_spread)}</dd>
+							<dt class="text-muted-foreground">BRL (with spread)</dt>
+							<dd class="tabular-nums font-medium">{formatBrl(detailNf.brl_with_spread)}</dd>
+							<dt class="text-muted-foreground">Date</dt>
+							<dd>{formatDateBr(detailNf.nf_date)}</dd>
+							<dt class="text-muted-foreground">Verification Code</dt>
+							<dd class="font-mono text-xs">{detailNf.verification_code ?? '\u2014'}</dd>
+							<dt class="text-muted-foreground">Payment Via</dt>
+							<dd>{detailNf.payment_via ?? '\u2014'}</dd>
+							<dt class="text-muted-foreground">Fiscal Month</dt>
+							<dd>{formatFiscalMes(detailNf.fiscal_mes)}</dd>
+							<dt class="text-muted-foreground">Created</dt>
+							<dd class="text-xs">{detailNf.created_at}</dd>
+						</dl>
+
+						<Separator />
+
+						<div class="space-y-2">
+							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+								<RefreshCw class="h-3 w-3" />
+								Replace PDF
+							</span>
+							<FileDropZone
+								accept=".pdf,application/pdf"
+								loading={replacingPdf}
+								onchange={handleReplacePdf}
+								label="Drop new NF PDF to replace"
+							/>
+						</div>
+					</Card.Content>
+				</Card.Root>
+
+				<!-- Images Card -->
+				<Card.Root>
+					<Card.Header class="pb-3">
+						<div class="flex items-center gap-2">
+							<ImageIcon class="h-4 w-4 text-muted-foreground" />
+							<Card.Title class="text-sm">Attachments ({detailImages.length})</Card.Title>
+						</div>
+					</Card.Header>
+					<Card.Content class="space-y-4">
+						{#if detailImages.length > 0}
+							<div class="grid grid-cols-1 gap-2">
+								{#each detailImages as img (img.id)}
+									<div class="flex items-center justify-between rounded-md border border-border px-3 py-2">
+										<button
+											class="text-sm text-muted-foreground hover:text-foreground transition-colors truncate flex-1 text-left"
+											onclick={() => downloadImage(detailNf!.id, img.id)}
+										>
+											Image #{img.id}
+										</button>
+										<div class="flex items-center gap-1 ml-2 shrink-0">
+											<Button
+												variant="ghost"
+												size="icon"
+												class="h-7 w-7"
+												onclick={() => downloadImage(detailNf!.id, img.id)}
+												title="Download"
+											>
+												<Download class="h-3.5 w-3.5" />
+											</Button>
+											<Button
+												variant="ghost"
+												size="icon"
+												class="h-7 w-7 text-destructive-foreground"
+												onclick={() => handleDeleteImage(img.id)}
+												title="Delete"
+											>
+												<Trash2 class="h-3.5 w-3.5" />
+											</Button>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<p class="text-sm text-muted-foreground">No images attached.</p>
+						{/if}
+
+						<Separator />
+
+						<div class="space-y-2">
+							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+								<Plus class="h-3 w-3" />
+								Add Images
+							</span>
+							<FileDropZone
+								accept="image/*"
+								multiple={true}
+								loading={addingImages}
+								onchange={handleAddImages}
+								label="Drop images here to add"
+							/>
+						</div>
+					</Card.Content>
+				</Card.Root>
 			</div>
 		{/if}
 	</Sheet.SheetContent>

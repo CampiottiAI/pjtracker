@@ -24,6 +24,7 @@
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
 	import {
 		Plus,
 		Download,
@@ -31,10 +32,12 @@
 		Eye,
 		Loader2,
 		ArrowUpDown,
-		FileWarning
+		FileWarning,
+		RefreshCw,
+		FileText,
+		Receipt
 	} from 'lucide-svelte';
 
-	// Props -- different per domain
 	let {
 		domainLabel,
 		routePrefix,
@@ -43,7 +46,10 @@
 		createFn,
 		deleteFn,
 		patchFiscalMesFn,
-		getBarcodeDiffFn
+		getBarcodeDiffFn,
+		replacePdfFn,
+		replaceReceiptFn,
+		getFn
 	}: {
 		domainLabel: string;
 		routePrefix: string;
@@ -59,6 +65,14 @@
 		deleteFn: (id: number) => Promise<void>;
 		patchFiscalMesFn: (id: number, fm: string | null) => Promise<BoletoEntry>;
 		getBarcodeDiffFn: (id: number) => Promise<string>;
+		replacePdfFn: (id: number, file: File) => Promise<BoletoEntry>;
+		replaceReceiptFn: (
+			id: number,
+			receipt: File,
+			receiptDate?: string,
+			receiptTime?: string
+		) => Promise<BoletoEntry>;
+		getFn: (id: number) => Promise<BoletoEntry>;
 	} = $props();
 
 	// ---------------------------------------------------------------------------
@@ -88,6 +102,15 @@
 	let detailItem = $state<BoletoEntry | null>(null);
 	let barcodeDiff = $state<string | null>(null);
 	let barcodeDiffLoading = $state(false);
+
+	// Detail replacement state
+	let replacingPdf = $state(false);
+	let replacingReceipt = $state(false);
+	let replaceReceiptDate = $state('');
+	let replaceReceiptTime = $state('');
+	let replaceReceiptFile = $state<File | null>(null);
+	let replaceReceiptPreview = $state<ReceiptPreview | null>(null);
+	let replaceReceiptPreviewing = $state(false);
 
 	// Delete dialog
 	let deleteDialogOpen = $state(false);
@@ -251,7 +274,23 @@
 		detailItem = item;
 		barcodeDiff = null;
 		barcodeDiffLoading = false;
+		replacingPdf = false;
+		replacingReceipt = false;
+		replaceReceiptFile = null;
+		replaceReceiptPreview = null;
+		replaceReceiptPreviewing = false;
+		replaceReceiptDate = '';
+		replaceReceiptTime = '';
 		detailOpen = true;
+	}
+
+	async function refreshDetail() {
+		if (!detailItem) return;
+		try {
+			detailItem = await getFn(detailItem.id);
+		} catch {
+			// silently fail
+		}
 	}
 
 	async function loadBarcodeDiff(id: number) {
@@ -271,6 +310,77 @@
 			triggerDownload(blob, filename ?? fallbackName);
 		} catch (e) {
 			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Download failed');
+		}
+	}
+
+	// ---------------------------------------------------------------------------
+	// Detail: Replace PDF
+	// ---------------------------------------------------------------------------
+
+	async function handleReplacePdf(files: File[]) {
+		if (!detailItem || files.length === 0) return;
+		replacingPdf = true;
+		try {
+			detailItem = await replacePdfFn(detailItem.id, files[0]);
+			toast.success(`${domainLabel} PDF replaced`);
+			barcodeDiff = null;
+			await loadItems();
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Replace failed');
+		} finally {
+			replacingPdf = false;
+		}
+	}
+
+	// ---------------------------------------------------------------------------
+	// Detail: Replace/Add Receipt
+	// ---------------------------------------------------------------------------
+
+	async function handleDetailReceiptSelected(files: File[]) {
+		if (files.length === 0) return;
+		replaceReceiptFile = files[0];
+		replaceReceiptPreview = null;
+		replaceReceiptPreviewing = true;
+		try {
+			replaceReceiptPreview = await receiptParsePreview(files[0]);
+			if (replaceReceiptPreview.payment_datetime) {
+				const parts = replaceReceiptPreview.payment_datetime.split(' ');
+				if (parts[0]) {
+					const [dd, mm, yyyy] = parts[0].split('/');
+					if (yyyy && mm && dd) replaceReceiptDate = `${yyyy}-${mm}-${dd}`;
+				}
+				if (parts[1]) replaceReceiptTime = parts[1];
+			}
+		} catch (e) {
+			toast.error(
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Receipt preview failed'
+			);
+		} finally {
+			replaceReceiptPreviewing = false;
+		}
+	}
+
+	async function handleSaveReceipt() {
+		if (!detailItem || !replaceReceiptFile) return;
+		replacingReceipt = true;
+		try {
+			detailItem = await replaceReceiptFn(
+				detailItem.id,
+				replaceReceiptFile,
+				replaceReceiptDate || undefined,
+				replaceReceiptTime || undefined
+			);
+			toast.success('Receipt updated');
+			replaceReceiptFile = null;
+			replaceReceiptPreview = null;
+			replaceReceiptDate = '';
+			replaceReceiptTime = '';
+			barcodeDiff = null;
+			await loadItems();
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Receipt update failed');
+		} finally {
+			replacingReceipt = false;
 		}
 	}
 
@@ -548,89 +658,179 @@
 
 <!-- Detail Sheet -->
 <Sheet.Sheet bind:open={detailOpen}>
-	<Sheet.SheetContent side="right">
+	<Sheet.SheetContent side="right" class="sm:max-w-lg">
 		<Sheet.SheetHeader>
 			<Sheet.SheetTitle>{domainLabel} Details</Sheet.SheetTitle>
 			{#if detailItem}
-				<Sheet.SheetDescription>ID: {detailItem.id}</Sheet.SheetDescription>
+				<Sheet.SheetDescription>ID: {detailItem.id} &middot; {formatFiscalMes(detailItem.fiscal_mes)}</Sheet.SheetDescription>
 			{/if}
 		</Sheet.SheetHeader>
 		{#if detailItem}
-			<div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-				<!-- Document info -->
-				<div>
-					<h4 class="text-sm font-medium mb-3">{domainLabel}</h4>
-					<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-						<dt class="text-muted-foreground">Value</dt>
-						<dd class="tabular-nums">{formatBrl(detailItem.value)}</dd>
-						<dt class="text-muted-foreground">Emission</dt>
-						<dd>{formatDateBr(detailItem.emission_date)}</dd>
-						<dt class="text-muted-foreground">Deadline</dt>
-						<dd>{formatDateBr(detailItem.deadline_date)}</dd>
-						<dt class="text-muted-foreground">Barcode</dt>
-						<dd class="font-mono text-xs break-all">{detailItem.codigo_barras_digits ?? '\u2014'}</dd>
-						<dt class="text-muted-foreground">Fiscal Month</dt>
-						<dd>{formatFiscalMes(detailItem.fiscal_mes)}</dd>
-					</dl>
-					<Button
-						variant="outline"
-						size="sm"
-						class="mt-3"
-						onclick={() => downloadFile(`/${routePrefix}/${detailItem!.id}/pdf`, `${routePrefix}_${detailItem!.id}.pdf`)}
-					>
-						<Download class="h-4 w-4" />
-						Download PDF
-					</Button>
-				</div>
-
-				<!-- Receipt info -->
-				<div>
-					<h4 class="text-sm font-medium mb-3">Receipt</h4>
-					{#if detailItem.receipt_path}
-						{@const ms = receiptStatusDisplay(detailItem.receipt_path, detailItem.receipt_match_status)}
-						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-							<dt class="text-muted-foreground">Status</dt>
-							<dd><StatusBadge status={ms.status} label={ms.label} /></dd>
-							<dt class="text-muted-foreground">Value</dt>
-							<dd class="tabular-nums">{formatBrl(detailItem.receipt_value)}</dd>
-							<dt class="text-muted-foreground">Date</dt>
-							<dd>{formatDateBr(detailItem.receipt_date)}</dd>
-							<dt class="text-muted-foreground">Barcode</dt>
-							<dd class="font-mono text-xs break-all">{detailItem.receipt_codigo_barras_digits ?? '\u2014'}</dd>
-						</dl>
-						<div class="flex gap-2 mt-3">
+			<div class="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+				<!-- Document Card -->
+				<Card.Root>
+					<Card.Header class="pb-3">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-2">
+								<FileText class="h-4 w-4 text-muted-foreground" />
+								<Card.Title class="text-sm">{domainLabel} Document</Card.Title>
+							</div>
 							<Button
 								variant="outline"
 								size="sm"
-								onclick={() => downloadFile(`/${routePrefix}/${detailItem!.id}/receipt`, `receipt_${detailItem!.id}`)}
+								class="h-7 text-xs"
+								onclick={() => downloadFile(`/${routePrefix}/${detailItem!.id}/pdf`, `${routePrefix}_${detailItem!.id}.pdf`)}
 							>
-								<Download class="h-4 w-4" />
-								Receipt
+								<Download class="h-3.5 w-3.5" />
+								PDF
 							</Button>
 						</div>
+					</Card.Header>
+					<Card.Content class="space-y-4">
+						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+							<dt class="text-muted-foreground">Value</dt>
+							<dd class="tabular-nums font-medium">{formatBrl(detailItem.value)}</dd>
+							<dt class="text-muted-foreground">Emission</dt>
+							<dd class="tabular-nums">{formatDateBr(detailItem.emission_date)}</dd>
+							<dt class="text-muted-foreground">Deadline</dt>
+							<dd class="tabular-nums">{formatDateBr(detailItem.deadline_date)}</dd>
+							<dt class="text-muted-foreground">Barcode</dt>
+							<dd class="font-mono text-xs break-all">{detailItem.codigo_barras_digits ?? '\u2014'}</dd>
+							<dt class="text-muted-foreground">Fiscal Month</dt>
+							<dd>{formatFiscalMes(detailItem.fiscal_mes)}</dd>
+						</dl>
 
-						{#if detailItem.receipt_match_status === 'mismatch'}
-							<div class="mt-4">
-								{#if barcodeDiff === null && !barcodeDiffLoading}
+						<Separator />
+
+						<div class="space-y-2">
+							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+								<RefreshCw class="h-3 w-3" />
+								Replace PDF
+							</span>
+							<FileDropZone
+								accept=".pdf,application/pdf"
+								loading={replacingPdf}
+								onchange={handleReplacePdf}
+								label={`Drop new ${domainLabel} PDF to replace`}
+							/>
+						</div>
+					</Card.Content>
+				</Card.Root>
+
+				<!-- Receipt Card -->
+				<Card.Root>
+					<Card.Header class="pb-3">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-2">
+								<Receipt class="h-4 w-4 text-muted-foreground" />
+								<Card.Title class="text-sm">Receipt</Card.Title>
+							</div>
+							{#if detailItem.receipt_path}
+								{@const ms = receiptStatusDisplay(detailItem.receipt_path, detailItem.receipt_match_status)}
+								<div class="flex items-center gap-2">
+									<StatusBadge status={ms.status} label={ms.label} />
 									<Button
 										variant="outline"
 										size="sm"
-										onclick={() => loadBarcodeDiff(detailItem!.id)}
+										class="h-7 text-xs"
+										onclick={() => downloadFile(`/${routePrefix}/${detailItem!.id}/receipt`, `receipt_${detailItem!.id}`)}
 									>
-										<FileWarning class="h-4 w-4" />
-										View Barcode Diff
+										<Download class="h-3.5 w-3.5" />
+										Image
 									</Button>
-								{:else if barcodeDiffLoading}
-									<Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
-								{:else}
-									<pre class="mt-2 rounded-md bg-muted p-3 text-xs font-mono whitespace-pre-wrap overflow-x-auto">{barcodeDiff}</pre>
-								{/if}
-							</div>
+								</div>
+							{/if}
+						</div>
+					</Card.Header>
+					<Card.Content class="space-y-4">
+						{#if detailItem.receipt_path}
+							<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+								<dt class="text-muted-foreground">Value</dt>
+								<dd class="tabular-nums">{formatBrl(detailItem.receipt_value)}</dd>
+								<dt class="text-muted-foreground">Date</dt>
+								<dd>{formatDateBr(detailItem.receipt_date)}</dd>
+								<dt class="text-muted-foreground">Barcode</dt>
+								<dd class="font-mono text-xs break-all">{detailItem.receipt_codigo_barras_digits ?? '\u2014'}</dd>
+							</dl>
+
+							{#if detailItem.receipt_match_status === 'mismatch'}
+								<div>
+									{#if barcodeDiff === null && !barcodeDiffLoading}
+										<Button
+											variant="outline"
+											size="sm"
+											onclick={() => loadBarcodeDiff(detailItem!.id)}
+										>
+											<FileWarning class="h-4 w-4" />
+											View Barcode Diff
+										</Button>
+									{:else if barcodeDiffLoading}
+										<Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
+									{:else}
+										<pre class="rounded-md bg-muted p-3 text-xs font-mono whitespace-pre-wrap overflow-x-auto">{barcodeDiff}</pre>
+									{/if}
+								</div>
+							{/if}
+						{:else}
+							<p class="text-sm text-muted-foreground">No receipt attached.</p>
 						{/if}
-					{:else}
-						<p class="text-sm text-muted-foreground">No receipt attached.</p>
-					{/if}
-				</div>
+
+						<Separator />
+
+						<div class="space-y-3">
+							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+								<RefreshCw class="h-3 w-3" />
+								{detailItem.receipt_path ? 'Replace Receipt' : 'Add Receipt'}
+							</span>
+							<FileDropZone
+								accept="image/*"
+								loading={replaceReceiptPreviewing}
+								bind:file={replaceReceiptFile}
+								onchange={handleDetailReceiptSelected}
+								label="Drop receipt image here"
+							/>
+
+							{#if replaceReceiptPreview}
+								<div class="rounded-md border p-3 space-y-2">
+									<dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+										<dt class="text-muted-foreground">Value</dt>
+										<dd class="tabular-nums">{formatBrl(replaceReceiptPreview.value)}</dd>
+										<dt class="text-muted-foreground">Date/Time</dt>
+										<dd>{replaceReceiptPreview.payment_datetime ?? '\u2014'}</dd>
+										<dt class="text-muted-foreground">Barcode</dt>
+										<dd class="font-mono truncate">{replaceReceiptPreview.codigo_barras_digits ?? '\u2014'}</dd>
+									</dl>
+								</div>
+							{/if}
+
+							{#if replaceReceiptFile}
+								<div class="grid grid-cols-2 gap-3">
+									<div class="space-y-1">
+										<span class="text-xs font-medium text-muted-foreground">Receipt Date</span>
+										<Input type="date" bind:value={replaceReceiptDate} class="h-8 text-xs" />
+									</div>
+									<div class="space-y-1">
+										<span class="text-xs font-medium text-muted-foreground">Receipt Time</span>
+										<Input type="time" step="1" bind:value={replaceReceiptTime} class="h-8 text-xs" />
+									</div>
+								</div>
+								<Button
+									onclick={handleSaveReceipt}
+									disabled={replacingReceipt}
+									size="sm"
+									class="w-full"
+								>
+									{#if replacingReceipt}
+										<Loader2 class="h-4 w-4 animate-spin" />
+										Saving...
+									{:else}
+										Save Receipt
+									{/if}
+								</Button>
+							{/if}
+						</div>
+					</Card.Content>
+				</Card.Root>
 			</div>
 		{/if}
 	</Sheet.SheetContent>

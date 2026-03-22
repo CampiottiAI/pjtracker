@@ -13,6 +13,7 @@ from pjtracker.api.schemas.common import FISCAL_MES_REGEX, PatchFiscalMes
 from pjtracker.api.services.paths import project_root, resolve_stored_path
 from pjtracker.app import (
     delete_nf,
+    delete_nf_image,
     get_nf_by_id,
     get_nf_entries,
     get_nf_images,
@@ -21,6 +22,7 @@ from pjtracker.app import (
     save_nf_image,
     save_pdf,
     update_nf_fiscal_mes,
+    update_nf_pdf,
 )
 from pjtracker.parsers.nf_parser import compute_brl, parse_nf_pdf
 
@@ -154,6 +156,74 @@ def patch_nf(nf_id: int, body: PatchFiscalMes) -> dict:
     row = get_nf_by_id(nf_id)
     assert row
     return _nf_to_json(row)
+
+
+@router.put("/{nf_id}/pdf")
+async def put_nf_pdf(
+    nf_id: int,
+    file: UploadFile = File(..., description="Replacement NF PDF"),
+) -> dict:
+    row = get_nf_by_id(nf_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="NF not found")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Empty PDF")
+    parsed = parse_nf_pdf(data, filename=file.filename or "nota_fiscal.pdf")
+    if parsed.usd is None or parsed.rate is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not extract USD and/or rate from PDF",
+        )
+    brl = compute_brl(parsed.usd, parsed.rate, parsed.spread)
+    ok = update_nf_pdf(
+        nf_id,
+        data,
+        company=parsed.company,
+        usd=parsed.usd,
+        rate=parsed.rate,
+        spread=parsed.spread,
+        brl_no_spread=brl.brl_no_spread,
+        brl_with_spread=brl.brl_with_spread,
+        nf_date=parsed.nf_date,
+        verification_code=parsed.verification_code,
+        payment_via=parsed.payment_via,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="NF not found")
+    row2 = get_nf_by_id(nf_id)
+    assert row2
+    return _nf_to_json(row2)
+
+
+@router.post("/{nf_id}/images")
+async def add_nf_images(
+    nf_id: int,
+    images: list[UploadFile] = File(..., description="Image files to add"),
+) -> list[dict]:
+    if not get_nf_by_id(nf_id):
+        raise HTTPException(status_code=404, detail="NF not found")
+    root = project_root()
+    for item in images:
+        img_bytes = await item.read()
+        if not img_bytes:
+            continue
+        mime = item.content_type or "image/png"
+        path_obj = save_image(img_bytes, nf_id, mime)
+        try:
+            rel_path = path_obj.relative_to(root)
+            save_nf_image(nf_id, str(rel_path))
+        except ValueError:
+            save_nf_image(nf_id, str(path_obj))
+    return get_nf_images(nf_id)
+
+
+@router.delete("/{nf_id}/images/{image_id}", status_code=204)
+def remove_nf_image(nf_id: int, image_id: int) -> None:
+    if not get_nf_by_id(nf_id):
+        raise HTTPException(status_code=404, detail="NF not found")
+    if not delete_nf_image(nf_id, image_id):
+        raise HTTPException(status_code=404, detail="Image not found")
 
 
 @router.delete("/{nf_id}", status_code=204)

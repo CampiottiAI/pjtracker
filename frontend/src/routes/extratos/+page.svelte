@@ -12,6 +12,7 @@
 		extratoParsePreview,
 		createExtrato,
 		getExtrato,
+		updateExtratoPdf,
 		updateCaixinhaPdf,
 		updateHiglobePdf,
 		deleteCaixinha,
@@ -34,6 +35,7 @@
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
 	import {
 		Plus,
 		Download,
@@ -41,7 +43,10 @@
 		Eye,
 		Loader2,
 		ArrowUpDown,
-		Upload
+		FileText,
+		RefreshCw,
+		CheckCircle2,
+		XCircle
 	} from 'lucide-svelte';
 
 	// ---------------------------------------------------------------------------
@@ -82,8 +87,10 @@
 	let sortField = $state<string>('period_start');
 	let sortAsc = $state(false);
 
-	// Attachment upload state
-	let attachUploading = $state<string | null>(null);
+	// Replacement state
+	let replacingExtrato = $state(false);
+	let replacingCaixinha = $state(false);
+	let replacingHiglobe = $state(false);
 
 	// ---------------------------------------------------------------------------
 	// Lifecycle
@@ -223,6 +230,9 @@
 		detailEntries = parseJsonField(item.extrato_entries_json);
 		detailCaixinhaEntries = parseJsonField(item.caixinha_entries_json);
 		detailHiglobeEntries = parseJsonField(item.higlobe_entries_json);
+		replacingExtrato = false;
+		replacingCaixinha = false;
+		replacingHiglobe = false;
 		detailOpen = true;
 	}
 
@@ -234,7 +244,7 @@
 			detailCaixinhaEntries = parseJsonField(fresh.caixinha_entries_json);
 			detailHiglobeEntries = parseJsonField(fresh.higlobe_entries_json);
 		} catch {
-			// Silently fail; data was likely deleted.
+			// silently fail
 		}
 	}
 
@@ -248,36 +258,51 @@
 	}
 
 	// ---------------------------------------------------------------------------
-	// Attachment management
+	// Detail: Replace/Add PDFs
 	// ---------------------------------------------------------------------------
 
-	async function handleAddCaixinha(files: File[]) {
+	async function handleReplaceExtrato(files: File[]) {
 		if (!detailItem || files.length === 0) return;
-		attachUploading = 'caixinha';
+		replacingExtrato = true;
 		try {
-			await updateCaixinhaPdf(detailItem.id, files[0]);
-			toast.success('Caixinha added');
+			await updateExtratoPdf(detailItem.id, files[0]);
+			toast.success('Extrato PDF replaced');
 			await refreshDetail(detailItem.id);
 			await loadExtratos();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Upload failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Replace failed');
 		} finally {
-			attachUploading = null;
+			replacingExtrato = false;
 		}
 	}
 
-	async function handleAddHiglobe(files: File[]) {
+	async function handleReplaceCaixinha(files: File[]) {
 		if (!detailItem || files.length === 0) return;
-		attachUploading = 'higlobe';
+		replacingCaixinha = true;
 		try {
-			await updateHiglobePdf(detailItem.id, files[0]);
-			toast.success('Higlobe added');
+			await updateCaixinhaPdf(detailItem.id, files[0]);
+			toast.success('Caixinha PDF updated');
 			await refreshDetail(detailItem.id);
 			await loadExtratos();
 		} catch (e) {
 			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Upload failed');
 		} finally {
-			attachUploading = null;
+			replacingCaixinha = false;
+		}
+	}
+
+	async function handleReplaceHiglobe(files: File[]) {
+		if (!detailItem || files.length === 0) return;
+		replacingHiglobe = true;
+		try {
+			await updateHiglobePdf(detailItem.id, files[0]);
+			toast.success('Higlobe PDF updated');
+			await refreshDetail(detailItem.id);
+			await loadExtratos();
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Upload failed');
+		} finally {
+			replacingHiglobe = false;
 		}
 	}
 
@@ -609,21 +634,27 @@
 
 <!-- Detail Sheet -->
 <Sheet.Sheet bind:open={detailOpen}>
-	<Sheet.SheetContent side="right">
+	<Sheet.SheetContent side="right" class="sm:max-w-lg">
 		<Sheet.SheetHeader>
 			<Sheet.SheetTitle>Extrato Details</Sheet.SheetTitle>
 			{#if detailItem}
-				<Sheet.SheetDescription>ID: {detailItem.id}</Sheet.SheetDescription>
+				<Sheet.SheetDescription>ID: {detailItem.id} &middot; {formatFiscalMes(detailItem.fiscal_mes)}</Sheet.SheetDescription>
 			{/if}
 		</Sheet.SheetHeader>
 		{#if detailItem}
-			<div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-				<!-- Summary -->
+			<div class="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+				<!-- Summary Card -->
 				<Card.Root>
-					<Card.Content class="pt-4">
+					<Card.Header class="pb-3">
+						<div class="flex items-center gap-2">
+							<FileText class="h-4 w-4 text-muted-foreground" />
+							<Card.Title class="text-sm">Summary</Card.Title>
+						</div>
+					</Card.Header>
+					<Card.Content>
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
 							<dt class="text-muted-foreground">Period</dt>
-							<dd>{formatDateBr(detailItem.period_start)} - {formatDateBr(detailItem.period_end)}</dd>
+							<dd class="tabular-nums">{formatDateBr(detailItem.period_start)} - {formatDateBr(detailItem.period_end)}</dd>
 							<dt class="text-muted-foreground">Saldo Inicial</dt>
 							<dd class="tabular-nums">{formatBrl(detailItem.saldo_inicial)}</dd>
 							<dt class="text-muted-foreground">Rendimento</dt>
@@ -642,173 +673,244 @@
 					</Card.Content>
 				</Card.Root>
 
-				<!-- Downloads -->
-				<div class="flex flex-wrap gap-2">
-					<Button
-						variant="outline"
-						size="sm"
-						onclick={() => downloadFile(`/extratos/${detailItem!.id}/extrato-pdf`, `extrato_${detailItem!.id}.pdf`)}
-					>
-						<Download class="h-4 w-4" />
-						Extrato PDF
-					</Button>
-					{#if detailItem.caixinha_pdf_path}
-						<Button
-							variant="outline"
-							size="sm"
-							onclick={() => downloadFile(`/extratos/${detailItem!.id}/caixinha-pdf`, `caixinha_${detailItem!.id}.pdf`)}
-						>
-							<Download class="h-4 w-4" />
-							Caixinha PDF
-						</Button>
-					{/if}
-					{#if detailItem.higlobe_pdf_path}
-						<Button
-							variant="outline"
-							size="sm"
-							onclick={() => downloadFile(`/extratos/${detailItem!.id}/higlobe-pdf`, `higlobe_${detailItem!.id}.pdf`)}
-						>
-							<Download class="h-4 w-4" />
-							Higlobe PDF
-						</Button>
-					{/if}
-				</div>
-
-				<!-- Attachment management -->
-				<div class="space-y-4">
-					<h4 class="text-sm font-medium">Attachments</h4>
-
-					<!-- Caixinha -->
-					<div class="space-y-2">
+				<!-- Extrato PDF Card -->
+				<Card.Root>
+					<Card.Header class="pb-3">
 						<div class="flex items-center justify-between">
-							<span class="text-sm text-muted-foreground">Caixinha</span>
-							{#if detailItem.caixinha_pdf_path}
-								<Button variant="ghost" size="sm" class="text-destructive-foreground h-7" onclick={handleRemoveCaixinha}>
-									<Trash2 class="h-3.5 w-3.5" />
-									Remove
-								</Button>
-							{/if}
+							<div class="flex items-center gap-2">
+								<CheckCircle2 class="h-4 w-4 text-emerald-500" />
+								<Card.Title class="text-sm">Extrato PDF</Card.Title>
+							</div>
+							<Button
+								variant="outline"
+								size="sm"
+								class="h-7 text-xs"
+								onclick={() => downloadFile(`/extratos/${detailItem!.id}/extrato-pdf`, `extrato_${detailItem!.id}.pdf`)}
+							>
+								<Download class="h-3.5 w-3.5" />
+								PDF
+							</Button>
 						</div>
-						{#if !detailItem.caixinha_pdf_path}
+					</Card.Header>
+					<Card.Content>
+						<div class="space-y-2">
+							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+								<RefreshCw class="h-3 w-3" />
+								Replace Extrato PDF
+							</span>
 							<FileDropZone
 								accept=".pdf,application/pdf"
-								loading={attachUploading === 'caixinha'}
-								onchange={handleAddCaixinha}
-								label="Drop caixinha PDF to add"
+								loading={replacingExtrato}
+								onchange={handleReplaceExtrato}
+								label="Drop new extrato PDF to replace"
 							/>
-						{:else}
-							<p class="text-xs text-muted-foreground">Caixinha PDF attached. Drop a new one above to replace, or remove it first.</p>
-						{/if}
-					</div>
-
-					<!-- Higlobe -->
-					<div class="space-y-2">
-						<div class="flex items-center justify-between">
-							<span class="text-sm text-muted-foreground">Higlobe</span>
-							{#if detailItem.higlobe_pdf_path}
-								<Button variant="ghost" size="sm" class="text-destructive-foreground h-7" onclick={handleRemoveHiglobe}>
-									<Trash2 class="h-3.5 w-3.5" />
-									Remove
-								</Button>
-							{/if}
 						</div>
-						{#if !detailItem.higlobe_pdf_path}
+					</Card.Content>
+				</Card.Root>
+
+				<!-- Caixinha PDF Card -->
+				<Card.Root>
+					<Card.Header class="pb-3">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-2">
+								{#if detailItem.caixinha_pdf_path}
+									<CheckCircle2 class="h-4 w-4 text-emerald-500" />
+								{:else}
+									<XCircle class="h-4 w-4 text-muted-foreground" />
+								{/if}
+								<Card.Title class="text-sm">Caixinha PDF</Card.Title>
+							</div>
+							<div class="flex items-center gap-1">
+								{#if detailItem.caixinha_pdf_path}
+									<Button
+										variant="outline"
+										size="sm"
+										class="h-7 text-xs"
+										onclick={() => downloadFile(`/extratos/${detailItem!.id}/caixinha-pdf`, `caixinha_${detailItem!.id}.pdf`)}
+									>
+										<Download class="h-3.5 w-3.5" />
+										PDF
+									</Button>
+									<Button
+										variant="ghost"
+										size="sm"
+										class="h-7 text-xs text-destructive-foreground"
+										onclick={handleRemoveCaixinha}
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+									</Button>
+								{/if}
+							</div>
+						</div>
+					</Card.Header>
+					<Card.Content>
+						<div class="space-y-2">
+							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+								{#if detailItem.caixinha_pdf_path}
+									<RefreshCw class="h-3 w-3" />
+									Replace Caixinha PDF
+								{:else}
+									<Plus class="h-3 w-3" />
+									Add Caixinha PDF
+								{/if}
+							</span>
 							<FileDropZone
 								accept=".pdf,application/pdf"
-								loading={attachUploading === 'higlobe'}
-								onchange={handleAddHiglobe}
-								label="Drop higlobe PDF to add"
+								loading={replacingCaixinha}
+								onchange={handleReplaceCaixinha}
+								label={detailItem.caixinha_pdf_path ? 'Drop new caixinha PDF to replace' : 'Drop caixinha PDF to add'}
 							/>
-						{:else}
-							<p class="text-xs text-muted-foreground">Higlobe PDF attached. Drop a new one above to replace, or remove it first.</p>
-						{/if}
-					</div>
-				</div>
+						</div>
+					</Card.Content>
+				</Card.Root>
+
+				<!-- Higlobe PDF Card -->
+				<Card.Root>
+					<Card.Header class="pb-3">
+						<div class="flex items-center justify-between">
+							<div class="flex items-center gap-2">
+								{#if detailItem.higlobe_pdf_path}
+									<CheckCircle2 class="h-4 w-4 text-emerald-500" />
+								{:else}
+									<XCircle class="h-4 w-4 text-muted-foreground" />
+								{/if}
+								<Card.Title class="text-sm">Higlobe PDF</Card.Title>
+							</div>
+							<div class="flex items-center gap-1">
+								{#if detailItem.higlobe_pdf_path}
+									<Button
+										variant="outline"
+										size="sm"
+										class="h-7 text-xs"
+										onclick={() => downloadFile(`/extratos/${detailItem!.id}/higlobe-pdf`, `higlobe_${detailItem!.id}.pdf`)}
+									>
+										<Download class="h-3.5 w-3.5" />
+										PDF
+									</Button>
+									<Button
+										variant="ghost"
+										size="sm"
+										class="h-7 text-xs text-destructive-foreground"
+										onclick={handleRemoveHiglobe}
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+									</Button>
+								{/if}
+							</div>
+						</div>
+					</Card.Header>
+					<Card.Content>
+						<div class="space-y-2">
+							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+								{#if detailItem.higlobe_pdf_path}
+									<RefreshCw class="h-3 w-3" />
+									Replace Higlobe PDF
+								{:else}
+									<Plus class="h-3 w-3" />
+									Add Higlobe PDF
+								{/if}
+							</span>
+							<FileDropZone
+								accept=".pdf,application/pdf"
+								loading={replacingHiglobe}
+								onchange={handleReplaceHiglobe}
+								label={detailItem.higlobe_pdf_path ? 'Drop new higlobe PDF to replace' : 'Drop higlobe PDF to add'}
+							/>
+						</div>
+					</Card.Content>
+				</Card.Root>
 
 				<!-- Entry tables -->
 				{#if detailEntries.length > 0 || detailCaixinhaEntries.length > 0 || detailHiglobeEntries.length > 0}
-					<Tabs.Tabs value="entries">
-						<Tabs.TabsList class="w-full">
-							<Tabs.TabsTrigger value="entries" class="flex-1" disabled={detailEntries.length === 0}>
-								Entries ({detailEntries.length})
-							</Tabs.TabsTrigger>
-							<Tabs.TabsTrigger value="caixinha-entries" class="flex-1" disabled={detailCaixinhaEntries.length === 0}>
-								Caixinha ({detailCaixinhaEntries.length})
-							</Tabs.TabsTrigger>
-							<Tabs.TabsTrigger value="higlobe-entries" class="flex-1" disabled={detailHiglobeEntries.length === 0}>
-								Higlobe ({detailHiglobeEntries.length})
-							</Tabs.TabsTrigger>
-						</Tabs.TabsList>
+					<Card.Root>
+						<Card.Header class="pb-3">
+							<Card.Title class="text-sm">Parsed Entries</Card.Title>
+						</Card.Header>
+						<Card.Content>
+							<Tabs.Tabs value="entries">
+								<Tabs.TabsList class="w-full">
+									<Tabs.TabsTrigger value="entries" class="flex-1" disabled={detailEntries.length === 0}>
+										Entries ({detailEntries.length})
+									</Tabs.TabsTrigger>
+									<Tabs.TabsTrigger value="caixinha-entries" class="flex-1" disabled={detailCaixinhaEntries.length === 0}>
+										Caixinha ({detailCaixinhaEntries.length})
+									</Tabs.TabsTrigger>
+									<Tabs.TabsTrigger value="higlobe-entries" class="flex-1" disabled={detailHiglobeEntries.length === 0}>
+										Higlobe ({detailHiglobeEntries.length})
+									</Tabs.TabsTrigger>
+								</Tabs.TabsList>
 
-						<Tabs.TabsContent value="entries">
-							<div class="max-h-64 overflow-auto rounded-md border">
-								<table class="w-full text-xs">
-									<thead class="bg-muted sticky top-0">
-										<tr>
-											{#each Object.keys(detailEntries[0] ?? {}) as key}
-												<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
-											{/each}
-										</tr>
-									</thead>
-									<tbody>
-										{#each detailEntries as row}
-											<tr class="border-t border-border">
-												{#each Object.values(row) as val}
-													<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
+								<Tabs.TabsContent value="entries">
+									<div class="max-h-64 overflow-auto rounded-md border">
+										<table class="w-full text-xs">
+											<thead class="bg-muted sticky top-0">
+												<tr>
+													{#each Object.keys(detailEntries[0] ?? {}) as key}
+														<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
+													{/each}
+												</tr>
+											</thead>
+											<tbody>
+												{#each detailEntries as row}
+													<tr class="border-t border-border">
+														{#each Object.values(row) as val}
+															<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
+														{/each}
+													</tr>
 												{/each}
-											</tr>
-										{/each}
-									</tbody>
-								</table>
-							</div>
-						</Tabs.TabsContent>
+											</tbody>
+										</table>
+									</div>
+								</Tabs.TabsContent>
 
-						<Tabs.TabsContent value="caixinha-entries">
-							<div class="max-h-64 overflow-auto rounded-md border">
-								<table class="w-full text-xs">
-									<thead class="bg-muted sticky top-0">
-										<tr>
-											{#each Object.keys(detailCaixinhaEntries[0] ?? {}) as key}
-												<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
-											{/each}
-										</tr>
-									</thead>
-									<tbody>
-										{#each detailCaixinhaEntries as row}
-											<tr class="border-t border-border">
-												{#each Object.values(row) as val}
-													<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
+								<Tabs.TabsContent value="caixinha-entries">
+									<div class="max-h-64 overflow-auto rounded-md border">
+										<table class="w-full text-xs">
+											<thead class="bg-muted sticky top-0">
+												<tr>
+													{#each Object.keys(detailCaixinhaEntries[0] ?? {}) as key}
+														<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
+													{/each}
+												</tr>
+											</thead>
+											<tbody>
+												{#each detailCaixinhaEntries as row}
+													<tr class="border-t border-border">
+														{#each Object.values(row) as val}
+															<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
+														{/each}
+													</tr>
 												{/each}
-											</tr>
-										{/each}
-									</tbody>
-								</table>
-							</div>
-						</Tabs.TabsContent>
+											</tbody>
+										</table>
+									</div>
+								</Tabs.TabsContent>
 
-						<Tabs.TabsContent value="higlobe-entries">
-							<div class="max-h-64 overflow-auto rounded-md border">
-								<table class="w-full text-xs">
-									<thead class="bg-muted sticky top-0">
-										<tr>
-											{#each Object.keys(detailHiglobeEntries[0] ?? {}) as key}
-												<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
-											{/each}
-										</tr>
-									</thead>
-									<tbody>
-										{#each detailHiglobeEntries as row}
-											<tr class="border-t border-border">
-												{#each Object.values(row) as val}
-													<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
+								<Tabs.TabsContent value="higlobe-entries">
+									<div class="max-h-64 overflow-auto rounded-md border">
+										<table class="w-full text-xs">
+											<thead class="bg-muted sticky top-0">
+												<tr>
+													{#each Object.keys(detailHiglobeEntries[0] ?? {}) as key}
+														<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
+													{/each}
+												</tr>
+											</thead>
+											<tbody>
+												{#each detailHiglobeEntries as row}
+													<tr class="border-t border-border">
+														{#each Object.values(row) as val}
+															<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
+														{/each}
+													</tr>
 												{/each}
-											</tr>
-										{/each}
-									</tbody>
-								</table>
-							</div>
-						</Tabs.TabsContent>
-					</Tabs.Tabs>
+											</tbody>
+										</table>
+									</div>
+								</Tabs.TabsContent>
+							</Tabs.Tabs>
+						</Card.Content>
+					</Card.Root>
 				{/if}
 			</div>
 		{/if}
