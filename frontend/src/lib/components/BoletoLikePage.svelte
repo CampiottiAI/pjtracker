@@ -11,7 +11,6 @@
 		triggerDownload
 	} from '$lib/api/client.js';
 	import type { BoletoEntry, BoletoPreview, ReceiptPreview } from '$lib/api/types.js';
-	import { cn } from '$lib/utils.js';
 	import { formatFiscalMes, formatBrl, formatDateBr } from '$lib/utils/format.js';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
@@ -22,9 +21,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
 	import {
 		Plus,
 		Download,
@@ -35,7 +32,8 @@
 		FileWarning,
 		RefreshCw,
 		FileText,
-		Receipt
+		Receipt,
+		Pencil
 	} from 'lucide-svelte';
 
 	let {
@@ -111,6 +109,10 @@
 	let replaceReceiptFile = $state<File | null>(null);
 	let replaceReceiptPreview = $state<ReceiptPreview | null>(null);
 	let replaceReceiptPreviewing = $state(false);
+	let showReplaceReceiptForm = $state(false);
+
+	let replacePdfInputEl: HTMLInputElement | undefined = $state();
+	let replaceReceiptInputEl: HTMLInputElement | undefined = $state();
 
 	// Delete dialog
 	let deleteDialogOpen = $state(false);
@@ -281,6 +283,7 @@
 		replaceReceiptPreviewing = false;
 		replaceReceiptDate = '';
 		replaceReceiptTime = '';
+		showReplaceReceiptForm = false;
 		detailOpen = true;
 	}
 
@@ -338,6 +341,7 @@
 
 	async function handleDetailReceiptSelected(files: File[]) {
 		if (files.length === 0) return;
+		showReplaceReceiptForm = true;
 		replaceReceiptFile = files[0];
 		replaceReceiptPreview = null;
 		replaceReceiptPreviewing = true;
@@ -375,6 +379,7 @@
 			replaceReceiptPreview = null;
 			replaceReceiptDate = '';
 			replaceReceiptTime = '';
+			showReplaceReceiptForm = false;
 			barcodeDiff = null;
 			await loadItems();
 		} catch (e) {
@@ -382,6 +387,36 @@
 		} finally {
 			replacingReceipt = false;
 		}
+	}
+
+	function openReplacePdfPicker() {
+		replacePdfInputEl?.click();
+	}
+
+	function openReplaceReceiptPicker() {
+		showReplaceReceiptForm = true;
+		replaceReceiptInputEl?.click();
+	}
+
+	function cancelReplaceReceipt() {
+		showReplaceReceiptForm = false;
+		replaceReceiptFile = null;
+		replaceReceiptPreview = null;
+		replaceReceiptPreviewing = false;
+		replaceReceiptDate = '';
+		replaceReceiptTime = '';
+	}
+
+	function handleReplacePdfInputChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		void handleReplacePdf(Array.from(target.files ?? []));
+		target.value = '';
+	}
+
+	function handleReplaceReceiptInputChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		void handleDetailReceiptSelected(Array.from(target.files ?? []));
+		target.value = '';
 	}
 
 	// ---------------------------------------------------------------------------
@@ -658,7 +693,7 @@
 
 <!-- Detail Sheet -->
 <Sheet.Sheet bind:open={detailOpen}>
-	<Sheet.SheetContent side="right" class="sm:max-w-lg">
+	<Sheet.SheetContent side="right" class="sm:max-w-2xl">
 		<Sheet.SheetHeader>
 			<Sheet.SheetTitle>{domainLabel} Details</Sheet.SheetTitle>
 			{#if detailItem}
@@ -674,6 +709,20 @@
 							<div class="flex items-center gap-2">
 								<FileText class="h-4 w-4 text-muted-foreground" />
 								<Card.Title class="text-sm">{domainLabel} Document</Card.Title>
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-7 w-7"
+									title={`Replace ${domainLabel} PDF`}
+									onclick={openReplacePdfPicker}
+									disabled={replacingPdf}
+								>
+									{#if replacingPdf}
+										<Loader2 class="h-3.5 w-3.5 animate-spin" />
+									{:else}
+										<Pencil class="h-3.5 w-3.5" />
+									{/if}
+								</Button>
 							</div>
 							<Button
 								variant="outline"
@@ -696,25 +745,23 @@
 							<dd class="tabular-nums">{formatDateBr(detailItem.deadline_date)}</dd>
 							<dt class="text-muted-foreground">Barcode</dt>
 							<dd class="font-mono text-xs break-all">{detailItem.codigo_barras_digits ?? '\u2014'}</dd>
+							<dt class="text-muted-foreground">Barcode (Raw)</dt>
+							<dd class="font-mono text-xs break-all">{detailItem.codigo_barras ?? '\u2014'}</dd>
 							<dt class="text-muted-foreground">Fiscal Month</dt>
 							<dd>{formatFiscalMes(detailItem.fiscal_mes)}</dd>
+							<dt class="text-muted-foreground">Created</dt>
+							<dd class="text-xs">{detailItem.created_at ?? '\u2014'}</dd>
+							<dt class="text-muted-foreground">Updated</dt>
+							<dd class="text-xs">{detailItem.updated_at ?? '\u2014'}</dd>
 						</dl>
-
-						<Separator />
-
-						<div class="space-y-2">
-							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-								<RefreshCw class="h-3 w-3" />
-								Replace PDF
-							</span>
-							<FileDropZone
-								accept=".pdf,application/pdf"
-								loading={replacingPdf}
-								onchange={handleReplacePdf}
-								label={`Drop new ${domainLabel} PDF to replace`}
-							/>
-						</div>
 					</Card.Content>
+					<input
+						bind:this={replacePdfInputEl}
+						type="file"
+						accept=".pdf,application/pdf"
+						class="sr-only"
+						onchange={handleReplacePdfInputChange}
+					/>
 				</Card.Root>
 
 				<!-- Receipt Card -->
@@ -724,6 +771,20 @@
 							<div class="flex items-center gap-2">
 								<Receipt class="h-4 w-4 text-muted-foreground" />
 								<Card.Title class="text-sm">Receipt</Card.Title>
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-7 w-7"
+									title={detailItem.receipt_path ? 'Replace receipt image' : 'Add receipt image'}
+									onclick={openReplaceReceiptPicker}
+									disabled={replacingReceipt || replaceReceiptPreviewing}
+								>
+									{#if replacingReceipt || replaceReceiptPreviewing}
+										<Loader2 class="h-3.5 w-3.5 animate-spin" />
+									{:else}
+										<Pencil class="h-3.5 w-3.5" />
+									{/if}
+								</Button>
 							</div>
 							{#if detailItem.receipt_path}
 								{@const ms = receiptStatusDisplay(detailItem.receipt_path, detailItem.receipt_match_status)}
@@ -751,6 +812,8 @@
 								<dd>{formatDateBr(detailItem.receipt_date)}</dd>
 								<dt class="text-muted-foreground">Barcode</dt>
 								<dd class="font-mono text-xs break-all">{detailItem.receipt_codigo_barras_digits ?? '\u2014'}</dd>
+								<dt class="text-muted-foreground">Barcode (Raw)</dt>
+								<dd class="font-mono text-xs break-all">{detailItem.receipt_codigo_barras ?? '\u2014'}</dd>
 							</dl>
 
 							{#if detailItem.receipt_match_status === 'mismatch'}
@@ -775,60 +838,76 @@
 							<p class="text-sm text-muted-foreground">No receipt attached.</p>
 						{/if}
 
-						<Separator />
-
-						<div class="space-y-3">
-							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-								<RefreshCw class="h-3 w-3" />
-								{detailItem.receipt_path ? 'Replace Receipt' : 'Add Receipt'}
-							</span>
-							<FileDropZone
-								accept="image/*"
-								loading={replaceReceiptPreviewing}
-								bind:file={replaceReceiptFile}
-								onchange={handleDetailReceiptSelected}
-								label="Drop receipt image here"
-							/>
-
-							{#if replaceReceiptPreview}
-								<div class="rounded-md border p-3 space-y-2">
-									<dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-										<dt class="text-muted-foreground">Value</dt>
-										<dd class="tabular-nums">{formatBrl(replaceReceiptPreview.value)}</dd>
-										<dt class="text-muted-foreground">Date/Time</dt>
-										<dd>{replaceReceiptPreview.payment_datetime ?? '\u2014'}</dd>
-										<dt class="text-muted-foreground">Barcode</dt>
-										<dd class="font-mono truncate">{replaceReceiptPreview.codigo_barras_digits ?? '\u2014'}</dd>
-									</dl>
+						{#if showReplaceReceiptForm}
+							<div class="space-y-3 rounded-md border p-3">
+								<div class="flex items-center justify-between">
+									<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+										<RefreshCw class="h-3 w-3" />
+										{detailItem.receipt_path ? 'Replace Receipt' : 'Add Receipt'}
+									</span>
+									<Button variant="outline" size="sm" class="h-7 text-xs" onclick={openReplaceReceiptPicker}>
+										Choose Image
+									</Button>
 								</div>
-							{/if}
 
-							{#if replaceReceiptFile}
-								<div class="grid grid-cols-2 gap-3">
-									<div class="space-y-1">
-										<span class="text-xs font-medium text-muted-foreground">Receipt Date</span>
-										<Input type="date" bind:value={replaceReceiptDate} class="h-8 text-xs" />
+								{#if replaceReceiptPreview}
+									<div class="rounded-md border p-3 space-y-2">
+										<dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+											<dt class="text-muted-foreground">Value</dt>
+											<dd class="tabular-nums">{formatBrl(replaceReceiptPreview.value)}</dd>
+											<dt class="text-muted-foreground">Date/Time</dt>
+											<dd>{replaceReceiptPreview.payment_datetime ?? '\u2014'}</dd>
+											<dt class="text-muted-foreground">Barcode</dt>
+											<dd class="font-mono break-all">{replaceReceiptPreview.codigo_barras_digits ?? '\u2014'}</dd>
+										</dl>
 									</div>
-									<div class="space-y-1">
-										<span class="text-xs font-medium text-muted-foreground">Receipt Time</span>
-										<Input type="time" step="1" bind:value={replaceReceiptTime} class="h-8 text-xs" />
+								{/if}
+
+								{#if replaceReceiptFile}
+									<div class="grid grid-cols-2 gap-3">
+										<div class="space-y-1">
+											<span class="text-xs font-medium text-muted-foreground">Receipt Date</span>
+											<Input type="date" bind:value={replaceReceiptDate} class="h-8 text-xs" />
+										</div>
+										<div class="space-y-1">
+											<span class="text-xs font-medium text-muted-foreground">Receipt Time</span>
+											<Input type="time" step="1" bind:value={replaceReceiptTime} class="h-8 text-xs" />
+										</div>
 									</div>
-								</div>
-								<Button
-									onclick={handleSaveReceipt}
-									disabled={replacingReceipt}
-									size="sm"
-									class="w-full"
-								>
-									{#if replacingReceipt}
-										<Loader2 class="h-4 w-4 animate-spin" />
-										Saving...
-									{:else}
-										Save Receipt
-									{/if}
-								</Button>
-							{/if}
-						</div>
+									<div class="flex items-center gap-2">
+										<Button
+											onclick={handleSaveReceipt}
+											disabled={replacingReceipt}
+											size="sm"
+											class="flex-1"
+										>
+											{#if replacingReceipt}
+												<Loader2 class="h-4 w-4 animate-spin" />
+												Saving...
+											{:else}
+												Save Receipt
+											{/if}
+										</Button>
+										<Button
+											variant="ghost"
+											size="sm"
+											class="h-8"
+											onclick={cancelReplaceReceipt}
+											disabled={replacingReceipt}
+										>
+											Cancel
+										</Button>
+									</div>
+								{/if}
+							</div>
+						{/if}
+						<input
+							bind:this={replaceReceiptInputEl}
+							type="file"
+							accept="image/*"
+							class="sr-only"
+							onchange={handleReplaceReceiptInputChange}
+						/>
 					</Card.Content>
 				</Card.Root>
 			</div>

@@ -20,7 +20,6 @@
 		triggerDownload
 	} from '$lib/api/client.js';
 	import type { NfEntry, NfPreview, NfImage } from '$lib/api/types.js';
-	import { cn } from '$lib/utils.js';
 	import {
 		formatFiscalMes,
 		formatUsd,
@@ -49,7 +48,7 @@
 		Loader2,
 		ArrowUpDown,
 		FileText,
-		RefreshCw
+		Pencil
 	} from 'lucide-svelte';
 
 	// ---------------------------------------------------------------------------
@@ -80,6 +79,7 @@
 	// Detail replacement state
 	let replacingPdf = $state(false);
 	let addingImages = $state(false);
+	let replacePdfInputEl: HTMLInputElement | undefined = $state();
 
 	// Delete dialog
 	let deleteDialogOpen = $state(false);
@@ -273,6 +273,16 @@
 		} finally {
 			replacingPdf = false;
 		}
+	}
+
+	function openReplacePdfPicker() {
+		replacePdfInputEl?.click();
+	}
+
+	function handleReplacePdfInputChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		void handleReplacePdf(Array.from(target.files ?? []));
+		target.value = '';
 	}
 
 	// ---------------------------------------------------------------------------
@@ -571,7 +581,7 @@
 
 <!-- Detail Sheet -->
 <Sheet.Sheet bind:open={detailOpen}>
-	<Sheet.SheetContent side="right" class="sm:max-w-lg">
+	<Sheet.SheetContent side="right" class="sm:max-w-2xl">
 		<Sheet.SheetHeader>
 			<Sheet.SheetTitle>NF Details</Sheet.SheetTitle>
 			{#if detailNf}
@@ -587,6 +597,20 @@
 							<div class="flex items-center gap-2">
 								<FileText class="h-4 w-4 text-muted-foreground" />
 								<Card.Title class="text-sm">Nota Fiscal</Card.Title>
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-7 w-7"
+									title="Replace NF PDF"
+									onclick={openReplacePdfPicker}
+									disabled={replacingPdf}
+								>
+									{#if replacingPdf}
+										<Loader2 class="h-3.5 w-3.5 animate-spin" />
+									{:else}
+										<Pencil class="h-3.5 w-3.5" />
+									{/if}
+								</Button>
 							</div>
 							<Button
 								variant="outline"
@@ -624,22 +648,14 @@
 							<dt class="text-muted-foreground">Created</dt>
 							<dd class="text-xs">{detailNf.created_at}</dd>
 						</dl>
-
-						<Separator />
-
-						<div class="space-y-2">
-							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-								<RefreshCw class="h-3 w-3" />
-								Replace PDF
-							</span>
-							<FileDropZone
-								accept=".pdf,application/pdf"
-								loading={replacingPdf}
-								onchange={handleReplacePdf}
-								label="Drop new NF PDF to replace"
-							/>
-						</div>
 					</Card.Content>
+					<input
+						bind:this={replacePdfInputEl}
+						type="file"
+						accept=".pdf,application/pdf"
+						class="sr-only"
+						onchange={handleReplacePdfInputChange}
+					/>
 				</Card.Root>
 
 				<!-- Images Card -->

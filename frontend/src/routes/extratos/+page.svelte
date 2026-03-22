@@ -21,7 +21,6 @@
 		triggerDownload
 	} from '$lib/api/client.js';
 	import type { ExtratoEntry, ExtratoPreview } from '$lib/api/types.js';
-	import { cn } from '$lib/utils.js';
 	import { formatFiscalMes, formatBrl, formatDateBr } from '$lib/utils/format.js';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
@@ -33,7 +32,6 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import {
@@ -44,9 +42,9 @@
 		Loader2,
 		ArrowUpDown,
 		FileText,
-		RefreshCw,
 		CheckCircle2,
-		XCircle
+		XCircle,
+		Pencil
 	} from 'lucide-svelte';
 
 	// ---------------------------------------------------------------------------
@@ -91,6 +89,9 @@
 	let replacingExtrato = $state(false);
 	let replacingCaixinha = $state(false);
 	let replacingHiglobe = $state(false);
+	let replaceExtratoInputEl: HTMLInputElement | undefined = $state();
+	let replaceCaixinhaInputEl: HTMLInputElement | undefined = $state();
+	let replaceHiglobeInputEl: HTMLInputElement | undefined = $state();
 
 	// ---------------------------------------------------------------------------
 	// Lifecycle
@@ -328,6 +329,36 @@
 		} catch (e) {
 			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Remove failed');
 		}
+	}
+
+	function openReplaceExtratoPicker() {
+		replaceExtratoInputEl?.click();
+	}
+
+	function openReplaceCaixinhaPicker() {
+		replaceCaixinhaInputEl?.click();
+	}
+
+	function openReplaceHiglobePicker() {
+		replaceHiglobeInputEl?.click();
+	}
+
+	function handleReplaceExtratoInputChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		void handleReplaceExtrato(Array.from(target.files ?? []));
+		target.value = '';
+	}
+
+	function handleReplaceCaixinhaInputChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		void handleReplaceCaixinha(Array.from(target.files ?? []));
+		target.value = '';
+	}
+
+	function handleReplaceHiglobeInputChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		void handleReplaceHiglobe(Array.from(target.files ?? []));
+		target.value = '';
 	}
 
 	// ---------------------------------------------------------------------------
@@ -634,7 +665,7 @@
 
 <!-- Detail Sheet -->
 <Sheet.Sheet bind:open={detailOpen}>
-	<Sheet.SheetContent side="right" class="sm:max-w-lg">
+	<Sheet.SheetContent side="right" class="sm:max-w-2xl">
 		<Sheet.SheetHeader>
 			<Sheet.SheetTitle>Extrato Details</Sheet.SheetTitle>
 			{#if detailItem}
@@ -669,6 +700,10 @@
 							<dd class="tabular-nums">{formatBrl(detailItem.caixinha_saldo_final)}</dd>
 							<dt class="text-muted-foreground">Fiscal Month</dt>
 							<dd>{formatFiscalMes(detailItem.fiscal_mes)}</dd>
+							<dt class="text-muted-foreground">Created</dt>
+							<dd class="text-xs">{detailItem.created_at ?? '\u2014'}</dd>
+							<dt class="text-muted-foreground">Updated</dt>
+							<dd class="text-xs">{detailItem.updated_at ?? '\u2014'}</dd>
 						</dl>
 					</Card.Content>
 				</Card.Root>
@@ -680,6 +715,20 @@
 							<div class="flex items-center gap-2">
 								<CheckCircle2 class="h-4 w-4 text-emerald-500" />
 								<Card.Title class="text-sm">Extrato PDF</Card.Title>
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-7 w-7"
+									title="Replace extrato PDF"
+									onclick={openReplaceExtratoPicker}
+									disabled={replacingExtrato}
+								>
+									{#if replacingExtrato}
+										<Loader2 class="h-3.5 w-3.5 animate-spin" />
+									{:else}
+										<Pencil class="h-3.5 w-3.5" />
+									{/if}
+								</Button>
 							</div>
 							<Button
 								variant="outline"
@@ -692,20 +741,14 @@
 							</Button>
 						</div>
 					</Card.Header>
-					<Card.Content>
-						<div class="space-y-2">
-							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-								<RefreshCw class="h-3 w-3" />
-								Replace Extrato PDF
-							</span>
-							<FileDropZone
-								accept=".pdf,application/pdf"
-								loading={replacingExtrato}
-								onchange={handleReplaceExtrato}
-								label="Drop new extrato PDF to replace"
-							/>
-						</div>
-					</Card.Content>
+					<Card.Content />
+					<input
+						bind:this={replaceExtratoInputEl}
+						type="file"
+						accept=".pdf,application/pdf"
+						class="sr-only"
+						onchange={handleReplaceExtratoInputChange}
+					/>
 				</Card.Root>
 
 				<!-- Caixinha PDF Card -->
@@ -719,6 +762,20 @@
 									<XCircle class="h-4 w-4 text-muted-foreground" />
 								{/if}
 								<Card.Title class="text-sm">Caixinha PDF</Card.Title>
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-7 w-7"
+									title={detailItem.caixinha_pdf_path ? 'Replace caixinha PDF' : 'Add caixinha PDF'}
+									onclick={openReplaceCaixinhaPicker}
+									disabled={replacingCaixinha}
+								>
+									{#if replacingCaixinha}
+										<Loader2 class="h-3.5 w-3.5 animate-spin" />
+									{:else}
+										<Pencil class="h-3.5 w-3.5" />
+									{/if}
+								</Button>
 							</div>
 							<div class="flex items-center gap-1">
 								{#if detailItem.caixinha_pdf_path}
@@ -743,25 +800,14 @@
 							</div>
 						</div>
 					</Card.Header>
-					<Card.Content>
-						<div class="space-y-2">
-							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-								{#if detailItem.caixinha_pdf_path}
-									<RefreshCw class="h-3 w-3" />
-									Replace Caixinha PDF
-								{:else}
-									<Plus class="h-3 w-3" />
-									Add Caixinha PDF
-								{/if}
-							</span>
-							<FileDropZone
-								accept=".pdf,application/pdf"
-								loading={replacingCaixinha}
-								onchange={handleReplaceCaixinha}
-								label={detailItem.caixinha_pdf_path ? 'Drop new caixinha PDF to replace' : 'Drop caixinha PDF to add'}
-							/>
-						</div>
-					</Card.Content>
+					<Card.Content />
+					<input
+						bind:this={replaceCaixinhaInputEl}
+						type="file"
+						accept=".pdf,application/pdf"
+						class="sr-only"
+						onchange={handleReplaceCaixinhaInputChange}
+					/>
 				</Card.Root>
 
 				<!-- Higlobe PDF Card -->
@@ -775,6 +821,20 @@
 									<XCircle class="h-4 w-4 text-muted-foreground" />
 								{/if}
 								<Card.Title class="text-sm">Higlobe PDF</Card.Title>
+								<Button
+									variant="ghost"
+									size="icon"
+									class="h-7 w-7"
+									title={detailItem.higlobe_pdf_path ? 'Replace Higlobe PDF' : 'Add Higlobe PDF'}
+									onclick={openReplaceHiglobePicker}
+									disabled={replacingHiglobe}
+								>
+									{#if replacingHiglobe}
+										<Loader2 class="h-3.5 w-3.5 animate-spin" />
+									{:else}
+										<Pencil class="h-3.5 w-3.5" />
+									{/if}
+								</Button>
 							</div>
 							<div class="flex items-center gap-1">
 								{#if detailItem.higlobe_pdf_path}
@@ -799,25 +859,14 @@
 							</div>
 						</div>
 					</Card.Header>
-					<Card.Content>
-						<div class="space-y-2">
-							<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-								{#if detailItem.higlobe_pdf_path}
-									<RefreshCw class="h-3 w-3" />
-									Replace Higlobe PDF
-								{:else}
-									<Plus class="h-3 w-3" />
-									Add Higlobe PDF
-								{/if}
-							</span>
-							<FileDropZone
-								accept=".pdf,application/pdf"
-								loading={replacingHiglobe}
-								onchange={handleReplaceHiglobe}
-								label={detailItem.higlobe_pdf_path ? 'Drop new higlobe PDF to replace' : 'Drop higlobe PDF to add'}
-							/>
-						</div>
-					</Card.Content>
+					<Card.Content />
+					<input
+						bind:this={replaceHiglobeInputEl}
+						type="file"
+						accept=".pdf,application/pdf"
+						class="sr-only"
+						onchange={handleReplaceHiglobeInputChange}
+					/>
 				</Card.Root>
 
 				<!-- Entry tables -->
