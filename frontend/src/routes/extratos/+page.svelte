@@ -40,7 +40,6 @@
 		Eye,
 		Loader2,
 		ArrowUpDown,
-		FileText,
 		CheckCircle2,
 		XCircle,
 		Pencil
@@ -673,40 +672,6 @@
 		</Sheet.SheetHeader>
 		{#if detailItem}
 			<div class="flex-1 overflow-y-auto px-6 py-4 space-y-5">
-				<!-- Summary Card -->
-				<Card.Root>
-					<Card.Header class="pb-3">
-						<div class="flex items-center gap-2">
-							<FileText class="h-4 w-4 text-muted-foreground" />
-							<Card.Title class="text-sm">Summary</Card.Title>
-						</div>
-					</Card.Header>
-					<Card.Content>
-						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-							<dt class="text-muted-foreground">Period</dt>
-							<dd class="tabular-nums">{formatDateBr(detailItem.period_start)} - {formatDateBr(detailItem.period_end)}</dd>
-							<dt class="text-muted-foreground">Saldo Inicial</dt>
-							<dd class="tabular-nums">{formatBrl(detailItem.saldo_inicial)}</dd>
-							<dt class="text-muted-foreground">Rendimento</dt>
-							<dd class="tabular-nums">{formatBrl(detailItem.rendimento)}</dd>
-							<dt class="text-muted-foreground">Total Entradas</dt>
-							<dd class="tabular-nums">{formatBrl(detailItem.total_entradas)}</dd>
-							<dt class="text-muted-foreground">Total Saidas</dt>
-							<dd class="tabular-nums">{formatBrl(detailItem.total_saidas)}</dd>
-							<dt class="text-muted-foreground">Saldo Final</dt>
-							<dd class="tabular-nums font-medium">{formatBrl(detailItem.saldo_final)}</dd>
-							<dt class="text-muted-foreground">Caixinha Saldo Final</dt>
-							<dd class="tabular-nums">{formatBrl(detailItem.caixinha_saldo_final)}</dd>
-							<dt class="text-muted-foreground">Fiscal Month</dt>
-							<dd>{formatFiscalMes(detailItem.fiscal_mes)}</dd>
-							<dt class="text-muted-foreground">Created</dt>
-							<dd class="text-xs">{detailItem.created_at ?? '\u2014'}</dd>
-							<dt class="text-muted-foreground">Updated</dt>
-							<dd class="text-xs">{detailItem.updated_at ?? '\u2014'}</dd>
-						</dl>
-					</Card.Content>
-				</Card.Root>
-
 				<!-- Extrato PDF Card -->
 				<Card.Root>
 					<Card.Header class="pb-3">
