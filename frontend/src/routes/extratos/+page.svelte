@@ -33,7 +33,6 @@
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
 	import {
 		Plus,
 		Download,
@@ -741,7 +740,53 @@
 							</Button>
 						</div>
 					</Card.Header>
-					<Card.Content />
+					<Card.Content class="space-y-4">
+						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+							<dt class="text-muted-foreground">Period</dt>
+							<dd class="tabular-nums">{formatDateBr(detailItem.period_start)} - {formatDateBr(detailItem.period_end)}</dd>
+							<dt class="text-muted-foreground">Saldo Inicial</dt>
+							<dd class="tabular-nums">{formatBrl(detailItem.saldo_inicial)}</dd>
+							<dt class="text-muted-foreground">Rendimento</dt>
+							<dd class="tabular-nums">{formatBrl(detailItem.rendimento)}</dd>
+							<dt class="text-muted-foreground">Total Entradas</dt>
+							<dd class="tabular-nums">{formatBrl(detailItem.total_entradas)}</dd>
+							<dt class="text-muted-foreground">Total Saidas</dt>
+							<dd class="tabular-nums">{formatBrl(detailItem.total_saidas)}</dd>
+							<dt class="text-muted-foreground">Saldo Final</dt>
+							<dd class="tabular-nums font-medium">{formatBrl(detailItem.saldo_final)}</dd>
+							<dt class="text-muted-foreground">Status</dt>
+							<dd>Attached</dd>
+						</dl>
+						<div class="space-y-2">
+							<div class="text-xs font-medium text-muted-foreground">
+								Parsed Entries ({detailEntries.length})
+							</div>
+							{#if detailEntries.length > 0}
+								<div class="max-h-64 overflow-auto rounded-md border">
+									<table class="w-full text-xs">
+										<thead class="bg-muted sticky top-0">
+											<tr>
+												{#each Object.keys(detailEntries[0] ?? {}) as key}
+													<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
+												{/each}
+											</tr>
+										</thead>
+										<tbody>
+											{#each detailEntries as row}
+												<tr class="border-t border-border">
+													{#each Object.values(row) as val}
+														<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
+													{/each}
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							{:else}
+								<p class="text-sm text-muted-foreground">No parsed entries found for this extrato.</p>
+							{/if}
+						</div>
+					</Card.Content>
 					<input
 						bind:this={replaceExtratoInputEl}
 						type="file"
@@ -800,7 +845,47 @@
 							</div>
 						</div>
 					</Card.Header>
-					<Card.Content />
+					<Card.Content class="space-y-4">
+						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+							<dt class="text-muted-foreground">Type</dt>
+							<dd>Optional attachment</dd>
+							<dt class="text-muted-foreground">Status</dt>
+							<dd>{detailItem.caixinha_pdf_path ? 'Attached' : 'Not attached'}</dd>
+							<dt class="text-muted-foreground">Saldo Final</dt>
+							<dd class="tabular-nums">{formatBrl(detailItem.caixinha_saldo_final)}</dd>
+						</dl>
+						<div class="space-y-2">
+							<div class="text-xs font-medium text-muted-foreground">
+								Parsed Entries ({detailCaixinhaEntries.length})
+							</div>
+							{#if detailCaixinhaEntries.length > 0}
+								<div class="max-h-64 overflow-auto rounded-md border">
+									<table class="w-full text-xs">
+										<thead class="bg-muted sticky top-0">
+											<tr>
+												{#each Object.keys(detailCaixinhaEntries[0] ?? {}) as key}
+													<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
+												{/each}
+											</tr>
+										</thead>
+										<tbody>
+											{#each detailCaixinhaEntries as row}
+												<tr class="border-t border-border">
+													{#each Object.values(row) as val}
+														<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
+													{/each}
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							{:else if detailItem.caixinha_pdf_path}
+								<p class="text-sm text-muted-foreground">No parsed entries found for this caixinha PDF.</p>
+							{:else}
+								<p class="text-sm text-muted-foreground">No caixinha PDF attached.</p>
+							{/if}
+						</div>
+					</Card.Content>
 					<input
 						bind:this={replaceCaixinhaInputEl}
 						type="file"
@@ -859,7 +944,45 @@
 							</div>
 						</div>
 					</Card.Header>
-					<Card.Content />
+					<Card.Content class="space-y-4">
+						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+							<dt class="text-muted-foreground">Type</dt>
+							<dd>Optional attachment</dd>
+							<dt class="text-muted-foreground">Status</dt>
+							<dd>{detailItem.higlobe_pdf_path ? 'Attached' : 'Not attached'}</dd>
+						</dl>
+						<div class="space-y-2">
+							<div class="text-xs font-medium text-muted-foreground">
+								Parsed Entries ({detailHiglobeEntries.length})
+							</div>
+							{#if detailHiglobeEntries.length > 0}
+								<div class="max-h-64 overflow-auto rounded-md border">
+									<table class="w-full text-xs">
+										<thead class="bg-muted sticky top-0">
+											<tr>
+												{#each Object.keys(detailHiglobeEntries[0] ?? {}) as key}
+													<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
+												{/each}
+											</tr>
+										</thead>
+										<tbody>
+											{#each detailHiglobeEntries as row}
+												<tr class="border-t border-border">
+													{#each Object.values(row) as val}
+														<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
+													{/each}
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							{:else if detailItem.higlobe_pdf_path}
+								<p class="text-sm text-muted-foreground">No parsed entries found for this Higlobe PDF.</p>
+							{:else}
+								<p class="text-sm text-muted-foreground">No Higlobe PDF attached.</p>
+							{/if}
+						</div>
+					</Card.Content>
 					<input
 						bind:this={replaceHiglobeInputEl}
 						type="file"
@@ -869,98 +992,6 @@
 					/>
 				</Card.Root>
 
-				<!-- Entry tables -->
-				{#if detailEntries.length > 0 || detailCaixinhaEntries.length > 0 || detailHiglobeEntries.length > 0}
-					<Card.Root>
-						<Card.Header class="pb-3">
-							<Card.Title class="text-sm">Parsed Entries</Card.Title>
-						</Card.Header>
-						<Card.Content>
-							<Tabs.Tabs value="entries">
-								<Tabs.TabsList class="w-full">
-									<Tabs.TabsTrigger value="entries" class="flex-1" disabled={detailEntries.length === 0}>
-										Entries ({detailEntries.length})
-									</Tabs.TabsTrigger>
-									<Tabs.TabsTrigger value="caixinha-entries" class="flex-1" disabled={detailCaixinhaEntries.length === 0}>
-										Caixinha ({detailCaixinhaEntries.length})
-									</Tabs.TabsTrigger>
-									<Tabs.TabsTrigger value="higlobe-entries" class="flex-1" disabled={detailHiglobeEntries.length === 0}>
-										Higlobe ({detailHiglobeEntries.length})
-									</Tabs.TabsTrigger>
-								</Tabs.TabsList>
-
-								<Tabs.TabsContent value="entries">
-									<div class="max-h-64 overflow-auto rounded-md border">
-										<table class="w-full text-xs">
-											<thead class="bg-muted sticky top-0">
-												<tr>
-													{#each Object.keys(detailEntries[0] ?? {}) as key}
-														<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
-													{/each}
-												</tr>
-											</thead>
-											<tbody>
-												{#each detailEntries as row}
-													<tr class="border-t border-border">
-														{#each Object.values(row) as val}
-															<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
-														{/each}
-													</tr>
-												{/each}
-											</tbody>
-										</table>
-									</div>
-								</Tabs.TabsContent>
-
-								<Tabs.TabsContent value="caixinha-entries">
-									<div class="max-h-64 overflow-auto rounded-md border">
-										<table class="w-full text-xs">
-											<thead class="bg-muted sticky top-0">
-												<tr>
-													{#each Object.keys(detailCaixinhaEntries[0] ?? {}) as key}
-														<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
-													{/each}
-												</tr>
-											</thead>
-											<tbody>
-												{#each detailCaixinhaEntries as row}
-													<tr class="border-t border-border">
-														{#each Object.values(row) as val}
-															<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
-														{/each}
-													</tr>
-												{/each}
-											</tbody>
-										</table>
-									</div>
-								</Tabs.TabsContent>
-
-								<Tabs.TabsContent value="higlobe-entries">
-									<div class="max-h-64 overflow-auto rounded-md border">
-										<table class="w-full text-xs">
-											<thead class="bg-muted sticky top-0">
-												<tr>
-													{#each Object.keys(detailHiglobeEntries[0] ?? {}) as key}
-														<th class="px-2 py-1 text-left font-medium text-muted-foreground">{key}</th>
-													{/each}
-												</tr>
-											</thead>
-											<tbody>
-												{#each detailHiglobeEntries as row}
-													<tr class="border-t border-border">
-														{#each Object.values(row) as val}
-															<td class="px-2 py-1 whitespace-nowrap">{val ?? ''}</td>
-														{/each}
-													</tr>
-												{/each}
-											</tbody>
-										</table>
-									</div>
-								</Tabs.TabsContent>
-							</Tabs.Tabs>
-						</Card.Content>
-					</Card.Root>
-				{/if}
 			</div>
 		{/if}
 	</Sheet.SheetContent>
