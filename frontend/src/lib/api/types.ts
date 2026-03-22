@@ -96,6 +96,19 @@ export type BoletoEntry = {
 
 export type DarfEntry = BoletoEntry;
 
+export type BoletoLikeFieldsPatch = {
+	value: number | null;
+	emission_date: string | null;
+	deadline_date: string | null;
+	codigo_barras: string | null;
+	codigo_barras_digits: string | null;
+	receipt_date: string | null;
+	receipt_value: number | null;
+	receipt_codigo_barras: string | null;
+	receipt_codigo_barras_digits: string | null;
+	fiscal_mes: string | null;
+};
+
 /** Boleto/DARF parse-preview. */
 export type BoletoPreview = {
 	value: number | null;

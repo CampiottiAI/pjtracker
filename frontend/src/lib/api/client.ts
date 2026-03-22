@@ -6,6 +6,7 @@ import type {
 	NfPreview,
 	NfImage,
 	BoletoEntry,
+	BoletoLikeFieldsPatch,
 	BoletoPreview,
 	DarfEntry,
 	DarfPreview,
@@ -266,6 +267,17 @@ export async function patchBoletoFiscalMes(
 	});
 }
 
+export async function patchBoletoFields(
+	id: number,
+	payload: BoletoLikeFieldsPatch
+): Promise<BoletoEntry> {
+	return apiJson<BoletoEntry>(`/boletos/${id}/fields`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+}
+
 export async function updateBoletoPdf(id: number, file: File): Promise<BoletoEntry> {
 	const form = new FormData();
 	form.append('file', file);
@@ -337,6 +349,17 @@ export async function patchDarfFiscalMes(
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ fiscal_mes: fiscalMes })
+	});
+}
+
+export async function patchDarfFields(
+	id: number,
+	payload: BoletoLikeFieldsPatch
+): Promise<DarfEntry> {
+	return apiJson<DarfEntry>(`/darfs/${id}/fields`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
 	});
 }
 

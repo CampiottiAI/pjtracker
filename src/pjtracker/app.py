@@ -657,6 +657,73 @@ def get_boleto_by_id(boleto_id: int) -> dict | None:
         return dict(row) if row else None
 
 
+def _compute_receipt_match_status(
+    document_digits: str | None,
+    receipt_digits: str | None,
+) -> str | None:
+    if not document_digits or not receipt_digits:
+        return None
+    return "match" if document_digits == receipt_digits else "mismatch"
+
+
+def update_boleto_fields(
+    boleto_id: int,
+    *,
+    value: float | None,
+    emission_date: str | None,
+    deadline_date: str | None,
+    codigo_barras: str | None,
+    codigo_barras_digits: str | None,
+    receipt_date: str | None,
+    receipt_value: float | None,
+    receipt_codigo_barras: str | None,
+    receipt_codigo_barras_digits: str | None,
+    fiscal_mes: str | None,
+) -> bool:
+    """Update editable boleto fields and derived hashes/match status."""
+    row = get_boleto_by_id(boleto_id)
+    if not row:
+        return False
+    content_hash = compute_boleto_content_hash(value, emission_date, deadline_date)
+    receipt_match_status = _compute_receipt_match_status(
+        codigo_barras_digits,
+        receipt_codigo_barras_digits,
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                """
+                UPDATE boletos
+                SET value = ?, emission_date = ?, deadline_date = ?,
+                    codigo_barras = ?, codigo_barras_digits = ?,
+                    receipt_date = ?, receipt_value = ?,
+                    receipt_codigo_barras = ?, receipt_codigo_barras_digits = ?,
+                    receipt_match_status = ?, fiscal_mes = ?, content_hash = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    value,
+                    emission_date,
+                    deadline_date,
+                    codigo_barras,
+                    codigo_barras_digits,
+                    receipt_date,
+                    receipt_value,
+                    receipt_codigo_barras,
+                    receipt_codigo_barras_digits,
+                    receipt_match_status,
+                    fiscal_mes,
+                    content_hash,
+                    now,
+                    boleto_id,
+                ),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
 def update_boleto_pdf(
     boleto_id: int,
     pdf_bytes: bytes,
@@ -903,6 +970,64 @@ def get_darf_by_id(darf_id: int) -> dict | None:
         cur = conn.execute("SELECT * FROM darfs WHERE id = ?", (darf_id,))
         row = cur.fetchone()
         return dict(row) if row else None
+
+
+def update_darf_fields(
+    darf_id: int,
+    *,
+    value: float | None,
+    emission_date: str | None,
+    deadline_date: str | None,
+    codigo_barras: str | None,
+    codigo_barras_digits: str | None,
+    receipt_date: str | None,
+    receipt_value: float | None,
+    receipt_codigo_barras: str | None,
+    receipt_codigo_barras_digits: str | None,
+    fiscal_mes: str | None,
+) -> bool:
+    """Update editable DARF fields and derived hashes/match status."""
+    row = get_darf_by_id(darf_id)
+    if not row:
+        return False
+    content_hash = compute_darf_content_hash(value, emission_date, deadline_date)
+    receipt_match_status = _compute_receipt_match_status(
+        codigo_barras_digits,
+        receipt_codigo_barras_digits,
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                """
+                UPDATE darfs
+                SET value = ?, emission_date = ?, deadline_date = ?,
+                    codigo_barras = ?, codigo_barras_digits = ?,
+                    receipt_date = ?, receipt_value = ?,
+                    receipt_codigo_barras = ?, receipt_codigo_barras_digits = ?,
+                    receipt_match_status = ?, fiscal_mes = ?, content_hash = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    value,
+                    emission_date,
+                    deadline_date,
+                    codigo_barras,
+                    codigo_barras_digits,
+                    receipt_date,
+                    receipt_value,
+                    receipt_codigo_barras,
+                    receipt_codigo_barras_digits,
+                    receipt_match_status,
+                    fiscal_mes,
+                    content_hash,
+                    now,
+                    darf_id,
+                ),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False
 
 
 def update_darf_pdf(

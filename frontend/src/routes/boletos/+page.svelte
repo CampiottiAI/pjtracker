@@ -6,6 +6,7 @@
 		createBoleto,
 		deleteBoleto,
 		patchBoletoFiscalMes,
+		patchBoletoFields,
 		getBoletoBarcodeDiff,
 		updateBoletoPdf,
 		updateBoletoReceipt,
@@ -21,6 +22,7 @@
 	createFn={createBoleto}
 	deleteFn={deleteBoleto}
 	patchFiscalMesFn={patchBoletoFiscalMes}
+	patchFieldsFn={patchBoletoFields}
 	getBarcodeDiffFn={getBoletoBarcodeDiff}
 	replacePdfFn={updateBoletoPdf}
 	replaceReceiptFn={updateBoletoReceipt}

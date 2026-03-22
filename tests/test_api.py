@@ -12,7 +12,15 @@ from fastapi.testclient import TestClient
 
 import pjtracker.app as app_module
 from pjtracker.api.main import app
-from pjtracker.app import init_db, save_nf_entry, save_pdf
+from pjtracker.app import (
+    init_db,
+    save_boleto_entry,
+    save_boleto_pdf,
+    save_darf_entry,
+    save_darf_pdf,
+    save_nf_entry,
+    save_pdf,
+)
 from pjtracker.parsers.nf_parser import NFParsed
 
 
@@ -190,3 +198,129 @@ def test_fiscal_months_list(client: TestClient):
         r = client.get("/api/v1/fiscal-months")
     assert r.status_code == 200
     assert "2025-04" in r.json()["months"]
+
+
+def test_patch_boleto_fields_persists_and_recomputes_match_status(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        pdf_path = save_boleto_pdf(b"%PDF", emission_date="01/01/2025", value=100.0)
+        inserted, boleto_id = save_boleto_entry(
+            pdf_path=str(pdf_path),
+            value=100.0,
+            emission_date="01/01/2025",
+            deadline_date="15/01/2025",
+            codigo_barras="old_raw",
+            codigo_barras_digits="1111",
+            receipt_path=None,
+            receipt_date="01/01/2025 10:00:00",
+            receipt_value=100.0,
+            receipt_codigo_barras="old_receipt_raw",
+            receipt_codigo_barras_digits="9999",
+            receipt_match_status="mismatch",
+            fiscal_mes="2025-01",
+        )
+        assert inserted and boleto_id is not None
+
+        r = client.patch(
+            f"/api/v1/boletos/{boleto_id}/fields",
+            json={
+                "value": 200.5,
+                "emission_date": "05/02/2025",
+                "deadline_date": "20/02/2025",
+                "codigo_barras": "doc_raw_new",
+                "codigo_barras_digits": "123456",
+                "receipt_date": "05/02/2025 11:22:33",
+                "receipt_value": 200.5,
+                "receipt_codigo_barras": "receipt_raw_new",
+                "receipt_codigo_barras_digits": "123456",
+                "fiscal_mes": "2025-02",
+            },
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["value"] == 200.5
+    assert body["emission_date"] == "05/02/2025"
+    assert body["deadline_date"] == "20/02/2025"
+    assert body["codigo_barras_digits"] == "123456"
+    assert body["receipt_codigo_barras_digits"] == "123456"
+    assert body["receipt_match_status"] == "match"
+    assert body["fiscal_mes"] == "2025-02"
+
+
+def test_patch_boleto_fields_rejects_non_digit_barcode(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        pdf_path = save_boleto_pdf(b"%PDF", emission_date="01/01/2025", value=100.0)
+        inserted, boleto_id = save_boleto_entry(
+            pdf_path=str(pdf_path),
+            value=100.0,
+            emission_date="01/01/2025",
+            deadline_date="15/01/2025",
+            codigo_barras_digits="1111",
+            fiscal_mes="2025-01",
+        )
+        assert inserted and boleto_id is not None
+
+        r = client.patch(
+            f"/api/v1/boletos/{boleto_id}/fields",
+            json={
+                "value": 100.0,
+                "emission_date": "01/01/2025",
+                "deadline_date": "15/01/2025",
+                "codigo_barras": "abc",
+                "codigo_barras_digits": "12A3",
+                "receipt_date": None,
+                "receipt_value": None,
+                "receipt_codigo_barras": None,
+                "receipt_codigo_barras_digits": None,
+                "fiscal_mes": "2025-01",
+            },
+        )
+
+    assert r.status_code == 422
+
+
+def test_patch_darf_fields_persists_and_recomputes_match_status(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        pdf_path = save_darf_pdf(b"%PDF", emission_date="01/03/2025", value=300.0)
+        inserted, darf_id = save_darf_entry(
+            pdf_path=str(pdf_path),
+            value=300.0,
+            emission_date="01/03/2025",
+            deadline_date="20/03/2025",
+            codigo_barras="old_darf_raw",
+            codigo_barras_digits="8888",
+            receipt_path=None,
+            receipt_date="01/03/2025 10:00:00",
+            receipt_value=300.0,
+            receipt_codigo_barras="old_receipt_raw",
+            receipt_codigo_barras_digits="7777",
+            receipt_match_status="mismatch",
+            fiscal_mes="2025-03",
+        )
+        assert inserted and darf_id is not None
+
+        r = client.patch(
+            f"/api/v1/darfs/{darf_id}/fields",
+            json={
+                "value": 350.0,
+                "emission_date": "02/03/2025",
+                "deadline_date": "21/03/2025",
+                "codigo_barras": "darf_raw_new",
+                "codigo_barras_digits": "654321",
+                "receipt_date": "02/03/2025 09:08:07",
+                "receipt_value": 350.0,
+                "receipt_codigo_barras": "receipt_raw_new",
+                "receipt_codigo_barras_digits": "654321",
+                "fiscal_mes": "2025-03",
+            },
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["value"] == 350.0
+    assert body["codigo_barras_digits"] == "654321"
+    assert body["receipt_codigo_barras_digits"] == "654321"
+    assert body["receipt_match_status"] == "match"

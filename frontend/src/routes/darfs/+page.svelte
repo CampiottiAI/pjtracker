@@ -6,6 +6,7 @@
 		createDarf,
 		deleteDarf,
 		patchDarfFiscalMes,
+		patchDarfFields,
 		getDarfBarcodeDiff,
 		updateDarfPdf,
 		updateDarfReceipt,
@@ -21,6 +22,7 @@
 	createFn={createDarf}
 	deleteFn={deleteDarf}
 	patchFiscalMesFn={patchDarfFiscalMes}
+	patchFieldsFn={patchDarfFields}
 	getBarcodeDiffFn={getDarfBarcodeDiff}
 	replacePdfFn={updateDarfPdf}
 	replaceReceiptFn={updateDarfReceipt}

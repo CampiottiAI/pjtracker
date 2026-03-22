@@ -9,7 +9,11 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from pjtracker.api.errors import conflict
-from pjtracker.api.schemas.common import FISCAL_MES_REGEX, PatchFiscalMes
+from pjtracker.api.schemas.common import (
+    FISCAL_MES_REGEX,
+    PatchBoletoLikeFields,
+    PatchFiscalMes,
+)
 from pjtracker.api.services.paths import project_root, resolve_stored_path
 from pjtracker.app import (
     delete_boleto,
@@ -18,6 +22,7 @@ from pjtracker.app import (
     save_boleto_entry,
     save_boleto_pdf,
     save_boleto_receipt,
+    update_boleto_fields,
     update_boleto_fiscal_mes,
     update_boleto_pdf,
     update_boleto_receipt,
@@ -175,6 +180,34 @@ def patch_boleto(boleto_id: int, body: PatchFiscalMes) -> dict:
     row = get_boleto_by_id(boleto_id)
     assert row
     return dict(row)
+
+
+@router.patch("/{boleto_id}/fields")
+def patch_boleto_fields(boleto_id: int, body: PatchBoletoLikeFields) -> dict:
+    row = get_boleto_by_id(boleto_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Boleto not found")
+    ok = update_boleto_fields(
+        boleto_id,
+        value=body.value,
+        emission_date=body.emission_date,
+        deadline_date=body.deadline_date,
+        codigo_barras=body.codigo_barras,
+        codigo_barras_digits=body.codigo_barras_digits,
+        receipt_date=body.receipt_date,
+        receipt_value=body.receipt_value,
+        receipt_codigo_barras=body.receipt_codigo_barras,
+        receipt_codigo_barras_digits=body.receipt_codigo_barras_digits,
+        fiscal_mes=body.fiscal_mes,
+    )
+    if not ok:
+        raise conflict(
+            "duplicate_boleto_hash",
+            "Another boleto already has the same content hash.",
+        )
+    row2 = get_boleto_by_id(boleto_id)
+    assert row2
+    return dict(row2)
 
 
 @router.put("/{boleto_id}/pdf")

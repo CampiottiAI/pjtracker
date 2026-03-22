@@ -8,7 +8,11 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from pjtracker.api.errors import conflict
-from pjtracker.api.schemas.common import FISCAL_MES_REGEX, PatchFiscalMes
+from pjtracker.api.schemas.common import (
+    FISCAL_MES_REGEX,
+    PatchBoletoLikeFields,
+    PatchFiscalMes,
+)
 from pjtracker.api.services.paths import project_root, resolve_stored_path
 from pjtracker.app import (
     delete_darf,
@@ -17,6 +21,7 @@ from pjtracker.app import (
     save_darf_entry,
     save_darf_pdf,
     save_darf_receipt,
+    update_darf_fields,
     update_darf_fiscal_mes,
     update_darf_pdf,
     update_darf_receipt,
@@ -175,6 +180,34 @@ def patch_darf(darf_id: int, body: PatchFiscalMes) -> dict:
     row = get_darf_by_id(darf_id)
     assert row
     return dict(row)
+
+
+@router.patch("/{darf_id}/fields")
+def patch_darf_fields(darf_id: int, body: PatchBoletoLikeFields) -> dict:
+    row = get_darf_by_id(darf_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="DARF not found")
+    ok = update_darf_fields(
+        darf_id,
+        value=body.value,
+        emission_date=body.emission_date,
+        deadline_date=body.deadline_date,
+        codigo_barras=body.codigo_barras,
+        codigo_barras_digits=body.codigo_barras_digits,
+        receipt_date=body.receipt_date,
+        receipt_value=body.receipt_value,
+        receipt_codigo_barras=body.receipt_codigo_barras,
+        receipt_codigo_barras_digits=body.receipt_codigo_barras_digits,
+        fiscal_mes=body.fiscal_mes,
+    )
+    if not ok:
+        raise conflict(
+            "duplicate_darf_hash",
+            "Another DARF already has the same content hash.",
+        )
+    row2 = get_darf_by_id(darf_id)
+    assert row2
+    return dict(row2)
 
 
 @router.put("/{darf_id}/pdf")

@@ -10,7 +10,12 @@
 		downloadBlob,
 		triggerDownload
 	} from '$lib/api/client.js';
-	import type { BoletoEntry, BoletoPreview, ReceiptPreview } from '$lib/api/types.js';
+	import type {
+		BoletoEntry,
+		BoletoLikeFieldsPatch,
+		BoletoPreview,
+		ReceiptPreview
+	} from '$lib/api/types.js';
 	import { formatFiscalMes, formatBrl, formatDateBr } from '$lib/utils/format.js';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
@@ -44,6 +49,7 @@
 		createFn,
 		deleteFn,
 		patchFiscalMesFn,
+		patchFieldsFn,
 		getBarcodeDiffFn,
 		replacePdfFn,
 		replaceReceiptFn,
@@ -62,6 +68,7 @@
 		) => Promise<BoletoEntry>;
 		deleteFn: (id: number) => Promise<void>;
 		patchFiscalMesFn: (id: number, fm: string | null) => Promise<BoletoEntry>;
+		patchFieldsFn: (id: number, payload: BoletoLikeFieldsPatch) => Promise<BoletoEntry>;
 		getBarcodeDiffFn: (id: number) => Promise<string>;
 		replacePdfFn: (id: number, file: File) => Promise<BoletoEntry>;
 		replaceReceiptFn: (
@@ -100,6 +107,18 @@
 	let detailItem = $state<BoletoEntry | null>(null);
 	let barcodeDiff = $state<string | null>(null);
 	let barcodeDiffLoading = $state(false);
+	let detailEditing = $state(false);
+	let detailSaving = $state(false);
+	let detailValue = $state('');
+	let detailEmissionDate = $state('');
+	let detailDeadlineDate = $state('');
+	let detailCodigoBarras = $state('');
+	let detailCodigoBarrasDigits = $state('');
+	let detailReceiptDate = $state('');
+	let detailReceiptValue = $state('');
+	let detailReceiptCodigoBarras = $state('');
+	let detailReceiptCodigoBarrasDigits = $state('');
+	let detailFiscalMes = $state('');
 
 	// Detail replacement state
 	let replacingPdf = $state(false);
@@ -274,8 +293,11 @@
 
 	async function openDetail(item: BoletoEntry) {
 		detailItem = item;
+		resetDetailEdit(item);
 		barcodeDiff = null;
 		barcodeDiffLoading = false;
+		detailEditing = false;
+		detailSaving = false;
 		replacingPdf = false;
 		replacingReceipt = false;
 		replaceReceiptFile = null;
@@ -291,8 +313,77 @@
 		if (!detailItem) return;
 		try {
 			detailItem = await getFn(detailItem.id);
+			if (detailItem && !detailEditing) {
+				resetDetailEdit(detailItem);
+			}
 		} catch {
 			// silently fail
+		}
+	}
+
+	function nullableString(value: string): string | null {
+		const v = value.trim();
+		return v.length > 0 ? v : null;
+	}
+
+	function nullableNumber(value: string): number | null {
+		const v = value.trim();
+		if (!v) return null;
+		const n = Number(v.replace(',', '.'));
+		return Number.isFinite(n) ? n : null;
+	}
+
+	function resetDetailEdit(item: BoletoEntry) {
+		detailValue = item.value == null ? '' : String(item.value);
+		detailEmissionDate = item.emission_date ?? '';
+		detailDeadlineDate = item.deadline_date ?? '';
+		detailCodigoBarras = item.codigo_barras ?? '';
+		detailCodigoBarrasDigits = item.codigo_barras_digits ?? '';
+		detailReceiptDate = item.receipt_date ?? '';
+		detailReceiptValue = item.receipt_value == null ? '' : String(item.receipt_value);
+		detailReceiptCodigoBarras = item.receipt_codigo_barras ?? '';
+		detailReceiptCodigoBarrasDigits = item.receipt_codigo_barras_digits ?? '';
+		detailFiscalMes = item.fiscal_mes ?? '';
+	}
+
+	function startDetailEdit() {
+		if (!detailItem) return;
+		resetDetailEdit(detailItem);
+		detailEditing = true;
+	}
+
+	function cancelDetailEdit() {
+		if (detailItem) resetDetailEdit(detailItem);
+		detailEditing = false;
+	}
+
+	async function saveDetailEdit() {
+		if (!detailItem) return;
+		const payload: BoletoLikeFieldsPatch = {
+			value: nullableNumber(detailValue),
+			emission_date: nullableString(detailEmissionDate),
+			deadline_date: nullableString(detailDeadlineDate),
+			codigo_barras: nullableString(detailCodigoBarras),
+			codigo_barras_digits: nullableString(detailCodigoBarrasDigits),
+			receipt_date: nullableString(detailReceiptDate),
+			receipt_value: nullableNumber(detailReceiptValue),
+			receipt_codigo_barras: nullableString(detailReceiptCodigoBarras),
+			receipt_codigo_barras_digits: nullableString(detailReceiptCodigoBarrasDigits),
+			fiscal_mes: nullableString(detailFiscalMes)
+		};
+		detailSaving = true;
+		try {
+			detailItem = await patchFieldsFn(detailItem.id, payload);
+			detailEditing = false;
+			barcodeDiff = null;
+			toast.success('Fields updated');
+			await loadItems();
+		} catch (e) {
+			toast.error(
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Save changes failed'
+			);
+		} finally {
+			detailSaving = false;
 		}
 	}
 
@@ -702,6 +793,27 @@
 		</Sheet.SheetHeader>
 		{#if detailItem}
 			<div class="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+				<div class="flex items-center justify-end gap-2">
+					{#if detailEditing}
+						<Button variant="outline" size="sm" onclick={cancelDetailEdit} disabled={detailSaving}>
+							Cancel
+						</Button>
+						<Button size="sm" onclick={saveDetailEdit} disabled={detailSaving}>
+							{#if detailSaving}
+								<Loader2 class="h-4 w-4 animate-spin" />
+								Saving...
+							{:else}
+								Save changes
+							{/if}
+						</Button>
+					{:else}
+						<Button variant="outline" size="sm" onclick={startDetailEdit}>
+							<Pencil class="h-4 w-4" />
+							Edit fields
+						</Button>
+					{/if}
+				</div>
+
 				<!-- Document Card -->
 				<Card.Root>
 					<Card.Header class="pb-3">
@@ -738,17 +850,53 @@
 					<Card.Content class="space-y-4">
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
 							<dt class="text-muted-foreground">Value</dt>
-							<dd class="tabular-nums font-medium">{formatBrl(detailItem.value)}</dd>
+							<dd class="tabular-nums font-medium">
+								{#if detailEditing}
+									<Input type="number" step="0.01" bind:value={detailValue} class="h-8 text-xs" />
+								{:else}
+									{formatBrl(detailItem.value)}
+								{/if}
+							</dd>
 							<dt class="text-muted-foreground">Emission</dt>
-							<dd class="tabular-nums">{formatDateBr(detailItem.emission_date)}</dd>
+							<dd class="tabular-nums">
+								{#if detailEditing}
+									<Input type="text" bind:value={detailEmissionDate} placeholder="DD/MM/YYYY" class="h-8 text-xs" />
+								{:else}
+									{formatDateBr(detailItem.emission_date)}
+								{/if}
+							</dd>
 							<dt class="text-muted-foreground">Deadline</dt>
-							<dd class="tabular-nums">{formatDateBr(detailItem.deadline_date)}</dd>
+							<dd class="tabular-nums">
+								{#if detailEditing}
+									<Input type="text" bind:value={detailDeadlineDate} placeholder="DD/MM/YYYY" class="h-8 text-xs" />
+								{:else}
+									{formatDateBr(detailItem.deadline_date)}
+								{/if}
+							</dd>
 							<dt class="text-muted-foreground">Barcode</dt>
-							<dd class="font-mono text-xs break-all">{detailItem.codigo_barras_digits ?? '\u2014'}</dd>
+							<dd class="font-mono text-xs break-all">
+								{#if detailEditing}
+									<Input type="text" bind:value={detailCodigoBarrasDigits} class="h-8 text-xs font-mono" />
+								{:else}
+									{detailItem.codigo_barras_digits ?? '\u2014'}
+								{/if}
+							</dd>
 							<dt class="text-muted-foreground">Barcode (Raw)</dt>
-							<dd class="font-mono text-xs break-all">{detailItem.codigo_barras ?? '\u2014'}</dd>
+							<dd class="font-mono text-xs break-all">
+								{#if detailEditing}
+									<Input type="text" bind:value={detailCodigoBarras} class="h-8 text-xs font-mono" />
+								{:else}
+									{detailItem.codigo_barras ?? '\u2014'}
+								{/if}
+							</dd>
 							<dt class="text-muted-foreground">Fiscal Month</dt>
-							<dd>{formatFiscalMes(detailItem.fiscal_mes)}</dd>
+							<dd>
+								{#if detailEditing}
+									<FiscalMonthPicker bind:value={detailFiscalMes} {months} />
+								{:else}
+									{formatFiscalMes(detailItem.fiscal_mes)}
+								{/if}
+							</dd>
 							<dt class="text-muted-foreground">Created</dt>
 							<dd class="text-xs">{detailItem.created_at ?? '\u2014'}</dd>
 							<dt class="text-muted-foreground">Updated</dt>
@@ -807,13 +955,37 @@
 						{#if detailItem.receipt_path}
 							<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
 								<dt class="text-muted-foreground">Value</dt>
-								<dd class="tabular-nums">{formatBrl(detailItem.receipt_value)}</dd>
+								<dd class="tabular-nums">
+									{#if detailEditing}
+										<Input type="number" step="0.01" bind:value={detailReceiptValue} class="h-8 text-xs" />
+									{:else}
+										{formatBrl(detailItem.receipt_value)}
+									{/if}
+								</dd>
 								<dt class="text-muted-foreground">Date</dt>
-								<dd>{formatDateBr(detailItem.receipt_date)}</dd>
+								<dd>
+									{#if detailEditing}
+										<Input type="text" bind:value={detailReceiptDate} placeholder="DD/MM/YYYY HH:MM:SS" class="h-8 text-xs" />
+									{:else}
+										{formatDateBr(detailItem.receipt_date)}
+									{/if}
+								</dd>
 								<dt class="text-muted-foreground">Barcode</dt>
-								<dd class="font-mono text-xs break-all">{detailItem.receipt_codigo_barras_digits ?? '\u2014'}</dd>
+								<dd class="font-mono text-xs break-all">
+									{#if detailEditing}
+										<Input type="text" bind:value={detailReceiptCodigoBarrasDigits} class="h-8 text-xs font-mono" />
+									{:else}
+										{detailItem.receipt_codigo_barras_digits ?? '\u2014'}
+									{/if}
+								</dd>
 								<dt class="text-muted-foreground">Barcode (Raw)</dt>
-								<dd class="font-mono text-xs break-all">{detailItem.receipt_codigo_barras ?? '\u2014'}</dd>
+								<dd class="font-mono text-xs break-all">
+									{#if detailEditing}
+										<Input type="text" bind:value={detailReceiptCodigoBarras} class="h-8 text-xs font-mono" />
+									{:else}
+										{detailItem.receipt_codigo_barras ?? '\u2014'}
+									{/if}
+								</dd>
 							</dl>
 
 							{#if detailItem.receipt_match_status === 'mismatch'}
