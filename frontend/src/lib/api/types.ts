@@ -95,6 +95,7 @@ export type BoletoEntry = {
 };
 
 export type DarfEntry = BoletoEntry;
+export type IrpjCsllEntry = BoletoEntry;
 
 export type BoletoLikeFieldsPatch = {
 	value: number | null;
@@ -120,6 +121,7 @@ export type BoletoPreview = {
 };
 
 export type DarfPreview = BoletoPreview;
+export type IrpjCsllPreview = BoletoPreview;
 
 /** Receipt parse-preview. */
 export type ReceiptPreview = {
@@ -201,6 +203,9 @@ export type CompletenessResponse = {
 	boletos_ok: boolean;
 	darfs_with_receipt_count: number;
 	darfs_ok: boolean;
+	irpj_csll_with_receipt_count: number;
+	irpj_csll_required: boolean;
+	irpj_csll_ok: boolean;
 	extratos_caixinha_count: number;
 	extratos_ok: boolean;
 	extratos_higlobe_count: number;

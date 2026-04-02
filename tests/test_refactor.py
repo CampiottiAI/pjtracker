@@ -219,6 +219,45 @@ class RefactorTests(unittest.TestCase):
             self.assertEqual(row["receipt_codigo_barras"], "999 888")
             self.assertEqual(row["receipt_match_status"], "match")
 
+    def test_init_db_and_irpj_csll_updates_store_new_barcode_fields(self):
+        with temporary_app_paths():
+            app.init_db()
+            pdf_path = app.save_irpj_csll_pdf(b"%PDF-1.4", emission_date="03/2026", value=30.0)
+            inserted, irpj_csll_id = app.save_irpj_csll_entry(
+                pdf_path=str(pdf_path),
+                value=30.0,
+                emission_date="03/2026",
+                deadline_date="31/03/2026",
+                codigo_barras="321.654",
+                codigo_barras_digits="321654",
+            )
+
+            self.assertTrue(inserted)
+            self.assertIsNotNone(irpj_csll_id)
+
+            app.update_irpj_csll_receipt(
+                irpj_csll_id,
+                "images/irpj.png",
+                "25/03/2026 12:00:00",
+                receipt_value=30.0,
+                receipt_codigo_barras="321 654",
+                receipt_codigo_barras_digits="321654",
+                receipt_match_status="match",
+            )
+
+            row = app.get_irpj_csll_by_id(irpj_csll_id)
+            self.assertEqual(row["codigo_barras"], "321.654")
+            self.assertEqual(row["codigo_barras_digits"], "321654")
+            self.assertEqual(row["receipt_codigo_barras"], "321 654")
+            self.assertEqual(row["receipt_match_status"], "match")
+
+            with sqlite3.connect(app.DB_PATH) as conn:
+                columns = {
+                    col[1] for col in conn.execute("PRAGMA table_info(irpj_cslls)").fetchall()
+                }
+            self.assertIn("codigo_barras", columns)
+            self.assertIn("receipt_codigo_barras_digits", columns)
+
 
 if __name__ == "__main__":
     unittest.main()

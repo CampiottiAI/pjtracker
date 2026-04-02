@@ -18,10 +18,16 @@ from pjtracker.app import (
     save_boleto_pdf,
     save_darf_entry,
     save_darf_pdf,
+    save_caixinha_pdf,
+    save_extrato_entry,
+    save_extrato_pdf,
+    save_irpj_csll_entry,
+    save_irpj_csll_pdf,
     save_nf_entry,
     save_pdf,
 )
 from pjtracker.parsers.boleto_parser import BoletoParsed, ReceiptParsed
+from pjtracker.parsers.darf_parser import DarfParsed
 from pjtracker.parsers.nf_parser import NFParsed
 
 
@@ -423,3 +429,169 @@ def test_patch_darf_fields_persists_and_recomputes_match_status(client: TestClie
     assert body["codigo_barras_digits"] == "654321"
     assert body["receipt_codigo_barras_digits"] == "654321"
     assert body["receipt_match_status"] == "match"
+
+
+def test_create_irpj_csll_with_receipt(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        fake_doc = DarfParsed(
+            value=420.0,
+            emission_date="03/2025",
+            deadline_date="31/03/2025",
+            codigo_barras_raw="111.222.333",
+            codigo_barras_digits="111222333",
+            source="test",
+        )
+        fake_receipt = ReceiptParsed(
+            value=420.0,
+            payment_datetime="20/03/2025 12:34:56",
+            codigo_barras_raw="111 222 333",
+            codigo_barras_digits="111222333",
+            source="test",
+        )
+        with (
+            patch("pjtracker.api.routers.irpj_csll.parse_irpj_csll_pdf", return_value=fake_doc),
+            patch("pjtracker.api.routers.irpj_csll.parse_receipt_image", return_value=fake_receipt),
+        ):
+            r = client.post(
+                "/api/v1/irpj-csll",
+                data={"fiscal_mes": "2025-03"},
+                files={
+                    "file": ("irpj.pdf", b"%PDF-1.4 irpj", "application/pdf"),
+                    "receipt": ("receipt.png", b"fake-image", "image/png"),
+                },
+            )
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["value"] == 420.0
+        assert body["receipt_value"] == 420.0
+        assert body["receipt_match_status"] == "match"
+
+        list_response = client.get("/api/v1/irpj-csll", params={"fiscal_mes": "2025-03"})
+        assert list_response.status_code == 200
+        listed = list_response.json()
+        assert len(listed) == 1
+        assert listed[0]["fiscal_mes"] == "2025-03"
+
+
+def test_fiscal_month_completeness_only_requires_irpj_csll_in_quarter_months(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+
+        def seed_complete_month(fiscal_mes: str) -> None:
+            month = fiscal_mes[-2:]
+            nf_date = f"10/{month}/2025 00:00:00"
+            pdf_path_1 = save_pdf(b"%PDF", f"NF-{fiscal_mes}-A", nf_date, 10.0)
+            save_nf_entry(
+                company=None,
+                usd=10.0,
+                rate=5.0,
+                spread=0.0,
+                brl_no_spread=50.0,
+                brl_with_spread=50.0,
+                nf_date=nf_date,
+                verification_code=f"NF-{fiscal_mes}-A",
+                payment_via=None,
+                pdf_path=str(pdf_path_1),
+                fiscal_mes=fiscal_mes,
+            )
+            pdf_path_2 = save_pdf(b"%PDF", f"NF-{fiscal_mes}-B", nf_date, 20.0)
+            save_nf_entry(
+                company=None,
+                usd=20.0,
+                rate=5.0,
+                spread=0.0,
+                brl_no_spread=100.0,
+                brl_with_spread=100.0,
+                nf_date=nf_date,
+                verification_code=f"NF-{fiscal_mes}-B",
+                payment_via=None,
+                pdf_path=str(pdf_path_2),
+                fiscal_mes=fiscal_mes,
+            )
+
+            boleto_pdf = save_boleto_pdf(
+                b"%PDF",
+                emission_date=f"01/{month}/2025",
+                value=float(month),
+            )
+            save_boleto_entry(
+                pdf_path=str(boleto_pdf),
+                value=float(month),
+                emission_date=f"01/{month}/2025",
+                deadline_date=f"10/{month}/2025",
+                receipt_path="images/boleto.png",
+                receipt_date=f"10/{month}/2025 10:00:00",
+                fiscal_mes=fiscal_mes,
+            )
+
+            darf_pdf = save_darf_pdf(
+                b"%PDF",
+                emission_date=f"{month}/2025",
+                value=float(int(month) + 100),
+            )
+            save_darf_entry(
+                pdf_path=str(darf_pdf),
+                value=float(int(month) + 100),
+                emission_date=f"{month}/2025",
+                deadline_date=f"20/{month}/2025",
+                receipt_path="images/darf.png",
+                receipt_date=f"20/{month}/2025 10:00:00",
+                fiscal_mes=fiscal_mes,
+            )
+
+            extrato_pdf = save_extrato_pdf(
+                b"%PDF",
+                period_start=f"01/{month}/2025",
+                period_end=f"28/{month}/2025",
+            )
+            caixinha_pdf = save_caixinha_pdf(
+                b"%PDF",
+                period_start=f"01/{month}/2025",
+                period_end=f"28/{month}/2025",
+            )
+            save_extrato_entry(
+                extrato_pdf_path=str(extrato_pdf),
+                caixinha_pdf_path=str(caixinha_pdf),
+                period_start=f"01/{month}/2025",
+                period_end=f"28/{month}/2025",
+                fiscal_mes=fiscal_mes,
+            )
+
+        seed_complete_month("2025-02")
+        seed_complete_month("2025-03")
+
+        non_quarter = client.get("/api/v1/fiscal-months/2025-02/completeness")
+        assert non_quarter.status_code == 200
+        non_quarter_body = non_quarter.json()
+        assert non_quarter_body["irpj_csll_required"] is False
+        assert non_quarter_body["irpj_csll_ok"] is True
+        assert non_quarter_body["month_complete"] is True
+
+        quarter = client.get("/api/v1/fiscal-months/2025-03/completeness")
+        assert quarter.status_code == 200
+        quarter_body = quarter.json()
+        assert quarter_body["irpj_csll_required"] is True
+        assert quarter_body["irpj_csll_with_receipt_count"] == 0
+        assert quarter_body["irpj_csll_ok"] is False
+        assert quarter_body["month_complete"] is False
+
+        irpj_pdf = save_irpj_csll_pdf(b"%PDF", emission_date="03/2025", value=300.0)
+        inserted, irpj_id = save_irpj_csll_entry(
+            pdf_path=str(irpj_pdf),
+            value=300.0,
+            emission_date="03/2025",
+            deadline_date="31/03/2025",
+            receipt_path="images/irpj.png",
+            receipt_date="31/03/2025 12:00:00",
+            fiscal_mes="2025-03",
+        )
+        assert inserted and irpj_id is not None
+
+        quarter_after_insert = client.get("/api/v1/fiscal-months/2025-03/completeness")
+        assert quarter_after_insert.status_code == 200
+        quarter_after_body = quarter_after_insert.json()
+        assert quarter_after_body["irpj_csll_with_receipt_count"] == 1
+        assert quarter_after_body["irpj_csll_ok"] is True
+        assert quarter_after_body["month_complete"] is True

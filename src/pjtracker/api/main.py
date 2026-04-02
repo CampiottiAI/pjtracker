@@ -15,6 +15,7 @@ from .routers import (
     extratos,
     fiscal_months,
     health,
+    irpj_csll,
     nfs,
     receipts,
 )
@@ -38,6 +39,7 @@ app.include_router(receipts.router, prefix=api_prefix)
 app.include_router(nfs.router, prefix=api_prefix)
 app.include_router(boletos.router, prefix=api_prefix)
 app.include_router(darfs.router, prefix=api_prefix)
+app.include_router(irpj_csll.router, prefix=api_prefix)
 app.include_router(extratos.router, prefix=api_prefix)
 app.include_router(fiscal_months.router, prefix=api_prefix)
 app.include_router(analytics.router, prefix=api_prefix)

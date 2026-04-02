@@ -99,6 +99,18 @@
 						required: 1,
 						href: `/darfs?fiscal_mes=${selectedMonth}`
 					},
+					...(completeness.irpj_csll_required
+						? [
+								{
+									label: 'IRPJ/CSLL c/ Recibo',
+									icon: Landmark,
+									count: completeness.irpj_csll_with_receipt_count,
+									ok: completeness.irpj_csll_ok,
+									required: 1,
+									href: `/irpj-csll?fiscal_mes=${selectedMonth}`
+								}
+							]
+						: []),
 					{
 						label: 'Extratos c/ Caixinha',
 						icon: WalletCards,
@@ -171,7 +183,7 @@
 
 	<!-- Completeness cards -->
 	{#if completeness}
-		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 			{#each checks as item}
 				<a href={item.href} class="block group">
 					<Card.Root

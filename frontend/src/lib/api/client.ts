@@ -10,6 +10,8 @@ import type {
 	BoletoPreview,
 	DarfEntry,
 	DarfPreview,
+	IrpjCsllEntry,
+	IrpjCsllPreview,
 	ReceiptPreview,
 	ExtratoEntry,
 	ExtratoPreview,
@@ -392,6 +394,91 @@ export async function deleteDarf(id: number): Promise<void> {
 
 export async function getDarfBarcodeDiff(id: number): Promise<string> {
 	const { blob } = await downloadBlob(`/darfs/${id}/barcode-diff`);
+	return blob.text();
+}
+
+// ---------------------------------------------------------------------------
+// IRPJ/CSLL
+// ---------------------------------------------------------------------------
+
+export async function irpjCsllParsePreview(file: File): Promise<IrpjCsllPreview> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<IrpjCsllPreview>('/irpj-csll/parse-preview', form);
+}
+
+export async function createIrpjCsll(
+	file: File,
+	fiscalMes: string,
+	receipt?: File,
+	receiptDate?: string,
+	receiptTime?: string
+): Promise<IrpjCsllEntry> {
+	const form = new FormData();
+	form.append('file', file);
+	form.append('fiscal_mes', fiscalMes);
+	if (receipt) form.append('receipt', receipt);
+	if (receiptDate) form.append('receipt_date', receiptDate);
+	if (receiptTime) form.append('receipt_time', receiptTime);
+	return apiForm<IrpjCsllEntry>('/irpj-csll', form);
+}
+
+export async function listIrpjCsll(fiscalMes?: string): Promise<IrpjCsllEntry[]> {
+	const q = fiscalMes ? `?fiscal_mes=${fiscalMes}` : '';
+	return apiJson<IrpjCsllEntry[]>(`/irpj-csll${q}`);
+}
+
+export async function getIrpjCsll(id: number): Promise<IrpjCsllEntry> {
+	return apiJson<IrpjCsllEntry>(`/irpj-csll/${id}`);
+}
+
+export async function patchIrpjCsllFiscalMes(
+	id: number,
+	fiscalMes: string | null
+): Promise<IrpjCsllEntry> {
+	return apiJson<IrpjCsllEntry>(`/irpj-csll/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ fiscal_mes: fiscalMes })
+	});
+}
+
+export async function patchIrpjCsllFields(
+	id: number,
+	payload: BoletoLikeFieldsPatch
+): Promise<IrpjCsllEntry> {
+	return apiJson<IrpjCsllEntry>(`/irpj-csll/${id}/fields`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+}
+
+export async function updateIrpjCsllPdf(id: number, file: File): Promise<IrpjCsllEntry> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<IrpjCsllEntry>(`/irpj-csll/${id}/pdf`, form, 'PUT');
+}
+
+export async function updateIrpjCsllReceipt(
+	id: number,
+	receipt: File,
+	receiptDate?: string,
+	receiptTime?: string
+): Promise<IrpjCsllEntry> {
+	const form = new FormData();
+	form.append('file', receipt);
+	if (receiptDate) form.append('receipt_date', receiptDate);
+	if (receiptTime) form.append('receipt_time', receiptTime);
+	return apiForm<IrpjCsllEntry>(`/irpj-csll/${id}/receipt`, form, 'PUT');
+}
+
+export async function deleteIrpjCsll(id: number): Promise<void> {
+	await apiJson(`/irpj-csll/${id}`, { method: 'DELETE' });
+}
+
+export async function getIrpjCsllBarcodeDiff(id: number): Promise<string> {
+	const { blob } = await downloadBlob(`/irpj-csll/${id}/barcode-diff`);
 	return blob.text();
 }
 

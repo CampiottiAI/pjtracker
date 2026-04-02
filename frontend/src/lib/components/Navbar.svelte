@@ -21,6 +21,7 @@
 		{ href: '/nfs', label: 'Notas Fiscais', icon: FileText },
 		{ href: '/boletos', label: 'Boletos', icon: Receipt },
 		{ href: '/darfs', label: 'DARFs', icon: Landmark },
+		{ href: '/irpj-csll', label: 'IRPJ/CSLL', icon: Landmark },
 		{ href: '/extratos', label: 'Extratos', icon: WalletCards },
 		{ href: '/analytics', label: 'Analytics', icon: BarChart3 }
 	];
