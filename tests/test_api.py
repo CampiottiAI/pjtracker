@@ -21,6 +21,7 @@ from pjtracker.app import (
     save_nf_entry,
     save_pdf,
 )
+from pjtracker.parsers.boleto_parser import BoletoParsed, ReceiptParsed
 from pjtracker.parsers.nf_parser import NFParsed
 
 
@@ -279,6 +280,104 @@ def test_patch_boleto_fields_rejects_non_digit_barcode(client: TestClient):
         )
 
     assert r.status_code == 422
+
+
+def test_reprocess_boleto_refreshes_pdf_only_fields(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        pdf_path = save_boleto_pdf(b"%PDF", emission_date="01/01/2025", value=100.0)
+        inserted, boleto_id = save_boleto_entry(
+            pdf_path=str(pdf_path),
+            value=100.0,
+            emission_date="01/01/2025",
+            deadline_date="15/01/2025",
+            codigo_barras="old_raw",
+            codigo_barras_digits="1111",
+            fiscal_mes="2025-01",
+        )
+        assert inserted and boleto_id is not None
+
+        fake_doc = BoletoParsed(
+            value=250.0,
+            emission_date="05/02/2025",
+            deadline_date="20/02/2025",
+            codigo_barras_raw="doc_raw_new",
+            codigo_barras_digits="2222",
+            source="test",
+        )
+        with patch("pjtracker.api.routers.boletos.parse_boleto_pdf", return_value=fake_doc):
+            r = client.post(f"/api/v1/boletos/{boleto_id}/reprocess")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["value"] == 250.0
+    assert body["emission_date"] == "05/02/2025"
+    assert body["deadline_date"] == "20/02/2025"
+    assert body["codigo_barras"] == "doc_raw_new"
+    assert body["codigo_barras_digits"] == "2222"
+    assert body["receipt_path"] is None
+    assert body["receipt_match_status"] is None
+    assert body["fiscal_mes"] == "2025-01"
+
+
+def test_reprocess_boleto_refreshes_pdf_and_receipt_fields(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        pdf_path = save_boleto_pdf(b"%PDF", emission_date="01/01/2025", value=100.0)
+        inserted, boleto_id = save_boleto_entry(
+            pdf_path=str(pdf_path),
+            value=100.0,
+            emission_date="01/01/2025",
+            deadline_date="15/01/2025",
+            codigo_barras="old_raw",
+            codigo_barras_digits="1111",
+            fiscal_mes="2025-01",
+        )
+        assert inserted and boleto_id is not None
+
+        receipt_path = app_module.save_boleto_receipt(boleto_id, b"fake-image", "png")
+        app_module.update_boleto_receipt(
+            boleto_id,
+            str(receipt_path),
+            "01/01/2025 10:00:00",
+            receipt_value=100.0,
+            receipt_codigo_barras="old_receipt_raw",
+            receipt_codigo_barras_digits="9999",
+            receipt_match_status="mismatch",
+        )
+
+        fake_doc = BoletoParsed(
+            value=333.0,
+            emission_date="06/02/2025",
+            deadline_date="22/02/2025",
+            codigo_barras_raw="doc_raw_reprocessed",
+            codigo_barras_digits="7777",
+            source="test",
+        )
+        fake_receipt = ReceiptParsed(
+            value=333.0,
+            payment_datetime="07/02/2025 09:08:07",
+            codigo_barras_raw="receipt_raw_reprocessed",
+            codigo_barras_digits="7777",
+            source="test",
+        )
+        with (
+            patch("pjtracker.api.routers.boletos.parse_boleto_pdf", return_value=fake_doc),
+            patch("pjtracker.api.routers.boletos.parse_receipt_image", return_value=fake_receipt),
+        ):
+            r = client.post(f"/api/v1/boletos/{boleto_id}/reprocess")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["value"] == 333.0
+    assert body["codigo_barras"] == "doc_raw_reprocessed"
+    assert body["codigo_barras_digits"] == "7777"
+    assert body["receipt_date"] == "07/02/2025 09:08:07"
+    assert body["receipt_value"] == 333.0
+    assert body["receipt_codigo_barras"] == "receipt_raw_reprocessed"
+    assert body["receipt_codigo_barras_digits"] == "7777"
+    assert body["receipt_match_status"] == "match"
+    assert body["fiscal_mes"] == "2025-01"
 
 
 def test_patch_darf_fields_persists_and_recomputes_match_status(client: TestClient):

@@ -297,6 +297,10 @@ export async function updateBoletoReceipt(
 	return apiForm<BoletoEntry>(`/boletos/${id}/receipt`, form, 'PUT');
 }
 
+export async function reprocessBoleto(id: number): Promise<BoletoEntry> {
+	return apiJson<BoletoEntry>(`/boletos/${id}/reprocess`, { method: 'POST' });
+}
+
 export async function deleteBoleto(id: number): Promise<void> {
 	await apiJson(`/boletos/${id}`, { method: 'DELETE' });
 }

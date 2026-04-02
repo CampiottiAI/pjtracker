@@ -51,6 +51,7 @@
 		patchFiscalMesFn,
 		patchFieldsFn,
 		getBarcodeDiffFn,
+		reprocessFn = undefined,
 		replacePdfFn,
 		replaceReceiptFn,
 		getFn
@@ -70,6 +71,7 @@
 		patchFiscalMesFn: (id: number, fm: string | null) => Promise<BoletoEntry>;
 		patchFieldsFn: (id: number, payload: BoletoLikeFieldsPatch) => Promise<BoletoEntry>;
 		getBarcodeDiffFn: (id: number) => Promise<string>;
+		reprocessFn?: (id: number) => Promise<BoletoEntry>;
 		replacePdfFn: (id: number, file: File) => Promise<BoletoEntry>;
 		replaceReceiptFn: (
 			id: number,
@@ -109,6 +111,7 @@
 	let barcodeDiffLoading = $state(false);
 	let detailEditing = $state(false);
 	let detailSaving = $state(false);
+	let reprocessing = $state(false);
 	let detailValue = $state('');
 	let detailEmissionDate = $state('');
 	let detailDeadlineDate = $state('');
@@ -298,6 +301,7 @@
 		barcodeDiffLoading = false;
 		detailEditing = false;
 		detailSaving = false;
+		reprocessing = false;
 		replacingPdf = false;
 		replacingReceipt = false;
 		replaceReceiptFile = null;
@@ -318,6 +322,23 @@
 			}
 		} catch {
 			// silently fail
+		}
+	}
+
+	async function handleReprocess() {
+		if (!detailItem || !reprocessFn) return;
+		reprocessing = true;
+		try {
+			detailItem = await reprocessFn(detailItem.id);
+			resetDetailEdit(detailItem);
+			detailEditing = false;
+			barcodeDiff = null;
+			toast.success(`${domainLabel} reprocessed`);
+			await loadItems();
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Reprocess failed');
+		} finally {
+			reprocessing = false;
 		}
 	}
 
@@ -826,6 +847,24 @@
 							<div class="flex items-center gap-2">
 								<FileText class="h-4 w-4 text-muted-foreground" />
 								<Card.Title class="text-sm">{domainLabel} Document</Card.Title>
+							{#if reprocessFn}
+								<Button
+									variant="ghost"
+									size="sm"
+									class="h-7 px-2 text-xs"
+									title={`Reprocess stored ${domainLabel.toLowerCase()} files`}
+									onclick={handleReprocess}
+									disabled={reprocessing || replacingPdf || detailSaving || detailEditing}
+								>
+									{#if reprocessing}
+										<Loader2 class="h-3.5 w-3.5 animate-spin" />
+										Reprocessing...
+									{:else}
+										<RefreshCw class="h-3.5 w-3.5" />
+										Reprocess
+									{/if}
+								</Button>
+							{/if}
 								<Button
 									variant="ghost"
 									size="icon"

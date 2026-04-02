@@ -172,6 +172,73 @@ def get_boleto(boleto_id: int) -> dict:
     return dict(row)
 
 
+@router.post("/{boleto_id}/reprocess")
+def reprocess_boleto(boleto_id: int) -> dict:
+    row = get_boleto_by_id(boleto_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Boleto not found")
+
+    pdf_path = resolve_stored_path(row.get("pdf_path"))
+    if not pdf_path or not pdf_path.is_file():
+        raise HTTPException(status_code=404, detail="Stored boleto PDF not found")
+
+    pdf_bytes = pdf_path.read_bytes()
+    if not pdf_bytes:
+        raise HTTPException(status_code=422, detail="Stored boleto PDF is empty")
+
+    parsed = parse_boleto_pdf(pdf_bytes, filename=pdf_path.name)
+
+    receipt_date = row.get("receipt_date")
+    receipt_value = row.get("receipt_value")
+    receipt_codigo_barras = row.get("receipt_codigo_barras")
+    receipt_codigo_barras_digits = row.get("receipt_codigo_barras_digits")
+
+    receipt_path = resolve_stored_path(row.get("receipt_path"))
+    if receipt_path:
+        if not receipt_path.is_file():
+            raise HTTPException(status_code=404, detail="Stored receipt image not found")
+        receipt_bytes = receipt_path.read_bytes()
+        if not receipt_bytes:
+            raise HTTPException(status_code=422, detail="Stored receipt image is empty")
+        receipt_mime, _ = mimetypes.guess_type(str(receipt_path))
+        rec_parsed = parse_receipt_image(
+            receipt_bytes,
+            filename=receipt_path.name,
+            mime_type=receipt_mime or "image/png",
+        )
+        if not rec_parsed.payment_datetime:
+            raise HTTPException(
+                status_code=422,
+                detail="Stored receipt image requires extractable payment datetime",
+            )
+        receipt_date = rec_parsed.payment_datetime
+        receipt_value = rec_parsed.value
+        receipt_codigo_barras = rec_parsed.codigo_barras_raw
+        receipt_codigo_barras_digits = rec_parsed.codigo_barras_digits
+
+    ok = update_boleto_fields(
+        boleto_id,
+        value=parsed.value,
+        emission_date=parsed.emission_date,
+        deadline_date=parsed.deadline_date,
+        codigo_barras=parsed.codigo_barras_raw,
+        codigo_barras_digits=parsed.codigo_barras_digits,
+        receipt_date=receipt_date,
+        receipt_value=receipt_value,
+        receipt_codigo_barras=receipt_codigo_barras,
+        receipt_codigo_barras_digits=receipt_codigo_barras_digits,
+        fiscal_mes=row.get("fiscal_mes"),
+    )
+    if not ok:
+        raise conflict(
+            "duplicate_boleto_hash",
+            "Another boleto already has the same content hash.",
+        )
+    row2 = get_boleto_by_id(boleto_id)
+    assert row2
+    return dict(row2)
+
+
 @router.patch("/{boleto_id}")
 def patch_boleto(boleto_id: int, body: PatchFiscalMes) -> dict:
     if not get_boleto_by_id(boleto_id):

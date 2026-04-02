@@ -8,6 +8,7 @@
 		patchBoletoFiscalMes,
 		patchBoletoFields,
 		getBoletoBarcodeDiff,
+		reprocessBoleto,
 		updateBoletoPdf,
 		updateBoletoReceipt,
 		getBoleto
@@ -24,6 +25,7 @@
 	patchFiscalMesFn={patchBoletoFiscalMes}
 	patchFieldsFn={patchBoletoFields}
 	getBarcodeDiffFn={getBoletoBarcodeDiff}
+	reprocessFn={reprocessBoleto}
 	replacePdfFn={updateBoletoPdf}
 	replaceReceiptFn={updateBoletoReceipt}
 	getFn={getBoleto}
