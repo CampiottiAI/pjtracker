@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { scaleTime, scaleLinear } from 'd3-scale';
-	import { Chart, Svg, Axis, Spline, Highlight, Tooltip, Grid } from 'layerchart';
+	import { Chart, Svg, Axis, Spline, Highlight, Tooltip } from 'layerchart';
 	import {
 		ApiError,
 		formatApiErrorMessage,
@@ -58,6 +58,18 @@
 		[key: string]: unknown;
 	};
 
+	const chartFrameClass =
+		'analytics-chart h-64 rounded-xl border border-border/70 bg-background/40 px-3 pt-3 pb-2 shadow-inner shadow-black/25';
+	const tooltipCardClass =
+		'min-w-44 rounded-lg border border-border/80 bg-card/95 px-3 py-2 text-xs text-card-foreground shadow-2xl backdrop-blur-sm';
+	const tooltipHeaderClass =
+		'mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground';
+	const tooltipRowClass = 'flex items-center justify-between gap-4';
+	const tooltipLabelClass = 'flex items-center gap-2 text-muted-foreground';
+	const tooltipValueClass = 'font-semibold text-card-foreground';
+	const legendClass = 'mt-4 flex flex-wrap items-center gap-4 text-xs font-medium text-foreground/90';
+	const legendSwatchClass = 'inline-block h-2.5 w-5 rounded-full ring-1 ring-white/10';
+
 	const chartData = $derived<ChartPoint[]>(
 		points.map((p) => ({
 			...p,
@@ -104,8 +116,8 @@
 			<Card.Header>
 				<Card.Title class="text-sm">USD over Time</Card.Title>
 			</Card.Header>
-			<Card.Content>
-				<div class="h-64">
+			<Card.Content class="space-y-4">
+				<div class={chartFrameClass}>
 					<Chart
 						data={chartData}
 						x="date"
@@ -113,22 +125,27 @@
 						y="usd"
 						yScale={scaleLinear()}
 						yNice
-						padding={{ left: 48, bottom: 24, top: 8, right: 16 }}
+						padding={{ left: 56, bottom: 30, top: 14, right: 18 }}
 					>
 						<Svg>
-							<Axis placement="left" format={(v) => formatUsd(v)} />
-							<Axis placement="bottom" />
-							<Grid />
-							<Spline class="stroke-chart-1 stroke-2" />
+							<Axis placement="left" format={(v) => formatUsd(v)} grid rule />
+							<Axis placement="bottom" rule />
+							<Spline class="stroke-chart-1 stroke-[2.5]" />
 							<Highlight points lines />
 						</Svg>
-						<Tooltip.Root let:data>
-							<Tooltip.Header>
-								{data.date?.toLocaleDateString('pt-BR')}
-							</Tooltip.Header>
-							<Tooltip.List>
-								<Tooltip.Item label="USD" value={formatUsd(data.usd)} />
-							</Tooltip.List>
+						<Tooltip.Root x="data" y="pointer" let:data>
+							<div class={tooltipCardClass}>
+								<p class={tooltipHeaderClass}>{data.date?.toLocaleDateString('pt-BR')}</p>
+								<div class="space-y-1.5">
+									<div class={tooltipRowClass}>
+										<span class={tooltipLabelClass}>
+											<span class="h-2.5 w-2.5 rounded-full bg-chart-1"></span>
+											USD
+										</span>
+										<span class={tooltipValueClass}>{formatUsd(data.usd)}</span>
+									</div>
+								</div>
+							</div>
 						</Tooltip.Root>
 					</Chart>
 				</div>
@@ -141,8 +158,8 @@
 				<Card.Title class="text-sm">BRL over Time</Card.Title>
 				<Card.Description>No spread vs. with spread</Card.Description>
 			</Card.Header>
-			<Card.Content>
-				<div class="h-64">
+			<Card.Content class="space-y-4">
+				<div class={chartFrameClass}>
 					<Chart
 						data={chartData}
 						x="date"
@@ -150,30 +167,47 @@
 						y={['brl_no_spread', 'brl_with_spread']}
 						yScale={scaleLinear()}
 						yNice
-						padding={{ left: 56, bottom: 24, top: 8, right: 16 }}
+						padding={{ left: 64, bottom: 30, top: 14, right: 18 }}
 					>
 						<Svg>
-							<Axis placement="left" format={(v) => formatBrl(v)} />
-							<Axis placement="bottom" />
-							<Grid />
-							<Spline y="brl_no_spread" class="stroke-chart-2 stroke-2" />
-							<Spline y="brl_with_spread" class="stroke-chart-4 stroke-2" />
+							<Axis placement="left" format={(v) => formatBrl(v)} grid rule />
+							<Axis placement="bottom" rule />
+							<Spline y="brl_no_spread" class="stroke-chart-2 stroke-[2.5]" />
+							<Spline y="brl_with_spread" class="stroke-chart-4 stroke-[2.5]" />
 							<Highlight points lines />
 						</Svg>
-						<Tooltip.Root let:data>
-							<Tooltip.Header>
-								{data.date?.toLocaleDateString('pt-BR')}
-							</Tooltip.Header>
-							<Tooltip.List>
-								<Tooltip.Item label="BRL (no spread)" value={formatBrl(data.brl_no_spread)} />
-								<Tooltip.Item label="BRL (with spread)" value={formatBrl(data.brl_with_spread)} />
-							</Tooltip.List>
+						<Tooltip.Root x="data" y="pointer" let:data>
+							<div class={tooltipCardClass}>
+								<p class={tooltipHeaderClass}>{data.date?.toLocaleDateString('pt-BR')}</p>
+								<div class="space-y-1.5">
+									<div class={tooltipRowClass}>
+										<span class={tooltipLabelClass}>
+											<span class="h-2.5 w-2.5 rounded-full bg-chart-2"></span>
+											BRL (no spread)
+										</span>
+										<span class={tooltipValueClass}>{formatBrl(data.brl_no_spread)}</span>
+									</div>
+									<div class={tooltipRowClass}>
+										<span class={tooltipLabelClass}>
+											<span class="h-2.5 w-2.5 rounded-full bg-chart-4"></span>
+											BRL (with spread)
+										</span>
+										<span class={tooltipValueClass}>{formatBrl(data.brl_with_spread)}</span>
+									</div>
+								</div>
+							</div>
 						</Tooltip.Root>
 					</Chart>
 				</div>
-				<div class="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-					<span class="flex items-center gap-1"><span class="inline-block h-2 w-4 rounded bg-chart-2"></span> No spread</span>
-					<span class="flex items-center gap-1"><span class="inline-block h-2 w-4 rounded bg-chart-4"></span> With spread</span>
+				<div class={legendClass}>
+					<span class="flex items-center gap-2">
+						<span class={`${legendSwatchClass} bg-chart-2`}></span>
+						No spread
+					</span>
+					<span class="flex items-center gap-2">
+						<span class={`${legendSwatchClass} bg-chart-4`}></span>
+						With spread
+					</span>
 				</div>
 			</Card.Content>
 		</Card.Root>
@@ -184,8 +218,8 @@
 				<Card.Title class="text-sm">Exchange Rate over Time</Card.Title>
 				<Card.Description>Rate vs. effective rate</Card.Description>
 			</Card.Header>
-			<Card.Content>
-				<div class="h-64">
+			<Card.Content class="space-y-4">
+				<div class={chartFrameClass}>
 					<Chart
 						data={chartData}
 						x="date"
@@ -193,32 +227,75 @@
 						y={['rate', 'effective_rate']}
 						yScale={scaleLinear()}
 						yNice
-						padding={{ left: 48, bottom: 24, top: 8, right: 16 }}
+						padding={{ left: 56, bottom: 30, top: 14, right: 18 }}
 					>
 						<Svg>
-							<Axis placement="left" format={(v) => formatNumber(v, 4)} />
-							<Axis placement="bottom" />
-							<Grid />
-							<Spline y="rate" class="stroke-chart-1 stroke-2" />
-							<Spline y="effective_rate" class="stroke-chart-5 stroke-2" />
+							<Axis placement="left" format={(v) => formatNumber(v, 4)} grid rule />
+							<Axis placement="bottom" rule />
+							<Spline y="rate" class="stroke-chart-1 stroke-[2.5]" />
+							<Spline y="effective_rate" class="stroke-chart-5 stroke-[2.5]" />
 							<Highlight points lines />
 						</Svg>
-						<Tooltip.Root let:data>
-							<Tooltip.Header>
-								{data.date?.toLocaleDateString('pt-BR')}
-							</Tooltip.Header>
-							<Tooltip.List>
-								<Tooltip.Item label="Rate" value={formatNumber(data.rate, 4)} />
-								<Tooltip.Item label="Effective Rate" value={formatNumber(data.effective_rate, 4)} />
-							</Tooltip.List>
+						<Tooltip.Root x="data" y="pointer" let:data>
+							<div class={tooltipCardClass}>
+								<p class={tooltipHeaderClass}>{data.date?.toLocaleDateString('pt-BR')}</p>
+								<div class="space-y-1.5">
+									<div class={tooltipRowClass}>
+										<span class={tooltipLabelClass}>
+											<span class="h-2.5 w-2.5 rounded-full bg-chart-1"></span>
+											Rate
+										</span>
+										<span class={tooltipValueClass}>{formatNumber(data.rate, 4)}</span>
+									</div>
+									<div class={tooltipRowClass}>
+										<span class={tooltipLabelClass}>
+											<span class="h-2.5 w-2.5 rounded-full bg-chart-5"></span>
+											Effective Rate
+										</span>
+										<span class={tooltipValueClass}>{formatNumber(data.effective_rate, 4)}</span>
+									</div>
+								</div>
+							</div>
 						</Tooltip.Root>
 					</Chart>
 				</div>
-				<div class="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-					<span class="flex items-center gap-1"><span class="inline-block h-2 w-4 rounded bg-chart-1"></span> Rate</span>
-					<span class="flex items-center gap-1"><span class="inline-block h-2 w-4 rounded bg-chart-5"></span> Effective Rate</span>
+				<div class={legendClass}>
+					<span class="flex items-center gap-2">
+						<span class={`${legendSwatchClass} bg-chart-1`}></span>
+						Rate
+					</span>
+					<span class="flex items-center gap-2">
+						<span class={`${legendSwatchClass} bg-chart-5`}></span>
+						Effective Rate
+					</span>
 				</div>
 			</Card.Content>
 		</Card.Root>
 	{/if}
 </div>
+
+<style>
+	.analytics-chart :global(svg) {
+		overflow: visible;
+	}
+
+	.analytics-chart :global(svg text),
+	.analytics-chart :global(.tick text),
+	.analytics-chart :global([class*='axis'] text) {
+		fill: var(--color-foreground) !important;
+		font-size: 0.75rem;
+	}
+
+	.analytics-chart :global(svg .domain),
+	.analytics-chart :global(svg .tick line),
+	.analytics-chart :global(svg [class*='axis'] line),
+	.analytics-chart :global(svg [class*='axis'] path) {
+		stroke: color-mix(in oklab, var(--color-border) 75%, white 25%) !important;
+	}
+
+	.analytics-chart :global(.grid line),
+	.analytics-chart :global(.grid path) {
+		stroke: color-mix(in oklab, var(--color-border) 72%, transparent);
+		stroke-dasharray: 3 5;
+	}
+</style>
