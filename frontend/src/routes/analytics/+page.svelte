@@ -77,11 +77,13 @@
 		[key: string]: unknown;
 	};
 
-	type TaxChartPoint = {
-		date: Date;
+	type SummaryTableRow = {
 		fiscalMes: string;
 		monthlyTaxes: number;
 		cumulativeTaxes: number;
+		monthlyNfWithSpread: number;
+		cumulativeNfWithSpread: number;
+		cumulativeDifference: number;
 	};
 
 	function parseInputDate(value: string): Date | null {
@@ -107,6 +109,12 @@
 		return new Date(value.getFullYear(), value.getMonth(), 1);
 	}
 
+	function toFiscalMesFromDate(value: Date): string {
+		const year = value.getFullYear();
+		const month = String(value.getMonth() + 1).padStart(2, '0');
+		return `${year}-${month}`;
+	}
+
 	const chartFrameClass =
 		'analytics-chart h-64 rounded-xl border border-border/70 bg-background/40 px-3 pt-3 pb-2 shadow-inner shadow-black/25';
 	const tooltipCardClass =
@@ -126,12 +134,13 @@
 		}))
 	);
 
-	const taxChartData = $derived.by<TaxChartPoint[]>(() => {
+	const summaryTableRows = $derived.by<SummaryTableRow[]>(() => {
 		const monthStartBase = parseInputDate(dateFrom);
 		const monthStart = monthStartBase ? startOfMonth(monthStartBase) : null;
 		const monthEndBase = parseInputDate(dateTo);
 		const monthEnd = monthEndBase ? endOfMonth(monthEndBase) : null;
-		const monthlyTotals = new Map<string, number>();
+		const monthlyTaxes = new Map<string, number>();
+		const monthlyNfWithSpread = new Map<string, number>();
 
 		for (const entry of [...darfEntries, ...irpjCsllEntries]) {
 			if (!entry.fiscal_mes || entry.value == null) continue;
@@ -139,24 +148,40 @@
 			if (!fiscalMesDate) continue;
 			if (monthStart && fiscalMesDate < monthStart) continue;
 			if (monthEnd && fiscalMesDate > monthEnd) continue;
-			monthlyTotals.set(entry.fiscal_mes, (monthlyTotals.get(entry.fiscal_mes) ?? 0) + entry.value);
+			monthlyTaxes.set(entry.fiscal_mes, (monthlyTaxes.get(entry.fiscal_mes) ?? 0) + entry.value);
+		}
+
+		for (const point of points) {
+			const parsedDate = new Date(point.date);
+			if (Number.isNaN(parsedDate.getTime())) continue;
+			const fiscalMes = toFiscalMesFromDate(parsedDate);
+			monthlyNfWithSpread.set(
+				fiscalMes,
+				(monthlyNfWithSpread.get(fiscalMes) ?? 0) + point.brl_with_spread
+			);
 		}
 
 		let cumulativeTaxes = 0;
-		return Array.from(monthlyTotals.entries())
-			.sort(([left], [right]) => left.localeCompare(right))
-			.map(([fiscalMes, monthlyTaxes]) => {
-				cumulativeTaxes += monthlyTaxes;
+		let cumulativeNfWithSpread = 0;
+		return Array.from(new Set([...monthlyTaxes.keys(), ...monthlyNfWithSpread.keys()]))
+			.sort((left, right) => left.localeCompare(right))
+			.map((fiscalMes) => {
+				const monthlyTaxValue = monthlyTaxes.get(fiscalMes) ?? 0;
+				const monthlyNfValue = monthlyNfWithSpread.get(fiscalMes) ?? 0;
+				cumulativeTaxes += monthlyTaxValue;
+				cumulativeNfWithSpread += monthlyNfValue;
 				return {
-					date: parseFiscalMes(fiscalMes) ?? new Date(),
 					fiscalMes,
-					monthlyTaxes,
-					cumulativeTaxes
+					monthlyTaxes: monthlyTaxValue,
+					cumulativeTaxes,
+					monthlyNfWithSpread: monthlyNfValue,
+					cumulativeNfWithSpread,
+					cumulativeDifference: cumulativeNfWithSpread - cumulativeTaxes
 				};
 			});
 	});
 
-	const hasAnyChartData = $derived(chartData.length > 0 || taxChartData.length > 0);
+	const hasAnyChartData = $derived(chartData.length > 0 || summaryTableRows.length > 0);
 </script>
 
 <div class="space-y-6">
@@ -192,12 +217,12 @@
 			</Card.Content>
 		</Card.Root>
 	{:else if hasAnyChartData}
-		{#if taxChartData.length > 0}
+		{#if summaryTableRows.length > 0}
 			<Card.Root>
 				<Card.Header>
-					<Card.Title class="text-sm">Accumulated Taxes Paid</Card.Title>
+					<Card.Title class="text-sm">Monthly Tax and NF Summary</Card.Title>
 					<Card.Description>
-						DARF and IRPJ/CSLL totals grouped by fiscal month within the selected range
+						DARF and IRPJ/CSLL taxes plus NF totals with spread, grouped by month
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>
@@ -208,10 +233,13 @@
 									<Table.TableHead>Fiscal month</Table.TableHead>
 									<Table.TableHead class="text-right">Monthly taxes</Table.TableHead>
 									<Table.TableHead class="text-right">Accumulated taxes</Table.TableHead>
+									<Table.TableHead class="text-right">Monthly NF (with spread)</Table.TableHead>
+									<Table.TableHead class="text-right">Accumulated NF (with spread)</Table.TableHead>
+									<Table.TableHead class="text-right">Accumulated difference</Table.TableHead>
 								</Table.TableRow>
 							</Table.TableHeader>
 							<Table.TableBody>
-								{#each taxChartData as row (row.fiscalMes)}
+								{#each summaryTableRows as row (row.fiscalMes)}
 									<Table.TableRow>
 										<Table.TableCell>{formatFiscalMes(row.fiscalMes)}</Table.TableCell>
 										<Table.TableCell class="text-right tabular-nums">
@@ -219,6 +247,15 @@
 										</Table.TableCell>
 										<Table.TableCell class="text-right tabular-nums">
 											{formatBrl(row.cumulativeTaxes)}
+										</Table.TableCell>
+										<Table.TableCell class="text-right tabular-nums">
+											{formatBrl(row.monthlyNfWithSpread)}
+										</Table.TableCell>
+										<Table.TableCell class="text-right tabular-nums">
+											{formatBrl(row.cumulativeNfWithSpread)}
+										</Table.TableCell>
+										<Table.TableCell class="text-right tabular-nums">
+											{formatBrl(row.cumulativeDifference)}
 										</Table.TableCell>
 									</Table.TableRow>
 								{/each}
