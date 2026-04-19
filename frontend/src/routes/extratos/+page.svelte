@@ -91,6 +91,8 @@
 	let replaceCaixinhaInputEl: HTMLInputElement | undefined = $state();
 	let replaceHiglobeInputEl: HTMLInputElement | undefined = $state();
 
+	const PRO_LABORE_VALUE = 1442.69;
+
 	// ---------------------------------------------------------------------------
 	// Lifecycle
 	// ---------------------------------------------------------------------------
@@ -165,6 +167,22 @@
 		uploadSaving = false;
 	}
 
+	function hasExpectedProLabore(entries: Record<string, unknown>[]): boolean {
+		return entries.some((entry) => {
+			const value = entry.valor;
+			return typeof value === 'number' && Math.abs(value - PRO_LABORE_VALUE) < 0.005;
+		});
+	}
+
+	function hasExpectedProLaboreFromJson(json: string | null): boolean {
+		return hasExpectedProLabore(parseJsonField(json));
+	}
+
+	function warnIfProLaboreMissing(entries: Record<string, unknown>[]): void {
+		if (hasExpectedProLabore(entries)) return;
+		toast.warning('Pro-Labore value 1.442,69 not found in this extrato');
+	}
+
 	async function handlePreview() {
 		if (!uploadExtrato) {
 			toast.error('Extrato PDF is required');
@@ -178,6 +196,7 @@
 				uploadCaixinha ?? undefined,
 				uploadHiglobe ?? undefined
 			);
+			warnIfProLaboreMissing(uploadPreview.extrato.entries);
 		} catch (e) {
 			toast.error(
 				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Preview failed'
@@ -191,6 +210,9 @@
 		if (!uploadExtrato || !uploadFiscalMes) {
 			toast.error('Extrato PDF and fiscal month are required');
 			return;
+		}
+		if (uploadPreview) {
+			warnIfProLaboreMissing(uploadPreview.extrato.entries);
 		}
 		uploadSaving = true;
 		try {
@@ -264,8 +286,9 @@
 		if (!detailItem || files.length === 0) return;
 		replacingExtrato = true;
 		try {
-			await updateExtratoPdf(detailItem.id, files[0]);
+			const updated = await updateExtratoPdf(detailItem.id, files[0]);
 			toast.success('Extrato PDF replaced');
+			warnIfProLaboreMissing(parseJsonField(updated.extrato_entries_json));
 			await refreshDetail(detailItem.id);
 			await loadExtratos();
 		} catch (e) {
@@ -438,6 +461,7 @@
 						{#each [
 							{ key: 'period_start', label: 'Period' },
 							{ key: 'saldo_final', label: 'Saldo Final' },
+							{ key: 'pro_labore', label: 'Pro-Labore' },
 							{ key: 'caixinha_pdf_path', label: 'Caixinha' },
 							{ key: 'higlobe_pdf_path', label: 'Higlobe' },
 							{ key: 'fiscal_mes', label: 'Fiscal Month' }
@@ -462,6 +486,12 @@
 								{formatDateBr(item.period_start)} - {formatDateBr(item.period_end)}
 							</Table.TableCell>
 							<Table.TableCell class="tabular-nums">{formatBrl(item.saldo_final)}</Table.TableCell>
+							<Table.TableCell>
+								<StatusBadge
+									status={hasExpectedProLaboreFromJson(item.extrato_entries_json) ? 'success' : 'warning'}
+									label={hasExpectedProLaboreFromJson(item.extrato_entries_json) ? 'Found' : 'Missing'}
+								/>
+							</Table.TableCell>
 							<Table.TableCell>
 								<StatusBadge
 									status={item.caixinha_pdf_path ? 'success' : 'neutral'}
@@ -722,6 +752,19 @@
 							<dt class="text-muted-foreground">Status</dt>
 							<dd>Attached</dd>
 						</dl>
+						<div
+							class={`rounded-md border px-3 py-2 text-sm ${
+								hasExpectedProLabore(detailEntries)
+									? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+									: 'border-amber-500/25 bg-amber-500/10 text-amber-300'
+							}`}
+						>
+							{#if hasExpectedProLabore(detailEntries)}
+								Pro-Labore value 1.442,69 found in this extrato.
+							{:else}
+								Warning: Pro-Labore value 1.442,69 was not found in this extrato.
+							{/if}
+						</div>
 						<div class="space-y-2">
 							<div class="text-xs font-medium text-muted-foreground">
 								Parsed Entries ({detailEntries.length})
