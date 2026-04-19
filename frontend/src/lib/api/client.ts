@@ -16,6 +16,7 @@ import type {
 	ExtratoEntry,
 	ExtratoPreview,
 	FiscalMonthsResponse,
+	CreateFiscalMonthResponse,
 	CompletenessResponse,
 	NfSeriesResponse
 } from './types';
@@ -568,6 +569,14 @@ export async function deleteHiglobe(id: number): Promise<void> {
 
 export async function listFiscalMonths(): Promise<FiscalMonthsResponse> {
 	return apiJson<FiscalMonthsResponse>('/fiscal-months');
+}
+
+export async function createFiscalMonth(fiscalMes: string): Promise<CreateFiscalMonthResponse> {
+	return apiJson<CreateFiscalMonthResponse>('/fiscal-months', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ fiscal_mes: fiscalMes })
+	});
 }
 
 export async function getCompleteness(fiscalMes: string): Promise<CompletenessResponse> {

@@ -3,6 +3,7 @@
 	import { toast } from 'svelte-sonner';
 	import {
 		ApiError,
+		createFiscalMonth,
 		listFiscalMonths,
 		getCompleteness,
 		formatApiErrorMessage
@@ -11,7 +12,10 @@
 	import { cn } from '$lib/utils.js';
 	import { formatFiscalMes } from '$lib/utils/format.js';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import {
 		FileText,
@@ -20,21 +24,21 @@
 		WalletCards,
 		DollarSign,
 		CheckCircle2,
-		AlertCircle
+		AlertCircle,
+		Plus
 	} from 'lucide-svelte';
 
 	let months = $state<string[]>([]);
 	let selectedMonth = $state('');
 	let completeness = $state<CompletenessResponse | null>(null);
 	let loading = $state(true);
+	let createDialogOpen = $state(false);
+	let createMonthValue = $state('');
+	let creatingMonth = $state(false);
 
 	onMount(async () => {
 		try {
-			const res = await listFiscalMonths();
-			months = res.months;
-			if (months.length > 0) {
-				selectedMonth = months[0];
-			}
+			await loadMonths();
 		} catch (e) {
 			const msg = e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to load';
 			toast.error(msg);
@@ -60,6 +64,64 @@
 				toast.error(formatApiErrorMessage(e.body));
 			}
 		}
+	}
+
+	async function loadMonths(preferredMonth?: string) {
+		const res = await listFiscalMonths();
+		months = res.months;
+		if (months.length === 0) {
+			selectedMonth = '';
+			completeness = null;
+			return;
+		}
+		if (preferredMonth && months.includes(preferredMonth)) {
+			selectedMonth = preferredMonth;
+			return;
+		}
+		if (selectedMonth && months.includes(selectedMonth)) {
+			return;
+		}
+		selectedMonth = months[0];
+	}
+
+	function getCurrentMonthValue(): string {
+		const today = new Date();
+		const month = `${today.getMonth() + 1}`.padStart(2, '0');
+		return `${today.getFullYear()}-${month}`;
+	}
+
+	function openCreateMonthDialog() {
+		createMonthValue = selectedMonth || getCurrentMonthValue();
+		createDialogOpen = true;
+	}
+
+	async function handleCreateMonth() {
+		if (!createMonthValue) {
+			toast.error('Select a fiscal month');
+			return;
+		}
+		creatingMonth = true;
+		try {
+			const response = await createFiscalMonth(createMonthValue);
+			await loadMonths(createMonthValue);
+			createDialogOpen = false;
+			toast.success(
+				response.created
+					? `${formatFiscalMes(createMonthValue)} created`
+					: `${formatFiscalMes(createMonthValue)} already exists`
+			);
+		} catch (e) {
+			const msg =
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to create fiscal month';
+			toast.error(msg);
+		} finally {
+			creatingMonth = false;
+		}
+	}
+
+	function handleCreateMonthSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		void handleCreateMonth();
 	}
 
 	type CheckItem = {
@@ -134,7 +196,14 @@
 </script>
 
 <div class="space-y-6">
-	<PageHeader title="Dashboard" description="Fiscal month completeness overview" />
+	<PageHeader title="Dashboard" description="Fiscal month completeness overview">
+		{#snippet actions()}
+			<Button onclick={openCreateMonthDialog}>
+				<Plus class="h-4 w-4" />
+				Create fiscal month
+			</Button>
+		{/snippet}
+	</PageHeader>
 
 	<!-- Month selector -->
 	<div class="flex items-center gap-3">
@@ -230,3 +299,30 @@
 		</Card.Root>
 	{/if}
 </div>
+
+<Dialog.Root bind:open={createDialogOpen}>
+	<Dialog.Content>
+		<form class="space-y-4" onsubmit={handleCreateMonthSubmit}>
+			<Dialog.Header>
+				<Dialog.Title>Create fiscal month</Dialog.Title>
+				<Dialog.Description>
+					Create an empty fiscal month so it appears on the dashboard before any uploads.
+				</Dialog.Description>
+			</Dialog.Header>
+
+			<div class="space-y-2">
+				<label for="create-fiscal-month" class="text-sm font-medium">Fiscal month</label>
+				<Input id="create-fiscal-month" type="month" bind:value={createMonthValue} required />
+			</div>
+
+			<Dialog.Footer>
+				<Button type="button" variant="outline" onclick={() => (createDialogOpen = false)}>
+					Cancel
+				</Button>
+				<Button type="submit" disabled={creatingMonth}>
+					{creatingMonth ? 'Creating...' : 'Create'}
+				</Button>
+			</Dialog.Footer>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>

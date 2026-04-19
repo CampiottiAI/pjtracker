@@ -19,6 +19,12 @@ def init_db() -> None:
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS fiscal_months (
+                fiscal_mes TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS nf_entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 company TEXT,
@@ -289,6 +295,25 @@ def default_fiscal_mes_date() -> date:
     """First day of current month, for fiscal month picker default."""
     today = date.today()
     return today.replace(day=1)
+
+
+def get_explicit_fiscal_months() -> list[str]:
+    """Return explicitly created fiscal months, newest first."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            "SELECT fiscal_mes FROM fiscal_months ORDER BY fiscal_mes DESC",
+        )
+        return [str(row[0]) for row in cur.fetchall()]
+
+
+def save_fiscal_month(fiscal_mes: str) -> bool:
+    """Persist an explicit fiscal month. Returns True when inserted, False when it already existed."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO fiscal_months (fiscal_mes, created_at) VALUES (?, ?)",
+            (fiscal_mes, datetime.now(timezone.utc).isoformat()),
+        )
+        return cur.rowcount > 0
 
 
 def save_pdf(pdf_bytes: bytes, verification_code: str, nf_date: str | None, usd: float) -> Path:

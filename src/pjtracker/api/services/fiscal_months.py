@@ -5,6 +5,7 @@ from __future__ import annotations
 from pjtracker.app import (
     get_boletos,
     get_darfs,
+    get_explicit_fiscal_months,
     get_extratos,
     get_irpj_cslls,
     get_nf_entries,
@@ -26,7 +27,7 @@ def is_irpj_csll_required(fiscal_mes: str) -> bool:
 
 
 def collect_fiscal_months() -> list[str]:
-    months: set[str] = set()
+    months: set[str] = set(get_explicit_fiscal_months())
     for row in get_nf_entries():
         fm = row.get("fiscal_mes")
         if fm and str(fm).strip():

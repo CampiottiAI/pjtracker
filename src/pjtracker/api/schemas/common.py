@@ -27,6 +27,23 @@ class PatchFiscalMes(BaseModel):
         return s
 
 
+class CreateFiscalMonthRequest(BaseModel):
+    fiscal_mes: str = Field(description="YYYY-MM")
+
+    @field_validator("fiscal_mes", mode="before")
+    @classmethod
+    def normalize_fiscal_mes(cls, value: str) -> str:
+        s = str(value).strip()
+        if not FISCAL_MES_REGEX.match(s):
+            raise ValueError("fiscal_mes must be YYYY-MM")
+        return s
+
+
+class FiscalMonthResponse(BaseModel):
+    fiscal_mes: str
+    created: bool
+
+
 class PatchBoletoLikeFields(BaseModel):
     value: float | None = Field(default=None)
     emission_date: str | None = Field(default=None)

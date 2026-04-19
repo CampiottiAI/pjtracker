@@ -207,6 +207,47 @@ def test_fiscal_months_list(client: TestClient):
     assert "2025-04" in r.json()["months"]
 
 
+def test_create_empty_fiscal_month_and_list_it(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+
+        create_response = client.post(
+            "/api/v1/fiscal-months",
+            json={"fiscal_mes": "2025-05"},
+        )
+        assert create_response.status_code == 200
+        assert create_response.json() == {"fiscal_mes": "2025-05", "created": True}
+
+        list_response = client.get("/api/v1/fiscal-months")
+
+    assert list_response.status_code == 200
+    assert list_response.json()["months"] == ["2025-05"]
+
+
+def test_create_fiscal_month_is_idempotent(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+
+        first = client.post("/api/v1/fiscal-months", json={"fiscal_mes": "2025-06"})
+        second = client.post("/api/v1/fiscal-months", json={"fiscal_mes": "2025-06"})
+        list_response = client.get("/api/v1/fiscal-months")
+
+    assert first.status_code == 200
+    assert first.json() == {"fiscal_mes": "2025-06", "created": True}
+    assert second.status_code == 200
+    assert second.json() == {"fiscal_mes": "2025-06", "created": False}
+    assert list_response.status_code == 200
+    assert list_response.json()["months"] == ["2025-06"]
+
+
+def test_create_fiscal_month_rejects_invalid_format(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        response = client.post("/api/v1/fiscal-months", json={"fiscal_mes": "2025/05"})
+
+    assert response.status_code == 422
+
+
 def test_patch_boleto_fields_persists_and_recomputes_match_status(client: TestClient):
     with temporary_app_paths():
         init_db()

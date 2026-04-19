@@ -194,6 +194,11 @@ export type FiscalMonthsResponse = {
 	months: string[];
 };
 
+export type CreateFiscalMonthResponse = {
+	fiscal_mes: string;
+	created: boolean;
+};
+
 /** Fiscal month completeness. */
 export type CompletenessResponse = {
 	fiscal_mes: string;
