@@ -16,10 +16,14 @@ from pjtracker.api.schemas.common import (
 )
 from pjtracker.api.services.paths import project_root, resolve_stored_path
 from pjtracker.app import (
+    clear_irpj_csll_attachment_pdf,
     delete_irpj_csll,
     get_irpj_csll_by_id,
     get_irpj_cslls,
+    replace_irpj_csll_attachment_pdf,
+    save_irpj_csll_attachment_pdf,
     save_irpj_csll_entry,
+    set_irpj_csll_attachment_pdf_path,
     save_irpj_csll_pdf,
     save_irpj_csll_receipt,
     update_irpj_csll_fields,
@@ -73,6 +77,9 @@ async def create_irpj_csll(
     receipt: UploadFile | None = File(None),
     receipt_date: str | None = Form(None),
     receipt_time: str | None = Form(None),
+    attachment_pdf: UploadFile | None = File(
+        None, description="Optional extra PDF stored without extraction"
+    ),
 ) -> dict:
     fm = fiscal_mes.strip()
     if not FISCAL_MES_REGEX.match(fm):
@@ -81,6 +88,15 @@ async def create_irpj_csll(
     pdf_bytes = await file.read()
     if not pdf_bytes:
         raise HTTPException(status_code=422, detail="Empty PDF")
+
+    attachment_bytes = await attachment_pdf.read() if attachment_pdf else None
+    if attachment_bytes is not None and not attachment_bytes:
+        attachment_bytes = None
+    if attachment_bytes is not None and not attachment_bytes.startswith(b"%PDF"):
+        raise HTTPException(
+            status_code=422,
+            detail="attachment_pdf must be a PDF",
+        )
 
     parsed = parse_irpj_csll_pdf(pdf_bytes, filename=file.filename or "irpj_csll.pdf")
     receipt_bytes = await receipt.read() if receipt else None
@@ -153,6 +169,17 @@ async def create_irpj_csll(
                 receipt_payload["codigo_barras_digits"],
             ),
         )
+
+    if attachment_bytes:
+        apath = save_irpj_csll_attachment_pdf(irpj_csll_id, attachment_bytes)
+        try:
+            set_irpj_csll_attachment_pdf_path(irpj_csll_id, str(apath))
+        except Exception:
+            p_att = Path(str(apath))
+            if not p_att.is_absolute():
+                p_att = project_root() / str(apath)
+            p_att.unlink(missing_ok=True)
+            raise
 
     row = get_irpj_csll_by_id(irpj_csll_id)
     assert row
@@ -337,6 +364,47 @@ def download_irpj_csll_receipt(irpj_csll_id: int) -> FileResponse:
         raise HTTPException(status_code=404, detail="Receipt not found")
     mt, _ = mimetypes.guess_type(str(path))
     return FileResponse(path, media_type=mt or "image/png", filename=path.name)
+
+
+@router.get("/{irpj_csll_id}/attachment-pdf")
+def download_irpj_csll_attachment_pdf(irpj_csll_id: int) -> FileResponse:
+    row = get_irpj_csll_by_id(irpj_csll_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="IRPJ/CSLL not found")
+    path = resolve_stored_path(row.get("attachment_pdf_path"))
+    if not path or not path.is_file():
+        raise HTTPException(status_code=404, detail="Attachment PDF not found")
+    mt, _ = mimetypes.guess_type(str(path))
+    return FileResponse(path, media_type=mt or "application/pdf", filename=path.name)
+
+
+@router.put("/{irpj_csll_id}/attachment-pdf")
+async def put_irpj_csll_attachment_pdf(
+    irpj_csll_id: int,
+    file: UploadFile = File(..., description="Extra PDF stored without extraction"),
+) -> dict:
+    if not get_irpj_csll_by_id(irpj_csll_id):
+        raise HTTPException(status_code=404, detail="IRPJ/CSLL not found")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Empty PDF")
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(status_code=422, detail="File must be a PDF")
+    if not replace_irpj_csll_attachment_pdf(irpj_csll_id, data):
+        raise HTTPException(status_code=404, detail="IRPJ/CSLL not found")
+    row2 = get_irpj_csll_by_id(irpj_csll_id)
+    assert row2
+    return dict(row2)
+
+
+@router.delete("/{irpj_csll_id}/attachment-pdf", status_code=204)
+def remove_irpj_csll_attachment_pdf(irpj_csll_id: int) -> None:
+    row = get_irpj_csll_by_id(irpj_csll_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="IRPJ/CSLL not found")
+    if not row.get("attachment_pdf_path"):
+        raise HTTPException(status_code=404, detail="No attachment PDF to remove")
+    clear_irpj_csll_attachment_pdf(irpj_csll_id)
 
 
 @router.get("/{irpj_csll_id}/barcode-diff", response_class=PlainTextResponse)

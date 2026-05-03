@@ -257,6 +257,7 @@ class RefactorTests(unittest.TestCase):
                 }
             self.assertIn("codigo_barras", columns)
             self.assertIn("receipt_codigo_barras_digits", columns)
+            self.assertIn("attachment_pdf_path", columns)
 
 
 if __name__ == "__main__":

@@ -38,7 +38,8 @@
 		RefreshCw,
 		FileText,
 		Receipt,
-		Pencil
+		Pencil,
+		Paperclip
 	} from 'lucide-svelte';
 
 	let {
@@ -54,7 +55,10 @@
 		reprocessFn = undefined,
 		replacePdfFn,
 		replaceReceiptFn,
-		getFn
+		getFn,
+		supplementaryPdfLabel = undefined,
+		replaceSupplementaryPdfFn = undefined,
+		deleteSupplementaryPdfFn = undefined
 	}: {
 		domainLabel: string;
 		routePrefix: string;
@@ -65,8 +69,12 @@
 			fiscalMes: string,
 			receipt?: File,
 			receiptDate?: string,
-			receiptTime?: string
+			receiptTime?: string,
+			supplementaryPdf?: File
 		) => Promise<BoletoEntry>;
+		supplementaryPdfLabel?: string;
+		replaceSupplementaryPdfFn?: (id: number, file: File) => Promise<BoletoEntry>;
+		deleteSupplementaryPdfFn?: (id: number) => Promise<void>;
 		deleteFn: (id: number) => Promise<void>;
 		patchFiscalMesFn: (id: number, fm: string | null) => Promise<BoletoEntry>;
 		patchFieldsFn: (id: number, payload: BoletoLikeFieldsPatch) => Promise<BoletoEntry>;
@@ -103,6 +111,7 @@
 	let uploadReceiptDate = $state('');
 	let uploadReceiptTime = $state('');
 	let uploadSaving = $state(false);
+	let uploadExtraPdf = $state<File | null>(null);
 
 	// Detail sheet
 	let detailOpen = $state(false);
@@ -135,6 +144,8 @@
 
 	let replacePdfInputEl: HTMLInputElement | undefined = $state();
 	let replaceReceiptInputEl: HTMLInputElement | undefined = $state();
+	let replacingSupplementaryPdf = $state(false);
+	let replaceSupplementaryPdfInputEl: HTMLInputElement | undefined = $state();
 
 	// Delete dialog
 	let deleteDialogOpen = $state(false);
@@ -223,6 +234,7 @@
 		uploadReceiptDate = '';
 		uploadReceiptTime = '';
 		uploadSaving = false;
+		uploadExtraPdf = null;
 	}
 
 	async function handleDocFileSelected(files: File[]) {
@@ -265,6 +277,11 @@
 		}
 	}
 
+	function handleExtraPdfSelected(files: File[]) {
+		if (files.length === 0) return;
+		uploadExtraPdf = files[0];
+	}
+
 	async function handleSave() {
 		if (!uploadFile || !uploadFiscalMes) {
 			toast.error('PDF and fiscal month are required');
@@ -277,7 +294,8 @@
 				uploadFiscalMes,
 				uploadReceipt ?? undefined,
 				uploadReceiptDate || undefined,
-				uploadReceiptTime || undefined
+				uploadReceiptTime || undefined,
+				supplementaryPdfLabel ? uploadExtraPdf ?? undefined : undefined
 			);
 			toast.success(`${domainLabel} saved successfully`);
 			uploadOpen = false;
@@ -310,7 +328,48 @@
 		replaceReceiptDate = '';
 		replaceReceiptTime = '';
 		showReplaceReceiptForm = false;
+		replacingSupplementaryPdf = false;
 		detailOpen = true;
+	}
+
+	async function handleReplaceSupplementaryPdf(files: File[]) {
+		if (!detailItem || files.length === 0 || !replaceSupplementaryPdfFn) return;
+		replacingSupplementaryPdf = true;
+		try {
+			detailItem = await replaceSupplementaryPdfFn(detailItem.id, files[0]);
+			toast.success('Extra PDF updated');
+			barcodeDiff = null;
+			await loadItems();
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Update failed');
+		} finally {
+			replacingSupplementaryPdf = false;
+		}
+	}
+
+	function openReplaceSupplementaryPdfPicker() {
+		replaceSupplementaryPdfInputEl?.click();
+	}
+
+	function handleReplaceSupplementaryPdfInputChange(e: Event) {
+		const target = e.target as HTMLInputElement;
+		void handleReplaceSupplementaryPdf(Array.from(target.files ?? []));
+		target.value = '';
+	}
+
+	async function handleDeleteSupplementaryPdf() {
+		if (!detailItem?.id || !deleteSupplementaryPdfFn) return;
+		replacingSupplementaryPdf = true;
+		try {
+			await deleteSupplementaryPdfFn(detailItem.id);
+			detailItem = await getFn(detailItem.id);
+			toast.success('Extra PDF removed');
+			await loadItems();
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Remove failed');
+		} finally {
+			replacingSupplementaryPdf = false;
+		}
 	}
 
 	async function refreshDetail() {
@@ -776,6 +835,22 @@
 					</div>
 				{/if}
 
+				{#if supplementaryPdfLabel}
+					<div class="space-y-2">
+						<span class="text-sm font-medium">{supplementaryPdfLabel}</span>
+						<p class="text-xs text-muted-foreground">
+							Optional. Stored without data extraction alongside the document above.
+						</p>
+						<FileDropZone
+							accept=".pdf,application/pdf"
+							loading={false}
+							bind:file={uploadExtraPdf}
+							onchange={handleExtraPdfSelected}
+							label="Drop extra PDF here"
+						/>
+					</div>
+				{/if}
+
 				<!-- Fiscal month -->
 				<div class="space-y-2">
 					<span class="text-sm font-medium">Fiscal Month <span class="text-destructive-foreground">*</span></span>
@@ -955,6 +1030,77 @@
 						onchange={handleReplacePdfInputChange}
 					/>
 				</Card.Root>
+
+				{#if supplementaryPdfLabel && replaceSupplementaryPdfFn}
+					<Card.Root>
+						<Card.Header class="pb-3">
+							<div class="flex flex-wrap items-center justify-between gap-2">
+								<div class="flex items-center gap-2">
+									<Paperclip class="h-4 w-4 text-muted-foreground" />
+									<Card.Title class="text-sm">{supplementaryPdfLabel}</Card.Title>
+									<Button
+										variant="ghost"
+										size="icon"
+										class="h-7 w-7"
+										title={detailItem.attachment_pdf_path ? 'Replace extra PDF' : 'Add extra PDF'}
+										onclick={openReplaceSupplementaryPdfPicker}
+										disabled={replacingSupplementaryPdf || detailEditing}
+									>
+										{#if replacingSupplementaryPdf}
+											<Loader2 class="h-3.5 w-3.5 animate-spin" />
+										{:else}
+											<Pencil class="h-3.5 w-3.5" />
+										{/if}
+									</Button>
+								</div>
+								<div class="flex items-center gap-2">
+									{#if detailItem.attachment_pdf_path}
+										<Button
+											variant="outline"
+											size="sm"
+											class="h-7 text-xs"
+											disabled={replacingSupplementaryPdf}
+											onclick={() =>
+												downloadFile(
+													`/${routePrefix}/${detailItem!.id}/attachment-pdf`,
+													`${routePrefix}_${detailItem!.id}_extra.pdf`
+												)}
+										>
+											<Download class="h-3.5 w-3.5" />
+											PDF
+										</Button>
+										{#if deleteSupplementaryPdfFn}
+											<Button
+												variant="ghost"
+												size="sm"
+												class="h-7 text-xs text-destructive-foreground"
+												disabled={replacingSupplementaryPdf}
+												onclick={handleDeleteSupplementaryPdf}
+											>
+												Remove
+											</Button>
+										{/if}
+									{/if}
+								</div>
+							</div>
+						</Card.Header>
+						<Card.Content>
+							<p class="text-xs text-muted-foreground">
+								Optional document stored as-is without parsing.
+							</p>
+							{#if !detailItem.attachment_pdf_path}
+								<p class="text-sm text-muted-foreground mt-2">No extra PDF uploaded.</p>
+							{/if}
+						</Card.Content>
+						<input
+							bind:this={replaceSupplementaryPdfInputEl}
+							type="file"
+							accept=".pdf,application/pdf"
+							class="sr-only"
+							onchange={handleReplaceSupplementaryPdfInputChange}
+						/>
+					</Card.Root>
+				{/if}
 
 				<!-- Receipt Card -->
 				<Card.Root>

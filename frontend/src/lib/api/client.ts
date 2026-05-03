@@ -239,7 +239,8 @@ export async function createBoleto(
 	fiscalMes: string,
 	receipt?: File,
 	receiptDate?: string,
-	receiptTime?: string
+	receiptTime?: string,
+	_supplementaryPdf?: File
 ): Promise<BoletoEntry> {
 	const form = new FormData();
 	form.append('file', file);
@@ -328,7 +329,8 @@ export async function createDarf(
 	fiscalMes: string,
 	receipt?: File,
 	receiptDate?: string,
-	receiptTime?: string
+	receiptTime?: string,
+	_supplementaryPdf?: File
 ): Promise<DarfEntry> {
 	const form = new FormData();
 	form.append('file', file);
@@ -413,7 +415,8 @@ export async function createIrpjCsll(
 	fiscalMes: string,
 	receipt?: File,
 	receiptDate?: string,
-	receiptTime?: string
+	receiptTime?: string,
+	attachmentPdf?: File
 ): Promise<IrpjCsllEntry> {
 	const form = new FormData();
 	form.append('file', file);
@@ -421,7 +424,21 @@ export async function createIrpjCsll(
 	if (receipt) form.append('receipt', receipt);
 	if (receiptDate) form.append('receipt_date', receiptDate);
 	if (receiptTime) form.append('receipt_time', receiptTime);
+	if (attachmentPdf) form.append('attachment_pdf', attachmentPdf);
 	return apiForm<IrpjCsllEntry>('/irpj-csll', form);
+}
+
+export async function updateIrpjCsllAttachmentPdf(
+	id: number,
+	file: File
+): Promise<IrpjCsllEntry> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<IrpjCsllEntry>(`/irpj-csll/${id}/attachment-pdf`, form, 'PUT');
+}
+
+export async function deleteIrpjCsllAttachmentPdf(id: number): Promise<void> {
+	await apiJson(`/irpj-csll/${id}/attachment-pdf`, { method: 'DELETE' });
 }
 
 export async function listIrpjCsll(fiscalMes?: string): Promise<IrpjCsllEntry[]> {
@@ -539,13 +556,13 @@ export async function deleteExtrato(id: number): Promise<void> {
 
 export async function updateExtratoPdf(id: number, file: File): Promise<ExtratoEntry> {
 	const form = new FormData();
-	form.append('extrato', file);
+	form.append('file', file);
 	return apiForm<ExtratoEntry>(`/extratos/${id}/extrato-pdf`, form, 'PUT');
 }
 
 export async function updateCaixinhaPdf(id: number, file: File): Promise<ExtratoEntry> {
 	const form = new FormData();
-	form.append('caixinha', file);
+	form.append('file', file);
 	return apiForm<ExtratoEntry>(`/extratos/${id}/caixinha`, form, 'PUT');
 }
 
@@ -555,7 +572,7 @@ export async function deleteCaixinha(id: number): Promise<void> {
 
 export async function updateHiglobePdf(id: number, file: File): Promise<ExtratoEntry> {
 	const form = new FormData();
-	form.append('higlobe', file);
+	form.append('file', file);
 	return apiForm<ExtratoEntry>(`/extratos/${id}/higlobe`, form, 'PUT');
 }
 

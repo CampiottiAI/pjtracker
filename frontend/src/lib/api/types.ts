@@ -77,6 +77,8 @@ export type NfImage = {
 export type BoletoEntry = {
 	id: number;
 	pdf_path: string;
+	/** Extra PDF (IRPJ/CSLL only), stored without parsing. */
+	attachment_pdf_path?: string | null;
 	receipt_path: string | null;
 	value: number | null;
 	emission_date: string | null;

@@ -516,6 +516,67 @@ def test_create_irpj_csll_with_receipt(client: TestClient):
         assert listed[0]["fiscal_mes"] == "2025-03"
 
 
+def test_create_irpj_csll_with_optional_attachment_pdf(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        fake_doc = DarfParsed(
+            value=210.0,
+            emission_date="04/2025",
+            deadline_date="30/04/2025",
+            codigo_barras_raw="999",
+            codigo_barras_digits="999",
+            source="test",
+        )
+        with patch(
+            "pjtracker.api.routers.irpj_csll.parse_irpj_csll_pdf", return_value=fake_doc
+        ):
+            r = client.post(
+                "/api/v1/irpj-csll",
+                data={"fiscal_mes": "2025-04"},
+                files={
+                    "file": ("main.pdf", b"%PDF-1.4 main", "application/pdf"),
+                    "attachment_pdf": ("extra.pdf", b"%PDF-1.7 extra memo", "application/pdf"),
+                },
+            )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["value"] == 210.0
+        assert body["fiscal_mes"] == "2025-04"
+        assert body.get("attachment_pdf_path")
+
+        dl = client.get(f"/api/v1/irpj-csll/{body['id']}/attachment-pdf")
+        assert dl.status_code == 200
+        assert dl.content.startswith(b"%PDF")
+
+        dell = client.delete(f"/api/v1/irpj-csll/{body['id']}/attachment-pdf")
+        assert dell.status_code == 204
+
+
+def test_create_irpj_csll_rejects_non_pdf_attachment(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        fake_doc = DarfParsed(
+            value=1.0,
+            emission_date="04/2025",
+            deadline_date="30/04/2025",
+            codigo_barras_raw="1",
+            codigo_barras_digits="1",
+            source="test",
+        )
+        with patch(
+            "pjtracker.api.routers.irpj_csll.parse_irpj_csll_pdf", return_value=fake_doc
+        ):
+            r = client.post(
+                "/api/v1/irpj-csll",
+                data={"fiscal_mes": "2025-04"},
+                files={
+                    "file": ("main.pdf", b"%PDF-1.4 main", "application/pdf"),
+                    "attachment_pdf": ("extra.pdf", b"notpdf", "application/pdf"),
+                },
+            )
+        assert r.status_code == 422
+
+
 def test_fiscal_month_completeness_only_requires_irpj_csll_in_quarter_months(client: TestClient):
     with temporary_app_paths():
         init_db()

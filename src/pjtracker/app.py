@@ -186,6 +186,12 @@ def init_db() -> None:
             conn.execute("ALTER TABLE irpj_cslls ADD COLUMN fiscal_mes TEXT")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute(
+                "ALTER TABLE irpj_cslls ADD COLUMN attachment_pdf_path TEXT"
+            )
+        except sqlite3.OperationalError:
+            pass
         # Extratos: main statement PDF + optional caixinha PDF
         conn.execute("""
             CREATE TABLE IF NOT EXISTS extratos (
@@ -1243,6 +1249,20 @@ def save_irpj_csll_pdf(
     return path
 
 
+def save_irpj_csll_attachment_pdf(irpj_csll_id: int, pdf_bytes: bytes) -> Path:
+    """Save supplementary IRPJ/CSLL PDF (no parsing). Returns path under PDF_DIR."""
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    base = f"irpj_csll_attachment_{irpj_csll_id}_{ts}"
+    path = PDF_DIR / f"{base}.pdf"
+    counter = 0
+    while path.exists():
+        counter += 1
+        path = PDF_DIR / f"{base}_{counter}.pdf"
+    path.write_bytes(pdf_bytes)
+    return path
+
+
 def save_irpj_csll_receipt(irpj_csll_id: int, image_bytes: bytes, mime_or_ext: str) -> Path:
     """Save receipt image for an IRPJ/CSLL document. Returns path."""
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -1450,6 +1470,49 @@ def update_irpj_csll_pdf(
         return False
 
 
+def set_irpj_csll_attachment_pdf_path(irpj_csll_id: int, attachment_pdf_path: str | None) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            UPDATE irpj_cslls SET attachment_pdf_path = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (attachment_pdf_path, now, irpj_csll_id),
+        )
+
+
+def replace_irpj_csll_attachment_pdf(irpj_csll_id: int, pdf_bytes: bytes) -> bool:
+    """Replace supplementary PDF; removes previous file if present."""
+    row = get_irpj_csll_by_id(irpj_csll_id)
+    if not row:
+        return False
+    project_root_path = Path(DB_PATH).resolve().parent
+    old_raw = row.get("attachment_pdf_path")
+    if old_raw:
+        old_p = Path(old_raw) if Path(old_raw).is_absolute() else project_root_path / old_raw
+        if old_p.exists():
+            old_p.unlink(missing_ok=True)
+    apath = save_irpj_csll_attachment_pdf(irpj_csll_id, pdf_bytes)
+    set_irpj_csll_attachment_pdf_path(irpj_csll_id, str(apath))
+    return True
+
+
+def clear_irpj_csll_attachment_pdf(irpj_csll_id: int) -> bool:
+    """Remove supplementary PDF file and clear path. Returns False if row missing."""
+    row = get_irpj_csll_by_id(irpj_csll_id)
+    if not row:
+        return False
+    project_root_path = Path(DB_PATH).resolve().parent
+    old_raw = row.get("attachment_pdf_path")
+    if old_raw:
+        old_p = Path(old_raw) if Path(old_raw).is_absolute() else project_root_path / old_raw
+        if old_p.exists():
+            old_p.unlink(missing_ok=True)
+    set_irpj_csll_attachment_pdf_path(irpj_csll_id, None)
+    return True
+
+
 def update_irpj_csll_receipt(
     irpj_csll_id: int,
     receipt_path: str,
@@ -1499,7 +1562,7 @@ def delete_irpj_csll(irpj_csll_id: int) -> bool:
     if not row:
         return False
     project_root = Path(DB_PATH).resolve().parent
-    for path_key in ("pdf_path", "receipt_path"):
+    for path_key in ("pdf_path", "receipt_path", "attachment_pdf_path"):
         raw = row.get(path_key)
         if not raw or (isinstance(raw, str) and not raw.strip()):
             continue

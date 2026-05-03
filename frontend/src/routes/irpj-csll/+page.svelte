@@ -9,6 +9,8 @@
 		patchIrpjCsllFields,
 		getIrpjCsllBarcodeDiff,
 		updateIrpjCsllPdf,
+		updateIrpjCsllAttachmentPdf,
+		deleteIrpjCsllAttachmentPdf,
 		updateIrpjCsllReceipt,
 		getIrpjCsll
 	} from '$lib/api/client.js';
@@ -20,6 +22,9 @@
 	listFn={listIrpjCsll}
 	parsePreviewFn={irpjCsllParsePreview}
 	createFn={createIrpjCsll}
+	supplementaryPdfLabel="Extra PDF"
+	replaceSupplementaryPdfFn={updateIrpjCsllAttachmentPdf}
+	deleteSupplementaryPdfFn={deleteIrpjCsllAttachmentPdf}
 	deleteFn={deleteIrpjCsll}
 	patchFiscalMesFn={patchIrpjCsllFiscalMes}
 	patchFieldsFn={patchIrpjCsllFields}
