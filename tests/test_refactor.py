@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import tempfile
 import unittest
@@ -8,9 +9,11 @@ from unittest.mock import patch
 import pjtracker.app as app
 from pjtracker.parsers.boleto_parser import BoletoParsed, ReceiptParsed, parse_boleto_pdf, parse_receipt_image
 from pjtracker.parsers.darf_parser import DarfParsed, parse_darf_pdf
+from pjtracker.parsers.parse_cache import clear_parse_cache
 from pjtracker.llm_extraction import (
     BoletoPdfExtraido,
     ComprovanteExtraido,
+    DarfPdfExtraido,
     LLMExtractionResult,
     normalize_digits,
 )
@@ -36,6 +39,9 @@ def temporary_app_paths():
 
 
 class RefactorTests(unittest.TestCase):
+    def setUp(self):
+        clear_parse_cache()
+
     def test_normalize_digits_strips_everything_but_numbers(self):
         self.assertEqual(
             normalize_digits("75691.32074 01232.820801 00018.620013 2 13810000056735"),
@@ -73,6 +79,89 @@ class RefactorTests(unittest.TestCase):
             "75691320740123282080100018620013213810000056735",
         )
         self.assertEqual(parsed.source, "merged")
+
+    def test_boleto_parser_runs_ocr_when_llm_missing_field(self):
+        llm_result = LLMExtractionResult(
+            data=BoletoPdfExtraido(
+                valor=567.35,
+                data_emissao=None,
+                data_vencimento="10/03/2026",
+                codigo_barras=None,
+            )
+        )
+        fallback = BoletoParsed(
+            value=567.35,
+            emission_date="27/02/2026",
+            deadline_date="10/03/2026",
+        )
+
+        with (
+            patch("pjtracker.parsers.boleto_parser.extract_boleto_pdf", return_value=llm_result),
+            patch(
+                "pjtracker.parsers.boleto_parser._parse_boleto_pdf_with_ocr",
+                return_value=fallback,
+            ) as ocr_mock,
+        ):
+            parse_boleto_pdf(b"fake-pdf")
+
+        ocr_mock.assert_called_once()
+
+    def test_darf_parser_skips_ocr_when_llm_complete(self):
+        llm_result = LLMExtractionResult(
+            data=DarfPdfExtraido(
+                valor=100.0,
+                periodo_apuracao="03/2026",
+                data_vencimento="31/03/2026",
+                codigo_barras="123456789",
+            )
+        )
+
+        with (
+            patch("pjtracker.parsers.darf_parser.extract_darf_pdf", return_value=llm_result),
+            patch("pjtracker.parsers.darf_parser._parse_darf_pdf_with_ocr") as ocr_mock,
+        ):
+            parsed = parse_darf_pdf(b"complete-darf")
+
+        ocr_mock.assert_not_called()
+        self.assertEqual(parsed.value, 100.0)
+        self.assertEqual(parsed.emission_date, "03/2026")
+        self.assertEqual(parsed.deadline_date, "31/03/2026")
+        self.assertEqual(parsed.source, "llm")
+
+    def test_parse_cache_returns_same_object_on_second_call(self):
+        llm_result = LLMExtractionResult(
+            data=DarfPdfExtraido(
+                valor=50.0,
+                periodo_apuracao="01/2026",
+                data_vencimento="15/02/2026",
+                codigo_barras=None,
+            )
+        )
+
+        with patch(
+            "pjtracker.parsers.darf_parser.extract_darf_pdf",
+            return_value=llm_result,
+        ) as extract_mock:
+            first = parse_darf_pdf(b"cache-test")
+            second = parse_darf_pdf(b"cache-test")
+
+        extract_mock.assert_called_once()
+        self.assertIs(first, second)
+
+    @patch.dict(os.environ, {"PJTRACKER_OCR": "0"})
+    def test_ocr_disabled_skips_fallback(self):
+        llm_result = LLMExtractionResult(data=None, error="sem chave")
+
+        with (
+            patch("pjtracker.parsers.darf_parser.extract_darf_pdf", return_value=llm_result),
+            patch("pjtracker.parsers.darf_parser._parse_darf_pdf_with_ocr") as ocr_mock,
+        ):
+            parsed = parse_darf_pdf(b"no-ocr")
+
+        ocr_mock.assert_not_called()
+        self.assertIsNone(parsed.value)
+        self.assertIsNone(parsed.emission_date)
+        self.assertIsNone(parsed.deadline_date)
 
     def test_receipt_parser_keeps_llm_barcode_and_fallback_datetime(self):
         llm_result = LLMExtractionResult(

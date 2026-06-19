@@ -6,13 +6,15 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 
-from pjtracker.parsers.boleto_parser import boleto_text_extractor
 from pjtracker.llm_extraction import (
     extract_darf_pdf,
     normalize_dd_mm_yyyy,
     normalize_digits,
     normalize_mm_yyyy,
 )
+from pjtracker.parsers.boleto_parser import _needs_ocr_fallback
+from pjtracker.parsers.ocr import pdf_to_text
+from pjtracker.parsers.parse_cache import cached_parse
 
 
 @dataclass
@@ -171,7 +173,7 @@ def _clean_text_field(value: str | None) -> str | None:
 
 def _parse_darf_pdf_with_ocr(pdf_bytes: bytes) -> DarfParsed:
     """Extract total amount, period, and due date from DARF PDF OCR text."""
-    text = boleto_text_extractor(pdf_bytes)
+    text = pdf_to_text(pdf_bytes)
     value: float | None = None
 
     for match in _VALUE_PATTERN.finditer(text):
@@ -193,11 +195,10 @@ def _parse_darf_pdf_with_ocr(pdf_bytes: bytes) -> DarfParsed:
     )
 
 
-def parse_darf_pdf(pdf_bytes: bytes, filename: str = "darf.pdf") -> DarfParsed:
+def _parse_darf_pdf_inner(pdf_bytes: bytes, filename: str = "darf.pdf") -> DarfParsed:
     """Extract DARF fields using the LLM first and OCR as fallback."""
     llm_attempt = extract_darf_pdf(pdf_bytes, filename=filename)
     llm_data = llm_attempt.data
-    fallback = _parse_darf_pdf_with_ocr(pdf_bytes)
 
     llm_value = getattr(llm_data, "valor", None) if llm_data else None
     llm_period = normalize_mm_yyyy(
@@ -210,19 +211,23 @@ def parse_darf_pdf(pdf_bytes: bytes, filename: str = "darf.pdf") -> DarfParsed:
         getattr(llm_data, "codigo_barras", None) if llm_data else None
     )
 
+    fallback: DarfParsed | None = None
+    if _needs_ocr_fallback(llm_value, llm_period, llm_deadline_date):
+        fallback = _parse_darf_pdf_with_ocr(pdf_bytes)
+
     used_fallback = False
     value = llm_value
-    if value is None:
+    if value is None and fallback is not None:
         value = fallback.value
         used_fallback = used_fallback or value is not None
 
     emission_date = llm_period
-    if emission_date is None:
+    if emission_date is None and fallback is not None:
         emission_date = fallback.emission_date
         used_fallback = used_fallback or emission_date is not None
 
     deadline_date = llm_deadline_date
-    if deadline_date is None:
+    if deadline_date is None and fallback is not None:
         deadline_date = fallback.deadline_date
         used_fallback = used_fallback or deadline_date is not None
 
@@ -247,4 +252,13 @@ def parse_darf_pdf(pdf_bytes: bytes, filename: str = "darf.pdf") -> DarfParsed:
         codigo_barras_raw=llm_codigo_barras,
         codigo_barras_digits=normalize_digits(llm_codigo_barras),
         source=source,
+    )
+
+
+def parse_darf_pdf(pdf_bytes: bytes, filename: str = "darf.pdf") -> DarfParsed:
+    """Extract DARF fields using the LLM first and OCR as fallback."""
+    return cached_parse(
+        pdf_bytes,
+        f"darf:{filename}",
+        lambda: _parse_darf_pdf_inner(pdf_bytes, filename=filename),
     )

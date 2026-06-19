@@ -3,12 +3,6 @@
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from io import BytesIO
-
-import numpy as np
-import easyocr
-from pdf2image import convert_from_bytes
-from PIL import Image
 
 from pjtracker.llm_extraction import (
     extract_boleto_pdf,
@@ -17,6 +11,8 @@ from pjtracker.llm_extraction import (
     normalize_digits,
     normalize_payment_datetime,
 )
+from pjtracker.parsers.ocr import image_to_text, ocr_enabled, pdf_to_text
+from pjtracker.parsers.parse_cache import cached_parse
 
 
 @dataclass
@@ -70,22 +66,9 @@ _VALUE_PATTERN = re.compile(
 )
 
 
-def boleto_text_extractor(pdf_bytes: bytes):
-    ocr = easyocr.Reader(["pt"])
-    pages = convert_from_bytes(pdf_bytes)
-    full_text = ""
-    for page in pages:
-        image = np.array(page)
-        lines = ocr.readtext(
-            image,
-            detail=0,
-            canvas_size=1280,
-            mag_ratio=1,
-            batch_size=1,
-        )
-        text = " ".join(lines)
-        full_text += f"\n\n {text}"
-    return full_text
+def boleto_text_extractor(pdf_bytes: bytes) -> str:
+    """Extract text from boleto PDF via OCR."""
+    return pdf_to_text(pdf_bytes)
 
 
 def _clean_text_field(value: str | None) -> str | None:
@@ -136,11 +119,20 @@ def _parse_boleto_pdf_with_ocr(pdf_bytes: bytes) -> BoletoParsed:
     return BoletoParsed(value=value, emission_date=emission_date, deadline_date=deadline_date)
 
 
-def parse_boleto_pdf(pdf_bytes: bytes, filename: str = "boleto.pdf") -> BoletoParsed:
+def _needs_ocr_fallback(
+    value: float | None,
+    emission_date: str | None,
+    deadline_date: str | None,
+) -> bool:
+    return ocr_enabled() and (
+        value is None or emission_date is None or deadline_date is None
+    )
+
+
+def _parse_boleto_pdf_inner(pdf_bytes: bytes, filename: str = "boleto.pdf") -> BoletoParsed:
     """Extract boleto fields using the LLM first and OCR as fallback."""
     llm_attempt = extract_boleto_pdf(pdf_bytes, filename=filename)
     llm_data = llm_attempt.data
-    fallback = _parse_boleto_pdf_with_ocr(pdf_bytes)
 
     llm_value = getattr(llm_data, "valor", None) if llm_data else None
     llm_emission_date = normalize_dd_mm_yyyy(
@@ -153,19 +145,23 @@ def parse_boleto_pdf(pdf_bytes: bytes, filename: str = "boleto.pdf") -> BoletoPa
         getattr(llm_data, "codigo_barras", None) if llm_data else None
     )
 
+    fallback: BoletoParsed | None = None
+    if _needs_ocr_fallback(llm_value, llm_emission_date, llm_deadline_date):
+        fallback = _parse_boleto_pdf_with_ocr(pdf_bytes)
+
     used_fallback = False
     value = llm_value
-    if value is None:
+    if value is None and fallback is not None:
         value = fallback.value
         used_fallback = used_fallback or value is not None
 
     emission_date = llm_emission_date
-    if emission_date is None:
+    if emission_date is None and fallback is not None:
         emission_date = fallback.emission_date
         used_fallback = used_fallback or emission_date is not None
 
     deadline_date = llm_deadline_date
-    if deadline_date is None:
+    if deadline_date is None and fallback is not None:
         deadline_date = fallback.deadline_date
         used_fallback = used_fallback or deadline_date is not None
 
@@ -193,6 +189,15 @@ def parse_boleto_pdf(pdf_bytes: bytes, filename: str = "boleto.pdf") -> BoletoPa
     )
 
 
+def parse_boleto_pdf(pdf_bytes: bytes, filename: str = "boleto.pdf") -> BoletoParsed:
+    """Extract boleto fields using the LLM first and OCR as fallback."""
+    return cached_parse(
+        pdf_bytes,
+        f"boleto:{filename}",
+        lambda: _parse_boleto_pdf_inner(pdf_bytes, filename=filename),
+    )
+
+
 # --- Receipt image: extract text and find date "03 MAR 2026 - 18:40:12" ---
 
 # DD MMM YYYY - HH:MM:SS (month 3 letters: PT or EN)
@@ -209,23 +214,8 @@ _MONTH_NAMES = {
 
 
 def receipt_text_extractor(image_bytes: bytes) -> str:
-    """Extract text from receipt image using EasyOCR (same as boleto)."""
-    ocr = easyocr.Reader(["pt"])
-    img = Image.open(BytesIO(image_bytes))
-    # Only keep the first third of the image vertically before running OCR
-    width, height = img.size
-    img = img.crop((0, 0, width, height // 3))
-    if img.mode != "RGB":
-        img = img.convert("RGB")
-    arr = np.array(img)
-    lines = ocr.readtext(
-        arr,
-        detail=0,
-        canvas_size=1280,
-        mag_ratio=1,
-        batch_size=1,
-    )
-    return " ".join(lines)
+    """Extract text from receipt image using EasyOCR."""
+    return image_to_text(image_bytes, crop_top_third=True)
 
 
 def parse_receipt_date_from_text(text: str) -> str | None:
@@ -253,7 +243,7 @@ def _parse_receipt_datetime_with_ocr(image_bytes: bytes) -> str | None:
     return parse_receipt_date_from_text(text)
 
 
-def parse_receipt_image(
+def _parse_receipt_image_inner(
     image_bytes: bytes,
     *,
     filename: str = "comprovante.png",
@@ -276,7 +266,7 @@ def parse_receipt_image(
 
     payment_datetime = llm_payment_datetime
     used_fallback = False
-    if payment_datetime is None:
+    if payment_datetime is None and ocr_enabled():
         payment_datetime = _parse_receipt_datetime_with_ocr(image_bytes)
         used_fallback = payment_datetime is not None
 
@@ -299,4 +289,22 @@ def parse_receipt_image(
         codigo_barras_raw=llm_codigo_barras,
         codigo_barras_digits=normalize_digits(llm_codigo_barras),
         source=source,
+    )
+
+
+def parse_receipt_image(
+    image_bytes: bytes,
+    *,
+    filename: str = "comprovante.png",
+    mime_type: str = "image/png",
+) -> ReceiptParsed:
+    """Extract receipt fields using the LLM first and OCR as fallback."""
+    return cached_parse(
+        image_bytes,
+        f"receipt:{filename}:{mime_type}",
+        lambda: _parse_receipt_image_inner(
+            image_bytes,
+            filename=filename,
+            mime_type=mime_type,
+        ),
     )
