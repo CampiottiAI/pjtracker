@@ -56,6 +56,7 @@ Open `http://<machine-ip>:4173` (default). Environment variables:
 | `PROD_HOST` | `0.0.0.0` | Preview bind address |
 | `PROD_PORT` | `4173` | Preview port |
 | `API_PORT` | `8000` | Internal uvicorn port |
+| `PROD_BUILD` | `0` | Set to `1` to force a frontend rebuild on startup |
 | `PJTRACKER_OCR` | `1` | Set to `0` to skip local EasyOCR (LLM-only parsing) |
 
 On a 4GB Pi, prefer `./scripts/prod.sh` over dev mode. If uploads still struggle, try `PJTRACKER_OCR=0` when Maritaca LLM extraction is reliable, and consider adding swap.

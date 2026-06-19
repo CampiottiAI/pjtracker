@@ -20,26 +20,26 @@ if [[ ! -d "$ROOT/frontend/node_modules" ]]; then
   exit 1
 fi
 
-echo "Building frontend..."
-(cd frontend && npm run build)
+FRONTEND_BUILD_MARKER="$ROOT/frontend/.svelte-kit/output/client"
+
+if [[ "${PROD_BUILD:-0}" == "1" ]]; then
+  echo "Building frontend (PROD_BUILD=1)..."
+  (cd frontend && npm run build)
+elif [[ -d "$FRONTEND_BUILD_MARKER" ]]; then
+  echo "Using existing frontend build (set PROD_BUILD=1 to rebuild)."
+else
+  echo "Building frontend (no prior build found)..."
+  (cd frontend && npm run build)
+fi
 
 echo "Starting backend on 127.0.0.1:$API_PORT (no reload)..."
-# #region agent log
-_debug_log "H1" "scripts/prod.sh" "backend_spawn" "{\"port\":$API_PORT,\"pid\":\"pending\"}"
-# #endregion
 uv run uvicorn pjtracker.api.main:app --host 127.0.0.1 --port "$API_PORT" &
 BACKEND_PID=$!
-# #region agent log
-_debug_log "H1" "scripts/prod.sh" "backend_spawned" "{\"port\":$API_PORT,\"pid\":$BACKEND_PID}"
-# #endregion
 
 echo "Waiting for backend to be ready..."
 wait_for_backend "$API_PORT"
 
 echo "Starting frontend preview on $PROD_HOST:$PROD_PORT..."
-# #region agent log
-_debug_log "H4" "scripts/prod.sh" "frontend_spawn" "{\"host\":\"$PROD_HOST\",\"port\":$PROD_PORT}"
-# #endregion
 (cd frontend && npm run preview -- --host "$PROD_HOST" --port "$PROD_PORT") &
 FRONTEND_PID=$!
 
