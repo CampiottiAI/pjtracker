@@ -45,7 +45,7 @@ primary interface to the system — all user interaction happens here.
 | Styling | Tailwind CSS 4 (dark theme by default) |
 | UI primitives | bits-ui (Dialog, Sheet, Tabs, etc.) |
 | Icons | lucide-svelte |
-| Charts | layerchart + D3 scales |
+| Charts | Unovis (@unovis/svelte) |
 | Toasts | svelte-sonner |
 | API communication | Thin fetch wrapper (`$lib/api/client.ts`) |
 
@@ -172,7 +172,7 @@ Time-series charts for NF data over a configurable date range. Three charts:
 3. **Exchange rate** — official rate vs. effective rate (after spread), visualizing how much
    the intermediary markup costs.
 
-Built with `layerchart` (Spline, Axis, Grid, Tooltip, Highlight) on top of D3 scales.
+Built with Unovis (`VisLine`, `VisAxis`, `VisCrosshair`, `VisTooltip`) in a shared `AnalyticsLineChart` component.
 
 ---
 
