@@ -697,3 +697,116 @@ def test_fiscal_month_completeness_only_requires_irpj_csll_in_quarter_months(cli
         assert quarter_after_body["irpj_csll_with_receipt_count"] == 1
         assert quarter_after_body["irpj_csll_ok"] is True
         assert quarter_after_body["month_complete"] is True
+
+
+def test_withdraws_list_empty_month_summary(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        response = client.get("/api/v1/withdraws", params={"fiscal_mes": "2026-01"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["summary"] == {
+        "target_brl": 50000.0,
+        "total_brl": 0.0,
+        "remaining_brl": 50000.0,
+        "over_target_brl": 0.0,
+        "target_reached": False,
+    }
+
+
+def test_withdraws_create_list_summary_patch_delete(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        first = client.post(
+            "/api/v1/withdraws",
+            json={
+                "fiscal_mes": "2026-02",
+                "amount_brl": 12500.0,
+                "withdraw_date": "2026-02-15",
+                "notes": "Primeiro saque",
+            },
+        )
+        second = client.post(
+            "/api/v1/withdraws",
+            json={
+                "fiscal_mes": "2026-02",
+                "amount_brl": 7500.0,
+                "withdraw_date": "2026-02-20",
+            },
+        )
+        assert first.status_code == 200
+        assert second.status_code == 200
+        first_id = first.json()["id"]
+
+        listed = client.get("/api/v1/withdraws", params={"fiscal_mes": "2026-02"})
+        assert listed.status_code == 200
+        body = listed.json()
+        assert len(body["items"]) == 2
+        assert body["summary"]["total_brl"] == 20000.0
+        assert body["summary"]["remaining_brl"] == 30000.0
+        assert body["summary"]["target_reached"] is False
+
+        patched = client.patch(
+            f"/api/v1/withdraws/{first_id}",
+            json={"amount_brl": 15000.0, "notes": "Ajustado"},
+        )
+        assert patched.status_code == 200
+        assert patched.json()["amount_brl"] == 15000.0
+        assert patched.json()["notes"] == "Ajustado"
+
+        after_patch = client.get("/api/v1/withdraws", params={"fiscal_mes": "2026-02"})
+        assert after_patch.json()["summary"]["total_brl"] == 22500.0
+        assert after_patch.json()["summary"]["remaining_brl"] == 27500.0
+
+        deleted = client.delete(f"/api/v1/withdraws/{first_id}")
+        assert deleted.status_code == 200
+        assert deleted.json() == {"deleted": True}
+
+        after_delete = client.get("/api/v1/withdraws", params={"fiscal_mes": "2026-02"})
+        assert len(after_delete.json()["items"]) == 1
+        assert after_delete.json()["summary"]["total_brl"] == 7500.0
+
+
+def test_withdraws_reject_invalid_fiscal_mes_and_non_positive_amount(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        invalid_month = client.get("/api/v1/withdraws", params={"fiscal_mes": "2026/02"})
+        invalid_create = client.post(
+            "/api/v1/withdraws",
+            json={"fiscal_mes": "2026/02", "amount_brl": 100.0},
+        )
+        invalid_amount = client.post(
+            "/api/v1/withdraws",
+            json={"fiscal_mes": "2026-02", "amount_brl": 0},
+        )
+    assert invalid_month.status_code == 422
+    assert invalid_create.status_code == 422
+    assert invalid_amount.status_code == 422
+
+
+def test_withdraws_over_target_summary(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        client.post(
+            "/api/v1/withdraws",
+            json={"fiscal_mes": "2026-03", "amount_brl": 52000.0},
+        )
+        response = client.get("/api/v1/withdraws", params={"fiscal_mes": "2026-03"})
+    summary = response.json()["summary"]
+    assert summary["total_brl"] == 52000.0
+    assert summary["remaining_brl"] == 0.0
+    assert summary["over_target_brl"] == 2000.0
+    assert summary["target_reached"] is True
+
+
+def test_fiscal_months_include_withdraw_only_month(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        client.post(
+            "/api/v1/withdraws",
+            json={"fiscal_mes": "2026-04", "amount_brl": 1000.0},
+        )
+        response = client.get("/api/v1/fiscal-months")
+    assert response.status_code == 200
+    assert "2026-04" in response.json()["months"]

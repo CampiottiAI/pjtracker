@@ -18,6 +18,7 @@ from .routers import (
     irpj_csll,
     nfs,
     receipts,
+    withdraws,
 )
 
 
@@ -43,3 +44,4 @@ app.include_router(irpj_csll.router, prefix=api_prefix)
 app.include_router(extratos.router, prefix=api_prefix)
 app.include_router(fiscal_months.router, prefix=api_prefix)
 app.include_router(analytics.router, prefix=api_prefix)
+app.include_router(withdraws.router, prefix=api_prefix)

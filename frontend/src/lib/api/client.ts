@@ -18,7 +18,11 @@ import type {
 	FiscalMonthsResponse,
 	CreateFiscalMonthResponse,
 	CompletenessResponse,
-	NfSeriesResponse
+	NfSeriesResponse,
+	WithdrawEntry,
+	WithdrawListResponse,
+	CreateWithdrawPayload,
+	PatchWithdrawPayload
 } from './types';
 
 /**
@@ -598,6 +602,37 @@ export async function createFiscalMonth(fiscalMes: string): Promise<CreateFiscal
 
 export async function getCompleteness(fiscalMes: string): Promise<CompletenessResponse> {
 	return apiJson<CompletenessResponse>(`/fiscal-months/${fiscalMes}/completeness`);
+}
+
+// ---------------------------------------------------------------------------
+// Withdraws
+// ---------------------------------------------------------------------------
+
+export async function listWithdraws(fiscalMes: string): Promise<WithdrawListResponse> {
+	return apiJson<WithdrawListResponse>(`/withdraws?fiscal_mes=${encodeURIComponent(fiscalMes)}`);
+}
+
+export async function createWithdraw(payload: CreateWithdrawPayload): Promise<WithdrawEntry> {
+	return apiJson<WithdrawEntry>('/withdraws', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+}
+
+export async function updateWithdraw(
+	id: number,
+	payload: PatchWithdrawPayload
+): Promise<WithdrawEntry> {
+	return apiJson<WithdrawEntry>(`/withdraws/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+}
+
+export async function deleteWithdraw(id: number): Promise<void> {
+	await apiJson(`/withdraws/${id}`, { method: 'DELETE' });
 }
 
 // ---------------------------------------------------------------------------

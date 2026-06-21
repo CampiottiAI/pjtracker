@@ -248,6 +248,19 @@ def init_db() -> None:
                 conn.execute(statement)
             except sqlite3.OperationalError:
                 pass
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS withdraws (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fiscal_mes TEXT NOT NULL,
+                amount_brl REAL NOT NULL,
+                withdraw_date TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+
+WITHDRAW_TARGET_BRL = 50_000.0
 
 
 def _sanitize_filename(s: str) -> str:
@@ -1939,4 +1952,120 @@ def delete_extrato(extrato_id: int) -> bool:
             p.unlink(missing_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("DELETE FROM extratos WHERE id = ?", (extrato_id,))
+    return True
+
+
+# --- Withdraws ---
+
+
+def save_withdraw(
+    fiscal_mes: str,
+    amount_brl: float,
+    withdraw_date: str | None = None,
+    notes: str | None = None,
+) -> int:
+    """Insert one withdrawal row. Returns the new row id."""
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO withdraws (fiscal_mes, amount_brl, withdraw_date, notes, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (fiscal_mes, amount_brl, withdraw_date, notes, now),
+        )
+        return int(cur.lastrowid)
+
+
+def get_withdraws(fiscal_mes: str | None = None) -> list[dict]:
+    """Return withdrawals, optionally filtered by fiscal_mes. Newest first."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        if fiscal_mes is not None:
+            cur = conn.execute(
+                """
+                SELECT * FROM withdraws
+                WHERE fiscal_mes = ?
+                ORDER BY COALESCE(withdraw_date, created_at) DESC, id DESC
+                """,
+                (fiscal_mes,),
+            )
+        else:
+            cur = conn.execute(
+                """
+                SELECT * FROM withdraws
+                ORDER BY COALESCE(withdraw_date, created_at) DESC, id DESC
+                """
+            )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_withdraw_fiscal_months() -> list[str]:
+    """Return distinct fiscal_mes values from withdraws."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            """
+            SELECT DISTINCT fiscal_mes FROM withdraws
+            WHERE fiscal_mes IS NOT NULL AND TRIM(fiscal_mes) != ''
+            """
+        )
+        return [str(row[0]).strip() for row in cur.fetchall()]
+
+
+def get_withdraw_by_id(withdraw_id: int) -> dict | None:
+    """Return one withdrawal by id or None."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute("SELECT * FROM withdraws WHERE id = ?", (withdraw_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def update_withdraw(
+    withdraw_id: int,
+    *,
+    fiscal_mes: str | None = None,
+    amount_brl: float | None = None,
+    withdraw_date: str | None = None,
+    notes: str | None = None,
+    clear_withdraw_date: bool = False,
+    clear_notes: bool = False,
+) -> bool:
+    """Update editable withdrawal fields. Returns True if the row existed."""
+    row = get_withdraw_by_id(withdraw_id)
+    if not row:
+        return False
+    new_fiscal_mes = fiscal_mes if fiscal_mes is not None else row["fiscal_mes"]
+    new_amount = amount_brl if amount_brl is not None else row["amount_brl"]
+    if clear_withdraw_date:
+        new_withdraw_date = None
+    elif withdraw_date is not None:
+        new_withdraw_date = withdraw_date
+    else:
+        new_withdraw_date = row.get("withdraw_date")
+    if clear_notes:
+        new_notes = None
+    elif notes is not None:
+        new_notes = notes
+    else:
+        new_notes = row.get("notes")
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            UPDATE withdraws
+            SET fiscal_mes = ?, amount_brl = ?, withdraw_date = ?, notes = ?
+            WHERE id = ?
+            """,
+            (new_fiscal_mes, new_amount, new_withdraw_date, new_notes, withdraw_id),
+        )
+    return True
+
+
+def delete_withdraw(withdraw_id: int) -> bool:
+    """Delete a withdrawal row. Returns True if deleted, False if not found."""
+    row = get_withdraw_by_id(withdraw_id)
+    if not row:
+        return False
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM withdraws WHERE id = ?", (withdraw_id,))
     return True

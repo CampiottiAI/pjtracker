@@ -9,6 +9,7 @@ from pjtracker.app import (
     get_extratos,
     get_irpj_cslls,
     get_nf_entries,
+    get_withdraw_fiscal_months,
 )
 
 REQUIRED_NFS = 2
@@ -48,6 +49,9 @@ def collect_fiscal_months() -> list[str]:
         fm = row.get("fiscal_mes")
         if fm and str(fm).strip():
             months.add(str(fm).strip())
+    for fm in get_withdraw_fiscal_months():
+        if fm:
+            months.add(fm)
     return sorted(months, reverse=True)
 
 

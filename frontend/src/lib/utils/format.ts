@@ -46,6 +46,17 @@ export function formatPercent(value: number | null | undefined): string {
 	return `${value.toFixed(2)}%`;
 }
 
+/** Format a withdraw date (ISO YYYY-MM-DD or DD/MM/YYYY). */
+export function formatWithdrawDate(value: string | null | undefined): string {
+	if (!value) return '\u2014';
+	const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+	if (isoMatch) {
+		const [, year, month, day] = isoMatch;
+		return `${day}/${month}/${year}`;
+	}
+	return formatDateBr(value);
+}
+
 /**
  * Parse a date string that may be DD/MM/YYYY or DD/MM/YYYY HH:MM:SS
  * into a short display format.

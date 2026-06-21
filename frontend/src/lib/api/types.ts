@@ -234,3 +234,40 @@ export type NfSeriesPoint = {
 export type NfSeriesResponse = {
 	points: NfSeriesPoint[];
 };
+
+/** Withdrawals. */
+export type WithdrawEntry = {
+	id: number;
+	fiscal_mes: string;
+	amount_brl: number;
+	withdraw_date: string | null;
+	notes: string | null;
+	created_at: string;
+};
+
+export type WithdrawSummary = {
+	target_brl: number;
+	total_brl: number;
+	remaining_brl: number;
+	over_target_brl: number;
+	target_reached: boolean;
+};
+
+export type WithdrawListResponse = {
+	items: WithdrawEntry[];
+	summary: WithdrawSummary;
+};
+
+export type CreateWithdrawPayload = {
+	fiscal_mes: string;
+	amount_brl: number;
+	withdraw_date?: string | null;
+	notes?: string | null;
+};
+
+export type PatchWithdrawPayload = {
+	fiscal_mes?: string | null;
+	amount_brl?: number;
+	withdraw_date?: string | null;
+	notes?: string | null;
+};
