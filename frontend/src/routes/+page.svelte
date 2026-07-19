@@ -75,18 +75,21 @@
 			total_brl: 0,
 			remaining_brl: WITHDRAW_TARGET_BRL,
 			over_target_brl: 0,
-			target_reached: false
+			target_reached: false,
+			previous_month_income_brl: 0
 		};
 	}
 
 	function computeLocalSummary(items: WithdrawEntry[]): WithdrawSummary {
 		const total = items.reduce((sum, item) => sum + item.amount_brl, 0);
+		const previousIncome = withdrawSummary?.previous_month_income_brl ?? 0;
 		return {
 			target_brl: WITHDRAW_TARGET_BRL,
 			total_brl: Math.round(total * 100) / 100,
 			remaining_brl: Math.max(0, WITHDRAW_TARGET_BRL - total),
 			over_target_brl: Math.max(0, total - WITHDRAW_TARGET_BRL),
-			target_reached: total >= WITHDRAW_TARGET_BRL
+			target_reached: total >= WITHDRAW_TARGET_BRL,
+			previous_month_income_brl: previousIncome
 		};
 	}
 
@@ -329,20 +332,45 @@
 		Math.min(100, (activeWithdrawSummary.total_brl / activeWithdrawSummary.target_brl) * 100)
 	);
 
-	const withdrawStatusClass = $derived(
+	const previousIncomePct = $derived(
+		Math.min(
+			100,
+			(activeWithdrawSummary.previous_month_income_brl / activeWithdrawSummary.target_brl) * 100
+		)
+	);
+
+	const withdrawZone = $derived<'safe' | 'warning' | 'over'>(
 		activeWithdrawSummary.over_target_brl
+			? 'over'
+			: activeWithdrawSummary.total_brl <= activeWithdrawSummary.previous_month_income_brl
+				? 'safe'
+				: 'warning'
+	);
+
+	const withdrawStatusClass = $derived(
+		withdrawZone === 'over'
 			? 'text-red-400'
-			: activeWithdrawSummary.target_reached
+			: withdrawZone === 'safe'
 				? 'text-emerald-400'
 				: 'text-amber-400'
 	);
 
 	const withdrawStatusLabel = $derived(
-		activeWithdrawSummary.over_target_brl
+		withdrawZone === 'over'
 			? `Acima da meta: ${formatBrl(activeWithdrawSummary.over_target_brl)}`
-			: activeWithdrawSummary.target_reached
-				? 'Meta atingida'
-				: `Faltam ${formatBrl(activeWithdrawSummary.remaining_brl)}`
+			: withdrawZone === 'safe'
+				? activeWithdrawSummary.previous_month_income_brl > 0
+					? 'Dentro da receita do mês anterior'
+					: `Faltam ${formatBrl(activeWithdrawSummary.remaining_brl)}`
+				: `Acima da receita: ${formatBrl(activeWithdrawSummary.total_brl - activeWithdrawSummary.previous_month_income_brl)}`
+	);
+
+	const withdrawProgressFillClass = $derived(
+		withdrawZone === 'over'
+			? 'bg-red-500'
+			: withdrawZone === 'safe'
+				? 'bg-emerald-600'
+				: 'bg-amber-500'
 	);
 
 	type CheckItem = {
@@ -519,16 +547,22 @@
 					<Card.Title>Saques</Card.Title>
 				</div>
 				<Card.Description>
-					Registre saques em BRL conforme ocorrem e acompanhe o progresso até a meta de
-					{formatBrl(50_000)}.
+					Registre saques em BRL conforme ocorrem. Verde até a receita do mês anterior, amarelo até
+					{formatBrl(50_000)}, vermelho acima disso.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="space-y-6">
-				<div class="grid gap-4 sm:grid-cols-3">
+				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 					<div>
 						<p class="text-sm text-muted-foreground">Total sacado</p>
 						<p class="text-2xl font-bold tabular-nums">
 							{formatBrl(activeWithdrawSummary.total_brl)}
+						</p>
+					</div>
+					<div>
+						<p class="text-sm text-muted-foreground">Receita mês anterior</p>
+						<p class="text-2xl font-bold tabular-nums">
+							{formatBrl(activeWithdrawSummary.previous_month_income_brl)}
 						</p>
 					</div>
 					<div>
@@ -539,7 +573,7 @@
 					</div>
 					<div>
 						<p class="text-sm text-muted-foreground">Status</p>
-						<p class={cn('text-2xl font-bold tabular-nums', withdrawStatusClass)}>
+						<p class={cn('text-lg font-bold tabular-nums sm:text-xl', withdrawStatusClass)}>
 							{withdrawStatusLabel}
 						</p>
 					</div>
@@ -550,18 +584,35 @@
 						<span>Progresso</span>
 						<span>{withdrawProgress.toFixed(0)}%</span>
 					</div>
-					<div class="h-2 overflow-hidden rounded-full bg-muted">
+					<div class="relative h-2 overflow-hidden rounded-full bg-muted">
+						{#if previousIncomePct > 0}
+							<div
+								class="absolute inset-y-0 left-0 bg-emerald-500/35"
+								style={`width: ${previousIncomePct}%`}
+							></div>
+						{/if}
+						{#if previousIncomePct < 100}
+							<div
+								class="absolute inset-y-0 bg-amber-500/35"
+								style={`left: ${previousIncomePct}%; width: ${100 - previousIncomePct}%`}
+							></div>
+						{/if}
 						<div
-							class={cn(
-								'h-full rounded-full transition-all',
-								activeWithdrawSummary.over_target_brl
-									? 'bg-red-500'
-									: activeWithdrawSummary.target_reached
-										? 'bg-emerald-500'
-										: 'bg-amber-500'
-							)}
+							class={cn('absolute inset-y-0 left-0 rounded-full transition-all', withdrawProgressFillClass)}
 							style={`width: ${withdrawProgress}%`}
 						></div>
+					</div>
+					<div class="relative h-4 text-[11px] text-muted-foreground">
+						<span class="absolute left-0">0</span>
+						{#if activeWithdrawSummary.previous_month_income_brl > 0 && previousIncomePct < 98}
+							<span
+								class="absolute -translate-x-1/2 whitespace-nowrap"
+								style={`left: ${previousIncomePct}%`}
+							>
+								Receita {formatBrl(activeWithdrawSummary.previous_month_income_brl)}
+							</span>
+						{/if}
+						<span class="absolute right-0">{formatBrl(activeWithdrawSummary.target_brl)}</span>
 					</div>
 				</div>
 

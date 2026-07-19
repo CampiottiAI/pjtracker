@@ -712,6 +712,7 @@ def test_withdraws_list_empty_month_summary(client: TestClient):
         "remaining_brl": 50000.0,
         "over_target_brl": 0.0,
         "target_reached": False,
+        "previous_month_income_brl": 0.0,
     }
 
 
@@ -746,6 +747,7 @@ def test_withdraws_create_list_summary_patch_delete(client: TestClient):
         assert body["summary"]["total_brl"] == 20000.0
         assert body["summary"]["remaining_brl"] == 30000.0
         assert body["summary"]["target_reached"] is False
+        assert body["summary"]["previous_month_income_brl"] == 0.0
 
         patched = client.patch(
             f"/api/v1/withdraws/{first_id}",
@@ -798,6 +800,64 @@ def test_withdraws_over_target_summary(client: TestClient):
     assert summary["remaining_brl"] == 0.0
     assert summary["over_target_brl"] == 2000.0
     assert summary["target_reached"] is True
+    assert summary["previous_month_income_brl"] == 0.0
+
+
+def test_withdraws_summary_includes_previous_month_nf_income(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        pdf_a = save_pdf(b"%PDF-a", "PREV-A", "15/12/2025 00:00:00", 1000.0)
+        pdf_b = save_pdf(b"%PDF-b", "PREV-B", "20/12/2025 00:00:00", 500.0)
+        save_nf_entry(
+            company="A",
+            usd=1000.0,
+            rate=5.0,
+            spread=0.0,
+            brl_no_spread=20000.0,
+            brl_with_spread=20000.0,
+            nf_date="15/12/2025 00:00:00",
+            verification_code="PREV-A",
+            payment_via=None,
+            pdf_path=str(pdf_a),
+            fiscal_mes="2025-12",
+        )
+        save_nf_entry(
+            company="B",
+            usd=500.0,
+            rate=5.0,
+            spread=0.0,
+            brl_no_spread=10000.0,
+            brl_with_spread=10000.0,
+            nf_date="20/12/2025 00:00:00",
+            verification_code="PREV-B",
+            payment_via=None,
+            pdf_path=str(pdf_b),
+            fiscal_mes="2025-12",
+        )
+        # Current-month NF must not count toward previous_month_income_brl.
+        pdf_c = save_pdf(b"%PDF-c", "CURR-C", "05/01/2026 00:00:00", 100.0)
+        save_nf_entry(
+            company="C",
+            usd=100.0,
+            rate=5.0,
+            spread=0.0,
+            brl_no_spread=500.0,
+            brl_with_spread=500.0,
+            nf_date="05/01/2026 00:00:00",
+            verification_code="CURR-C",
+            payment_via=None,
+            pdf_path=str(pdf_c),
+            fiscal_mes="2026-01",
+        )
+        client.post(
+            "/api/v1/withdraws",
+            json={"fiscal_mes": "2026-01", "amount_brl": 5000.0},
+        )
+        response = client.get("/api/v1/withdraws", params={"fiscal_mes": "2026-01"})
+    assert response.status_code == 200
+    summary = response.json()["summary"]
+    assert summary["previous_month_income_brl"] == 30000.0
+    assert summary["total_brl"] == 5000.0
 
 
 def test_fiscal_months_include_withdraw_only_month(client: TestClient):

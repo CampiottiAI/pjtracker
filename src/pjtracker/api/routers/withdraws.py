@@ -87,7 +87,7 @@ def list_withdraws(
     items = get_withdraws(fiscal_mes=fm)
     return {
         "items": [_serialize_withdraw(row) for row in items],
-        "summary": compute_withdraw_summary(items),
+        "summary": compute_withdraw_summary(items, fiscal_mes=fm),
     }
 
 

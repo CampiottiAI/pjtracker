@@ -251,6 +251,7 @@ export type WithdrawSummary = {
 	remaining_brl: number;
 	over_target_brl: number;
 	target_reached: boolean;
+	previous_month_income_brl: number;
 };
 
 export type WithdrawListResponse = {
