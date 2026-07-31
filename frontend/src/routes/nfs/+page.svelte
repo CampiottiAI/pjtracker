@@ -180,6 +180,12 @@
 		uploadSaving = false;
 	}
 
+	function openUpload() {
+		resetUpload();
+		uploadFiscalMes = filterMonth;
+		uploadOpen = true;
+	}
+
 	async function handleFileSelected(files: File[]) {
 		if (files.length === 0) return;
 		uploadFile = files[0];
@@ -384,7 +390,7 @@
 <div class="space-y-6">
 	<PageHeader title="Notas Fiscais" description="Manage NF-e documents">
 		{#snippet actions()}
-			<Button onclick={() => { resetUpload(); uploadOpen = true; }}>
+			<Button onclick={openUpload}>
 				<Plus class="h-4 w-4" />
 				Upload NF
 			</Button>

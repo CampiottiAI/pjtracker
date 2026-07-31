@@ -174,6 +174,12 @@
 		uploadSaving = false;
 	}
 
+	function openUpload() {
+		resetUpload();
+		uploadFiscalMes = filterMonth;
+		uploadOpen = true;
+	}
+
 	function hasExpectedProLabore(entries: Record<string, unknown>[]): boolean {
 		return entries.some((entry) => {
 			const value = entry.valor;
@@ -441,7 +447,7 @@
 <div class="space-y-6">
 	<PageHeader title="Extratos" description="Manage bank statements, caixinha and higlobe">
 		{#snippet actions()}
-			<Button onclick={() => { resetUpload(); uploadOpen = true; }}>
+			<Button onclick={openUpload}>
 				<Plus class="h-4 w-4" />
 				Upload Extrato
 			</Button>

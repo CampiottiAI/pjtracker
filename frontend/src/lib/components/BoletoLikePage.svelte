@@ -244,6 +244,12 @@
 		uploadExtraPdf = null;
 	}
 
+	function openUpload() {
+		resetUpload();
+		uploadFiscalMes = filterMonth;
+		uploadOpen = true;
+	}
+
 	async function handleDocFileSelected(files: File[]) {
 		if (files.length === 0) return;
 		uploadFile = files[0];
@@ -659,7 +665,7 @@
 <div class="space-y-6">
 	<PageHeader title={domainLabel} description={`Manage ${domainLabel.toLowerCase()} and receipts`}>
 		{#snippet actions()}
-			<Button onclick={() => { resetUpload(); uploadOpen = true; }}>
+			<Button onclick={openUpload}>
 				<Plus class="h-4 w-4" />
 				Upload {domainLabel}
 			</Button>
