@@ -26,6 +26,7 @@
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -74,6 +75,12 @@
 	// Delete
 	let deleteDialogOpen = $state(false);
 	let deleteTarget = $state<ExtratoEntry | null>(null);
+
+	// File preview
+	let previewOpen = $state(false);
+	let previewPath = $state<string | null>(null);
+	let previewTitle = $state('Preview');
+	let previewFallback = $state('file');
 
 	// Inline fiscal month edit
 	let editingFmId = $state<number | null>(null);
@@ -276,6 +283,13 @@
 		} catch (e) {
 			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Download failed');
 		}
+	}
+
+	function openPreview(path: string, title: string, fallbackFilename: string) {
+		previewPath = path;
+		previewTitle = title;
+		previewFallback = fallbackFilename;
+		previewOpen = true;
 	}
 
 	// ---------------------------------------------------------------------------
@@ -724,15 +738,33 @@
 									{/if}
 								</Button>
 							</div>
-							<Button
-								variant="outline"
-								size="sm"
-								class="h-7 text-xs"
-								onclick={() => downloadFile(`/extratos/${detailItem!.id}/extrato-pdf`, `extrato_${detailItem!.id}.pdf`)}
-							>
-								<Download class="h-3.5 w-3.5" />
-								PDF
-							</Button>
+							<div class="flex items-center gap-1">
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-7 text-xs"
+									onclick={() =>
+										openPreview(
+											`/extratos/${detailItem!.id}/extrato-pdf`,
+											`Extrato #${detailItem!.id}`,
+											`extrato_${detailItem!.id}.pdf`
+										)}
+									title="View PDF"
+								>
+									<Eye class="h-3.5 w-3.5" />
+									View
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-7 text-xs"
+									onclick={() => downloadFile(`/extratos/${detailItem!.id}/extrato-pdf`, `extrato_${detailItem!.id}.pdf`)}
+									title="Download PDF"
+								>
+									<Download class="h-3.5 w-3.5" />
+									PDF
+								</Button>
+							</div>
 						</div>
 					</Card.Header>
 					<Card.Content class="space-y-4">
@@ -836,7 +868,23 @@
 										variant="outline"
 										size="sm"
 										class="h-7 text-xs"
+										onclick={() =>
+											openPreview(
+												`/extratos/${detailItem!.id}/caixinha-pdf`,
+												`Caixinha #${detailItem!.id}`,
+												`caixinha_${detailItem!.id}.pdf`
+											)}
+										title="View PDF"
+									>
+										<Eye class="h-3.5 w-3.5" />
+										View
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										class="h-7 text-xs"
 										onclick={() => downloadFile(`/extratos/${detailItem!.id}/caixinha-pdf`, `caixinha_${detailItem!.id}.pdf`)}
+										title="Download PDF"
 									>
 										<Download class="h-3.5 w-3.5" />
 										PDF
@@ -935,7 +983,23 @@
 										variant="outline"
 										size="sm"
 										class="h-7 text-xs"
+										onclick={() =>
+											openPreview(
+												`/extratos/${detailItem!.id}/higlobe-pdf`,
+												`Higlobe #${detailItem!.id}`,
+												`higlobe_${detailItem!.id}.pdf`
+											)}
+										title="View PDF"
+									>
+										<Eye class="h-3.5 w-3.5" />
+										View
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										class="h-7 text-xs"
 										onclick={() => downloadFile(`/extratos/${detailItem!.id}/higlobe-pdf`, `higlobe_${detailItem!.id}.pdf`)}
+										title="Download PDF"
 									>
 										<Download class="h-3.5 w-3.5" />
 										PDF
@@ -1004,6 +1068,14 @@
 		{/if}
 	</Sheet.SheetContent>
 </Sheet.Sheet>
+
+<!-- File preview -->
+<FilePreviewDialog
+	bind:open={previewOpen}
+	bind:path={previewPath}
+	title={previewTitle}
+	fallbackFilename={previewFallback}
+/>
 
 <!-- Delete confirmation -->
 <ConfirmDialog

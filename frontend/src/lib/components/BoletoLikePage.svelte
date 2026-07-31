@@ -21,6 +21,7 @@
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -150,6 +151,12 @@
 	// Delete dialog
 	let deleteDialogOpen = $state(false);
 	let deleteTarget = $state<BoletoEntry | null>(null);
+
+	// File preview
+	let previewOpen = $state(false);
+	let previewPath = $state<string | null>(null);
+	let previewTitle = $state('Preview');
+	let previewFallback = $state('file');
 
 	// Inline fiscal month edit
 	let editingFmId = $state<number | null>(null);
@@ -485,6 +492,13 @@
 		} catch (e) {
 			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Download failed');
 		}
+	}
+
+	function openPreview(path: string, title: string, fallbackFilename: string) {
+		previewPath = path;
+		previewTitle = title;
+		previewFallback = fallbackFilename;
+		previewOpen = true;
 	}
 
 	// ---------------------------------------------------------------------------
@@ -955,15 +969,33 @@
 									{/if}
 								</Button>
 							</div>
-							<Button
-								variant="outline"
-								size="sm"
-								class="h-7 text-xs"
-								onclick={() => downloadFile(`/${routePrefix}/${detailItem!.id}/pdf`, `${routePrefix}_${detailItem!.id}.pdf`)}
-							>
-								<Download class="h-3.5 w-3.5" />
-								PDF
-							</Button>
+							<div class="flex items-center gap-1">
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-7 text-xs"
+									onclick={() =>
+										openPreview(
+											`/${routePrefix}/${detailItem!.id}/pdf`,
+											`${domainLabel} #${detailItem!.id} PDF`,
+											`${routePrefix}_${detailItem!.id}.pdf`
+										)}
+									title="View PDF"
+								>
+									<Eye class="h-3.5 w-3.5" />
+									View
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-7 text-xs"
+									onclick={() => downloadFile(`/${routePrefix}/${detailItem!.id}/pdf`, `${routePrefix}_${detailItem!.id}.pdf`)}
+									title="Download PDF"
+								>
+									<Download class="h-3.5 w-3.5" />
+									PDF
+								</Button>
+							</div>
 						</div>
 					</Card.Header>
 					<Card.Content class="space-y-4">
@@ -1061,10 +1093,27 @@
 											class="h-7 text-xs"
 											disabled={replacingSupplementaryPdf}
 											onclick={() =>
+												openPreview(
+													`/${routePrefix}/${detailItem!.id}/attachment-pdf`,
+													`${supplementaryPdfLabel ?? 'Extra PDF'} #${detailItem!.id}`,
+													`${routePrefix}_${detailItem!.id}_extra.pdf`
+												)}
+											title="View PDF"
+										>
+											<Eye class="h-3.5 w-3.5" />
+											View
+										</Button>
+										<Button
+											variant="outline"
+											size="sm"
+											class="h-7 text-xs"
+											disabled={replacingSupplementaryPdf}
+											onclick={() =>
 												downloadFile(
 													`/${routePrefix}/${detailItem!.id}/attachment-pdf`,
 													`${routePrefix}_${detailItem!.id}_extra.pdf`
 												)}
+											title="Download PDF"
 										>
 											<Download class="h-3.5 w-3.5" />
 											PDF
@@ -1132,7 +1181,23 @@
 										variant="outline"
 										size="sm"
 										class="h-7 text-xs"
+										onclick={() =>
+											openPreview(
+												`/${routePrefix}/${detailItem!.id}/receipt`,
+												`Receipt #${detailItem!.id}`,
+												`receipt_${detailItem!.id}`
+											)}
+										title="View receipt"
+									>
+										<Eye class="h-3.5 w-3.5" />
+										View
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										class="h-7 text-xs"
 										onclick={() => downloadFile(`/${routePrefix}/${detailItem!.id}/receipt`, `receipt_${detailItem!.id}`)}
+										title="Download receipt"
 									>
 										<Download class="h-3.5 w-3.5" />
 										Image
@@ -1276,6 +1341,14 @@
 		{/if}
 	</Sheet.SheetContent>
 </Sheet.Sheet>
+
+<!-- File preview -->
+<FilePreviewDialog
+	bind:open={previewOpen}
+	bind:path={previewPath}
+	title={previewTitle}
+	fallbackFilename={previewFallback}
+/>
 
 <!-- Delete confirmation -->
 <ConfirmDialog

@@ -32,6 +32,7 @@
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -75,6 +76,12 @@
 	let detailOpen = $state(false);
 	let detailNf = $state<NfEntry | null>(null);
 	let detailImages = $state<NfImage[]>([]);
+
+	// File preview
+	let previewOpen = $state(false);
+	let previewPath = $state<string | null>(null);
+	let previewTitle = $state('Preview');
+	let previewFallback = $state('file');
 
 	// Detail replacement state
 	let replacingPdf = $state(false);
@@ -239,6 +246,13 @@
 		}
 	}
 
+	function openPreview(path: string, title: string, fallbackFilename: string) {
+		previewPath = path;
+		previewTitle = title;
+		previewFallback = fallbackFilename;
+		previewOpen = true;
+	}
+
 	async function downloadPdf(nfId: number) {
 		try {
 			const { blob, filename } = await downloadBlob(`/nfs/${nfId}/pdf`);
@@ -255,6 +269,18 @@
 		} catch (e) {
 			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Download failed');
 		}
+	}
+
+	function previewPdf(nfId: number) {
+		openPreview(`/nfs/${nfId}/pdf`, `NF #${nfId} PDF`, `nf_${nfId}.pdf`);
+	}
+
+	function previewImage(nfId: number, imageId: number) {
+		openPreview(
+			`/nfs/${nfId}/images/${imageId}`,
+			`Image #${imageId}`,
+			`nf_${nfId}_img_${imageId}`
+		);
 	}
 
 	// ---------------------------------------------------------------------------
@@ -612,15 +638,28 @@
 									{/if}
 								</Button>
 							</div>
-							<Button
-								variant="outline"
-								size="sm"
-								class="h-7 text-xs"
-								onclick={() => downloadPdf(detailNf!.id)}
-							>
-								<Download class="h-3.5 w-3.5" />
-								PDF
-							</Button>
+							<div class="flex items-center gap-1">
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-7 text-xs"
+									onclick={() => previewPdf(detailNf!.id)}
+									title="View PDF"
+								>
+									<Eye class="h-3.5 w-3.5" />
+									View
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									class="h-7 text-xs"
+									onclick={() => downloadPdf(detailNf!.id)}
+									title="Download PDF"
+								>
+									<Download class="h-3.5 w-3.5" />
+									PDF
+								</Button>
+							</div>
 						</div>
 					</Card.Header>
 					<Card.Content class="space-y-4">
@@ -673,11 +712,20 @@
 									<div class="flex items-center justify-between rounded-md border border-border px-3 py-2">
 										<button
 											class="text-sm text-muted-foreground hover:text-foreground transition-colors truncate flex-1 text-left"
-											onclick={() => downloadImage(detailNf!.id, img.id)}
+											onclick={() => previewImage(detailNf!.id, img.id)}
 										>
 											Image #{img.id}
 										</button>
 										<div class="flex items-center gap-1 ml-2 shrink-0">
+											<Button
+												variant="ghost"
+												size="icon"
+												class="h-7 w-7"
+												onclick={() => previewImage(detailNf!.id, img.id)}
+												title="View"
+											>
+												<Eye class="h-3.5 w-3.5" />
+											</Button>
 											<Button
 												variant="ghost"
 												size="icon"
@@ -725,6 +773,14 @@
 		{/if}
 	</Sheet.SheetContent>
 </Sheet.Sheet>
+
+<!-- File preview -->
+<FilePreviewDialog
+	bind:open={previewOpen}
+	bind:path={previewPath}
+	title={previewTitle}
+	fallbackFilename={previewFallback}
+/>
 
 <!-- Delete confirmation -->
 <ConfirmDialog
