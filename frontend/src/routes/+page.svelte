@@ -601,18 +601,30 @@
 							class={cn('absolute inset-y-0 left-0 rounded-full transition-all', withdrawProgressFillClass)}
 							style={`width: ${withdrawProgress}%`}
 						></div>
-					</div>
-					<div class="relative h-4 text-[11px] text-muted-foreground">
-						<span class="absolute left-0">0</span>
-						{#if activeWithdrawSummary.previous_month_income_brl > 0 && previousIncomePct < 98}
-							<span
-								class="absolute -translate-x-1/2 whitespace-nowrap"
+						{#if previousIncomePct > 0 && previousIncomePct < 100}
+							<div
+								class="absolute inset-y-0 w-px bg-background/70"
 								style={`left: ${previousIncomePct}%`}
-							>
-								Receita {formatBrl(activeWithdrawSummary.previous_month_income_brl)}
+							></div>
+						{/if}
+					</div>
+					<div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
+						{#if activeWithdrawSummary.previous_month_income_brl > 0}
+							<span class="flex items-center gap-1.5">
+								<span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
+								Receita mês anterior
+								<span class="font-medium tabular-nums text-foreground">
+									{formatBrl(activeWithdrawSummary.previous_month_income_brl)}
+								</span>
 							</span>
 						{/if}
-						<span class="absolute right-0">{formatBrl(activeWithdrawSummary.target_brl)}</span>
+						<span class="flex items-center gap-1.5">
+							<span class="h-2 w-2 shrink-0 rounded-full bg-amber-500"></span>
+							Meta
+							<span class="font-medium tabular-nums text-foreground">
+								{formatBrl(activeWithdrawSummary.target_brl)}
+							</span>
+						</span>
 					</div>
 				</div>
 
