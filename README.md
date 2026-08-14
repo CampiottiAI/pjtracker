@@ -61,6 +61,56 @@ Open `http://<machine-ip>:4173` (default). Environment variables:
 
 On a 4GB Pi, prefer `./scripts/prod.sh` over dev mode. If uploads still struggle, try `PJTRACKER_OCR=0` when Maritaca LLM extraction is reliable, and consider adding swap.
 
+## Backup (Google Drive via rclone)
+
+Backs up the durable data only: `pjtracker.db`, `pdfs/`, and `images/`. Secrets (`.token`, SMTP env) are **not** included — keep those separately.
+
+Requires: `sqlite3`, `tar`, and [`rclone`](https://rclone.org/) (for upload).
+
+### One-time rclone setup
+
+```bash
+rclone config
+# Storage: Google Drive
+# remote name: gdrive
+# scope: drive.file (files created by rclone) or drive
+```
+
+On a headless Pi, authorize on a machine with a browser (`rclone authorize "drive"`) and paste the token into the Pi config.
+
+```bash
+rclone lsd gdrive:
+```
+
+### Run backup
+
+```bash
+./scripts/backup.sh --dry-run      # build tar.gz locally, no upload
+./scripts/backup.sh --local-only   # keep tar.gz locally, skip rclone
+./scripts/backup.sh                # snapshot → tar.gz → upload → prune
+```
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `RCLONE_REMOTE` | `gdrive` | rclone remote name |
+| `RCLONE_PATH` | `pjtracker-backups` | folder on the remote |
+| `KEEP_N` | `14` | how many remote tars to keep (`0` = no prune) |
+| `KEEP_LOCAL` | `0` | set to `1` to keep the local tar after upload |
+| `PJTRACKER_DB_PATH` | `<repo>/pjtracker.db` | override DB (pdfs/images live next to it) |
+
+Cron example (daily 03:00):
+
+```cron
+0 3 * * * cd /path/to/pjtracker && ./scripts/backup.sh >> /tmp/pjtracker-backup.log 2>&1
+```
+
+### Restore
+
+1. Stop the service.
+2. Download: `rclone copy gdrive:pjtracker-backups/<file>.tar.gz .`
+3. Extract at the repo root (overwrites `pjtracker.db`, `pdfs/`, `images/`): `tar -xzf pjtracker-YYYYMMDD-HHMMSS.tar.gz`
+4. Start again with `./scripts/prod.sh`.
+
 ## Nota Fiscal Tracker
 
 Upload a PDF of a Nota Fiscal (NF-e). The app will:

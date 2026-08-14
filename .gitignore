@@ -12,6 +12,9 @@ wheels/
 # Database
 *.db
 
+# Local backup archives (from scripts/backup.sh --dry-run / --local-only)
+pjtracker-*.tar.gz
+
 # Saved NF PDFs
 pdfs/
 images/
