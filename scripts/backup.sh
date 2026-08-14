@@ -112,13 +112,23 @@ fi
 ARCHIVE_SIZE="$(du -h "$ARCHIVE_PATH" | awk '{print $1}')"
 echo "Archive size: $ARCHIVE_SIZE"
 
+report_local_archive() {
+  echo ""
+  echo "Archive ready (not uploaded):"
+  echo "  $ARCHIVE_PATH"
+  echo ""
+  echo "Download it from another machine with:"
+  echo "  scp $(whoami)@$(hostname):'$ARCHIVE_PATH' ."
+  echo ""
+}
+
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "Dry run: archive ready at $ARCHIVE_PATH (not uploaded)."
+  report_local_archive
   exit 0
 fi
 
 if [[ "$LOCAL_ONLY" -eq 1 ]]; then
-  echo "Local-only: archive kept at $ARCHIVE_PATH"
+  report_local_archive
   exit 0
 fi
 

@@ -65,7 +65,20 @@ On a 4GB Pi, prefer `./scripts/prod.sh` over dev mode. If uploads still struggle
 
 Backs up the durable data only: `pjtracker.db`, `pdfs/`, and `images/`. Secrets (`.token`, SMTP env) are **not** included — keep those separately.
 
-Requires: `sqlite3`, `tar`, and [`rclone`](https://rclone.org/) (for upload).
+Requires: `sqlite3` and `tar`. [`rclone`](https://rclone.org/) is only needed to upload; `--local-only` works without it and prints the archive path plus an `scp` command to fetch it.
+
+### Install rclone (Pi)
+
+Preferred (latest binary):
+
+```bash
+sudo apt update
+sudo apt install -y curl unzip
+curl https://rclone.org/install.sh | sudo bash
+rclone version
+```
+
+Or from Debian packages (often older): `sudo apt install -y rclone`.
 
 ### One-time rclone setup
 
