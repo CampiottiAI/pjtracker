@@ -110,6 +110,7 @@ rclone lsd gdrive:
 | `KEEP_N` | `14` | how many remote tars to keep (`0` = no prune) |
 | `KEEP_LOCAL` | `0` | set to `1` to keep the local tar after upload |
 | `PJTRACKER_DB_PATH` | `<repo>/pjtracker.db` | override DB (pdfs/images live next to it) |
+| `BACKUP_SSH_HOST` | `<hostname>.local` | host printed in the `--local-only` / `--dry-run` scp hint |
 
 Cron example (daily 03:00):
 

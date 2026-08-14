@@ -10,6 +10,7 @@
 #   KEEP_N          how many remote tars to keep (default: 14; 0 = no prune)
 #   KEEP_LOCAL      set to 1 to keep the local tar after upload
 #   PJTRACKER_DB_PATH  override DB path (pdfs/ and images/ live next to it)
+#   BACKUP_SSH_HOST hostname shown in the local-only scp hint (default: <hostname>.local)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -113,12 +114,20 @@ ARCHIVE_SIZE="$(du -h "$ARCHIVE_PATH" | awk '{print $1}')"
 echo "Archive size: $ARCHIVE_SIZE"
 
 report_local_archive() {
+  local host="${BACKUP_SSH_HOST:-}"
+  if [[ -z "$host" ]]; then
+    host="$(hostname 2>/dev/null || echo localhost)"
+    # mDNS on LAN (e.g. raspi -> raspi.local) unless already a FQDN/IP-ish name
+    if [[ "$host" != *.* ]]; then
+      host="${host}.local"
+    fi
+  fi
   echo ""
   echo "Archive ready (not uploaded):"
   echo "  $ARCHIVE_PATH"
   echo ""
   echo "Download it from another machine with:"
-  echo "  scp $(whoami)@$(hostname):'$ARCHIVE_PATH' ."
+  echo "  scp $(whoami)@${host}:'$ARCHIVE_PATH' ."
   echo ""
 }
 
