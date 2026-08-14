@@ -100,6 +100,7 @@ rclone lsd gdrive:
 ```bash
 ./scripts/backup.sh --dry-run      # build tar.gz locally, no upload
 ./scripts/backup.sh --local-only   # keep tar.gz locally, skip rclone
+./scripts/backup.sh --clean-local  # delete local pjtracker-*.tar.gz (after scp)
 ./scripts/backup.sh                # snapshot → tar.gz → upload → prune
 ```
 
@@ -109,6 +110,7 @@ rclone lsd gdrive:
 | `RCLONE_PATH` | `pjtracker-backups` | folder on the remote |
 | `KEEP_N` | `14` | how many remote tars to keep (`0` = no prune) |
 | `KEEP_LOCAL` | `0` | set to `1` to keep the local tar after upload |
+| `KEEP_LOCAL_N` | `0` | with `--clean-local`: newest local tars to keep (`0` = delete all) |
 | `PJTRACKER_DB_PATH` | `<repo>/pjtracker.db` | override DB (pdfs/images live next to it) |
 | `BACKUP_SSH_HOST` | `<hostname>.local` | host printed in the `--local-only` / `--dry-run` scp hint |
 

@@ -9,6 +9,7 @@
 #   RCLONE_PATH     folder on the remote (default: pjtracker-backups)
 #   KEEP_N          how many remote tars to keep (default: 14; 0 = no prune)
 #   KEEP_LOCAL      set to 1 to keep the local tar after upload
+#   KEEP_LOCAL_N    with --clean-local: how many newest local tars to keep (default: 0 = delete all)
 #   PJTRACKER_DB_PATH  override DB path (pdfs/ and images/ live next to it)
 #   BACKUP_SSH_HOST hostname shown in the local-only scp hint (default: <hostname>.local)
 set -euo pipefail
@@ -20,24 +21,29 @@ RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
 RCLONE_PATH="${RCLONE_PATH:-pjtracker-backups}"
 KEEP_N="${KEEP_N:-14}"
 KEEP_LOCAL="${KEEP_LOCAL:-0}"
+KEEP_LOCAL_N="${KEEP_LOCAL_N:-0}"
 
 DRY_RUN=0
 LOCAL_ONLY=0
+CLEAN_LOCAL=0
 
 usage() {
   cat <<'EOF'
-Usage: backup.sh [--dry-run] [--local-only] [-h|--help]
+Usage: backup.sh [--dry-run] [--local-only] [--clean-local] [-h|--help]
 
-  --dry-run      Build the tar.gz; do not upload or prune
-  --local-only   Build the tar.gz and keep it locally; skip rclone
-  -h, --help     Show this help
+  --dry-run       Build the tar.gz; do not upload or prune
+  --local-only    Build the tar.gz and keep it locally; skip rclone
+  --clean-local   Delete local pjtracker-*.tar.gz archives (no backup)
+  -h, --help      Show this help
 
 Environment:
   RCLONE_REMOTE      rclone remote (default: gdrive)
   RCLONE_PATH        remote folder (default: pjtracker-backups)
   KEEP_N             remote tars to keep (default: 14; 0 = no prune)
   KEEP_LOCAL         1 to keep local tar after upload (default: 0)
+  KEEP_LOCAL_N       with --clean-local: newest local tars to keep (default: 0)
   PJTRACKER_DB_PATH  override path to pjtracker.db
+  BACKUP_SSH_HOST    host in the local-only scp hint (default: <hostname>.local)
 EOF
 }
 
@@ -45,6 +51,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --local-only) LOCAL_ONLY=1; shift ;;
+    --clean-local) CLEAN_LOCAL=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *)
       echo "error: unknown argument: $1" >&2
@@ -62,6 +69,56 @@ fi
 DATA_ROOT="$(dirname "$DB_PATH")"
 PDF_DIR="$DATA_ROOT/pdfs"
 IMAGES_DIR="$DATA_ROOT/images"
+
+clean_local_archives() {
+  local keep="$KEEP_LOCAL_N"
+  if [[ ! "$keep" =~ ^[0-9]+$ ]]; then
+    echo "error: invalid KEEP_LOCAL_N=$keep" >&2
+    exit 1
+  fi
+
+  local matches=()
+  local f
+  shopt -s nullglob
+  matches=("$DATA_ROOT"/pjtracker-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].tar.gz)
+  shopt -u nullglob
+
+  local files=()
+  if [[ ${#matches[@]} -gt 0 ]]; then
+    while IFS= read -r f; do
+      [[ -n "$f" ]] || continue
+      files+=("$f")
+    done < <(printf '%s\n' "${matches[@]}" | sort -r)
+  fi
+
+  local count="${#files[@]}"
+  if [[ "$count" -eq 0 ]]; then
+    echo "No local pjtracker-*.tar.gz archives in $DATA_ROOT"
+    return 0
+  fi
+
+  echo "Local archives in $DATA_ROOT: $count (keeping newest $keep)"
+  local i=0
+  while [[ "$i" -lt "$count" ]]; do
+    f="${files[$i]}"
+    if [[ "$i" -lt "$keep" ]]; then
+      echo "  keep  $f"
+    else
+      echo "  delete $f"
+      rm -f "$f"
+    fi
+    i=$((i + 1))
+  done
+}
+
+if [[ "$CLEAN_LOCAL" -eq 1 ]]; then
+  if [[ "$DRY_RUN" -eq 1 || "$LOCAL_ONLY" -eq 1 ]]; then
+    echo "error: --clean-local cannot be combined with --dry-run or --local-only" >&2
+    exit 1
+  fi
+  clean_local_archives
+  exit 0
+fi
 
 for cmd in sqlite3 tar; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -128,6 +185,9 @@ report_local_archive() {
   echo ""
   echo "Download it from another machine with:"
   echo "  scp $(whoami)@${host}:'$ARCHIVE_PATH' ."
+  echo ""
+  echo "After downloading, free space on this machine with:"
+  echo "  ./scripts/backup.sh --clean-local"
   echo ""
 }
 
