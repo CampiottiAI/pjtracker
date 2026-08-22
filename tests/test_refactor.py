@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pjtracker.app as app
 from pjtracker.parsers.boleto_parser import BoletoParsed, ReceiptParsed, parse_boleto_pdf, parse_receipt_image
 from pjtracker.parsers.darf_parser import DarfParsed, parse_darf_pdf
+from pjtracker.parsers.ocr import reset_easyocr_reader
 from pjtracker.parsers.parse_cache import clear_parse_cache
 from pjtracker.llm_extraction import (
     BoletoPdfExtraido,
@@ -41,6 +42,7 @@ def temporary_app_paths():
 class RefactorTests(unittest.TestCase):
     def setUp(self):
         clear_parse_cache()
+        reset_easyocr_reader()
 
     def test_normalize_digits_strips_everything_but_numbers(self):
         self.assertEqual(
@@ -192,6 +194,36 @@ class RefactorTests(unittest.TestCase):
             "75691320740123282080100018620013213810000056735",
         )
         self.assertEqual(parsed.source, "merged")
+
+    def test_receipt_parser_keeps_llm_fields_when_easyocr_init_fails(self):
+        llm_result = LLMExtractionResult(
+            data=ComprovanteExtraido(
+                valor=567.35,
+                data_pagamento=None,
+                codigo_barras="75691320740123282080100018620013213810000056735",
+            )
+        )
+
+        with (
+            patch("pjtracker.parsers.boleto_parser.extract_boleto_receipt", return_value=llm_result),
+            patch(
+                "pjtracker.parsers.ocr.easyocr.Reader",
+                side_effect=NameError("name 'corrupt_msg' is not defined"),
+            ),
+        ):
+            parsed = parse_receipt_image(
+                b"fake-image",
+                filename="comprovante.png",
+                mime_type="image/png",
+            )
+
+        self.assertEqual(parsed.value, 567.35)
+        self.assertIsNone(parsed.payment_datetime)
+        self.assertEqual(
+            parsed.codigo_barras_digits,
+            "75691320740123282080100018620013213810000056735",
+        )
+        self.assertEqual(parsed.source, "llm")
 
     def test_darf_parser_uses_fallback_when_llm_returns_nothing(self):
         fallback = DarfParsed(
