@@ -5,24 +5,20 @@
 	import { getReady } from '$lib/api/client.js';
 	import {
 		LayoutDashboard,
-		FileText,
-		Receipt,
-		Landmark,
-		WalletCards,
+		Home,
 		BarChart3,
 		Menu,
-		X
+		X,
+		FolderOpen,
+		FileText
 	} from 'lucide-svelte';
 
 	type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
 
-	const items: NavItem[] = [
-		{ href: '/', label: 'Dashboard', icon: LayoutDashboard },
-		{ href: '/nfs', label: 'Notas Fiscais', icon: FileText },
-		{ href: '/boletos', label: 'Boletos', icon: Receipt },
-		{ href: '/darfs', label: 'DARFs', icon: Landmark },
-		{ href: '/irpj-csll', label: 'IRPJ/CSLL', icon: Landmark },
-		{ href: '/extratos', label: 'Extratos', icon: WalletCards },
+	const primaryItems: NavItem[] = [
+		{ href: '/', label: 'Fluxo', icon: Home },
+		{ href: '/casa', label: 'Casa', icon: Home },
+		{ href: '/documentos', label: 'Documentos', icon: FolderOpen },
 		{ href: '/analytics', label: 'Analytics', icon: BarChart3 }
 	];
 
@@ -31,6 +27,16 @@
 
 	function isActive(href: string, pathname: string): boolean {
 		if (href === '/') return pathname === '/';
+		if (href === '/documentos') {
+			return (
+				pathname === '/documentos' ||
+				pathname.startsWith('/nfs') ||
+				pathname.startsWith('/boletos') ||
+				pathname.startsWith('/darfs') ||
+				pathname.startsWith('/irpj-csll') ||
+				pathname.startsWith('/extratos')
+			);
+		}
 		return pathname.startsWith(href);
 	}
 
@@ -57,9 +63,8 @@
 			<span>pjtracker</span>
 		</a>
 
-		<!-- Desktop nav -->
 		<div class="hidden md:flex items-center gap-1">
-			{#each items as item}
+			{#each primaryItems as item}
 				{@const active = isActive(item.href, $page.url.pathname)}
 				<a
 					href={item.href}
@@ -78,11 +83,15 @@
 
 		<div class="flex-1"></div>
 
-		<!-- API status indicator -->
-		<div class="hidden md:flex items-center gap-2 text-xs text-muted-foreground" title={`API: ${apiStatus}`}>
+		<div
+			class="hidden md:flex items-center gap-2 text-xs text-muted-foreground"
+			title={`API: ${apiStatus}`}
+		>
 			<span class="relative flex h-2 w-2">
 				{#if apiStatus === 'ok'}
-					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+					<span
+						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"
+					></span>
 					<span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
 				{:else if apiStatus === 'degraded'}
 					<span class="relative inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
@@ -93,7 +102,6 @@
 			API
 		</div>
 
-		<!-- Mobile hamburger -->
 		<button
 			class="md:hidden ml-2 inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-accent"
 			onclick={() => (mobileOpen = !mobileOpen)}
@@ -107,10 +115,9 @@
 		</button>
 	</div>
 
-	<!-- Mobile dropdown -->
 	{#if mobileOpen}
 		<div class="md:hidden border-t border-border px-4 pb-3 pt-2 space-y-1">
-			{#each items as item}
+			{#each primaryItems as item}
 				{@const active = isActive(item.href, $page.url.pathname)}
 				<a
 					href={item.href}

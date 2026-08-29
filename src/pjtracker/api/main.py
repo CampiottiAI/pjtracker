@@ -11,9 +11,11 @@ from pjtracker.app import init_db
 from .routers import (
     analytics,
     boletos,
+    casa,
     darfs,
     extratos,
     fiscal_months,
+    fluxo,
     health,
     irpj_csll,
     nfs,
@@ -45,3 +47,5 @@ app.include_router(extratos.router, prefix=api_prefix)
 app.include_router(fiscal_months.router, prefix=api_prefix)
 app.include_router(analytics.router, prefix=api_prefix)
 app.include_router(withdraws.router, prefix=api_prefix)
+app.include_router(casa.router, prefix=api_prefix)
+app.include_router(fluxo.router, prefix=api_prefix)

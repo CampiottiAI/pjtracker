@@ -4,11 +4,12 @@
 	import {
 		ApiError,
 		formatApiErrorMessage,
+		getFluxoSeries,
 		getNfSeries,
 		listDarfs,
 		listIrpjCsll
 	} from '$lib/api/client.js';
-	import type { DarfEntry, IrpjCsllEntry, NfSeriesPoint } from '$lib/api/types.js';
+	import type { DarfEntry, FluxoSeriesPoint, IrpjCsllEntry, NfSeriesPoint } from '$lib/api/types.js';
 	import { formatBrl, formatFiscalMes, formatUsd, formatNumber } from '$lib/utils/format.js';
 	import AnalyticsLineChart, {
 		type ChartPoint,
@@ -20,6 +21,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Loader2, TrendingUp } from 'lucide-svelte';
+	import { cn } from '$lib/utils.js';
 
 	let dateFrom = $state('');
 	let dateTo = $state('');
@@ -28,6 +30,7 @@
 	let irpjCsllEntries = $state<IrpjCsllEntry[]>([]);
 	let loading = $state(false);
 	let hasSearched = $state(false);
+	let fluxoPoints = $state<FluxoSeriesPoint[]>([]);
 	let requestSequence = 0;
 
 	onMount(() => {
@@ -35,6 +38,9 @@
 		const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
 		dateFrom = threeMonthsAgo.toISOString().split('T')[0];
 		dateTo = now.toISOString().split('T')[0];
+		void getFluxoSeries()
+			.then((r) => (fluxoPoints = r.points))
+			.catch(() => (fluxoPoints = []));
 	});
 
 	async function loadData() {
@@ -207,7 +213,57 @@
 </script>
 
 <div class="space-y-6">
-	<PageHeader title="Analytics" description="NF time series and financial charts" />
+	<PageHeader title="Analytics" description="NF, impostos e saques vs casa" />
+
+	{#if fluxoPoints.length > 0}
+		<Card.Root>
+			<Card.Header>
+				<Card.Title class="text-sm">Saques vs sua parte da casa</Card.Title>
+				<Card.Description>Por mês fiscal — saques da PJ e necessidade da casa (sua parte).</Card.Description>
+			</Card.Header>
+			<Card.Content>
+				<div class="rounded-lg border">
+					<Table.Table>
+						<Table.TableHeader>
+							<Table.TableRow>
+								<Table.TableHead>Mês</Table.TableHead>
+								<Table.TableHead class="text-right">Saques</Table.TableHead>
+								<Table.TableHead class="text-right">Sua parte casa</Table.TableHead>
+								<Table.TableHead class="text-right">Diferença</Table.TableHead>
+								<Table.TableHead>Casa</Table.TableHead>
+							</Table.TableRow>
+						</Table.TableHeader>
+						<Table.TableBody>
+							{#each fluxoPoints as row (row.fiscal_mes)}
+								<Table.TableRow>
+									<Table.TableCell>{formatFiscalMes(row.fiscal_mes)}</Table.TableCell>
+									<Table.TableCell class="text-right tabular-nums">
+										{formatBrl(row.saques_brl)}
+									</Table.TableCell>
+									<Table.TableCell class="text-right tabular-nums">
+										{formatBrl(row.primary_share_brl)}
+									</Table.TableCell>
+									<Table.TableCell
+										class={cn(
+											'text-right tabular-nums',
+											row.saques_brl >= row.primary_share_brl
+												? 'text-emerald-400'
+												: 'text-amber-400'
+										)}
+									>
+										{formatBrl(row.saques_brl - row.primary_share_brl)}
+									</Table.TableCell>
+									<Table.TableCell>
+										{row.casa_saved ? 'salva' : 'estimada'}
+									</Table.TableCell>
+								</Table.TableRow>
+							{/each}
+						</Table.TableBody>
+					</Table.Table>
+				</div>
+			</Card.Content>
+		</Card.Root>
+	{/if}
 
 	<!-- Date range -->
 	<div class="flex flex-wrap items-end gap-3">

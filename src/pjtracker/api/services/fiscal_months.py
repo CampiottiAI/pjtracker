@@ -11,6 +11,7 @@ from pjtracker.app import (
     get_nf_entries,
     get_withdraw_fiscal_months,
 )
+from pjtracker.casa.storage import list_saved_fiscal_meses
 
 REQUIRED_NFS = 2
 REQUIRED_BOLETO_WITH_RECEIPT = 1
@@ -52,6 +53,8 @@ def collect_fiscal_months() -> list[str]:
     for fm in get_withdraw_fiscal_months():
         if fm:
             months.add(fm)
+    for fm in list_saved_fiscal_meses():
+        months.add(fm)
     return sorted(months, reverse=True)
 
 

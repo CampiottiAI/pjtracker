@@ -4,16 +4,16 @@
 	import {
 		ApiError,
 		createFiscalMonth,
-		listFiscalMonths,
-		getCompleteness,
-		listWithdraws,
 		createWithdraw,
-		updateWithdraw,
 		deleteWithdraw,
-		formatApiErrorMessage
+		formatApiErrorMessage,
+		getFluxo,
+		listFiscalMonths,
+		listWithdraws,
+		updateWithdraw
 	} from '$lib/api/client.js';
 	import type {
-		CompletenessResponse,
+		FluxoResponse,
 		WithdrawEntry,
 		WithdrawSummary
 	} from '$lib/api/types.js';
@@ -38,16 +38,22 @@
 		Plus,
 		Pencil,
 		Trash2,
-		Banknote
+		Banknote,
+		Home,
+		Building2,
+		ChevronDown,
+		ChevronUp
 	} from 'lucide-svelte';
 
 	let months = $state<string[]>([]);
 	let selectedMonth = $state('');
-	let completeness = $state<CompletenessResponse | null>(null);
+	let fluxo = $state<FluxoResponse | null>(null);
 	let withdrawItems = $state<WithdrawEntry[]>([]);
 	let withdrawSummary = $state<WithdrawSummary | null>(null);
 	let withdrawLoading = $state(false);
 	let loading = $state(true);
+	let docsExpanded = $state(false);
+
 	let createDialogOpen = $state(false);
 	let createMonthValue = $state('');
 	let creatingMonth = $state(false);
@@ -80,33 +86,16 @@
 		};
 	}
 
-	function computeLocalSummary(items: WithdrawEntry[]): WithdrawSummary {
-		const total = items.reduce((sum, item) => sum + item.amount_brl, 0);
-		const previousIncome = withdrawSummary?.previous_month_income_brl ?? 0;
-		return {
-			target_brl: WITHDRAW_TARGET_BRL,
-			total_brl: Math.round(total * 100) / 100,
-			remaining_brl: Math.max(0, WITHDRAW_TARGET_BRL - total),
-			over_target_brl: Math.max(0, total - WITHDRAW_TARGET_BRL),
-			target_reached: total >= WITHDRAW_TARGET_BRL,
-			previous_month_income_brl: previousIncome
-		};
-	}
-
 	function getTodayIsoDate(): string {
 		const today = new Date();
-		const month = `${today.getMonth() + 1}`.padStart(2, '0');
-		const day = `${today.getDate()}`.padStart(2, '0');
-		return `${today.getFullYear()}-${month}-${day}`;
+		return `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, '0')}-${`${today.getDate()}`.padStart(2, '0')}`;
 	}
 
 	function parseAmountInput(value: string | number | null | undefined): number | null {
 		if (value == null) return null;
 		let raw = String(value).trim();
 		if (!raw) return null;
-		if (raw.includes(',')) {
-			raw = raw.replace(/\./g, '').replace(',', '.');
-		}
+		if (raw.includes(',')) raw = raw.replace(/\./g, '').replace(',', '.');
 		const amount = Number.parseFloat(raw);
 		if (!Number.isFinite(amount) || amount <= 0) return null;
 		return amount;
@@ -123,8 +112,7 @@
 		try {
 			await loadMonths();
 		} catch (e) {
-			const msg = e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to load';
-			toast.error(msg);
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao carregar');
 		} finally {
 			loading = false;
 		}
@@ -132,21 +120,21 @@
 
 	$effect(() => {
 		if (!selectedMonth) {
-			completeness = null;
+			fluxo = null;
 			withdrawItems = [];
 			withdrawSummary = null;
 			return;
 		}
 		addWithdrawDate = getTodayIsoDate();
-		void loadCompleteness(selectedMonth);
+		void loadFluxo(selectedMonth);
 		void loadWithdraws(selectedMonth);
 	});
 
-	async function loadCompleteness(fm: string) {
+	async function loadFluxo(fm: string) {
 		try {
-			completeness = await getCompleteness(fm);
+			fluxo = await getFluxo(fm);
 		} catch (e) {
-			completeness = null;
+			fluxo = null;
 			if (e instanceof ApiError && e.status !== 422) {
 				toast.error(formatApiErrorMessage(e.body));
 			}
@@ -162,9 +150,9 @@
 		} catch (e) {
 			withdrawItems = [];
 			withdrawSummary = emptyWithdrawSummary();
-			const msg =
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao carregar saques';
-			toast.error(msg);
+			toast.error(
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao carregar saques'
+			);
 		} finally {
 			withdrawLoading = false;
 		}
@@ -175,101 +163,49 @@
 		months = res.months;
 		if (months.length === 0) {
 			selectedMonth = '';
-			completeness = null;
 			return;
 		}
 		if (preferredMonth && months.includes(preferredMonth)) {
 			selectedMonth = preferredMonth;
 			return;
 		}
-		if (selectedMonth && months.includes(selectedMonth)) {
-			return;
-		}
+		if (selectedMonth && months.includes(selectedMonth)) return;
 		selectedMonth = months[0];
 	}
 
 	function getCurrentMonthValue(): string {
 		const today = new Date();
-		const month = `${today.getMonth() + 1}`.padStart(2, '0');
-		return `${today.getFullYear()}-${month}`;
-	}
-
-	function openCreateMonthDialog() {
-		createMonthValue = selectedMonth || getCurrentMonthValue();
-		createDialogOpen = true;
-	}
-
-	async function handleCreateMonth() {
-		if (!createMonthValue) {
-			toast.error('Select a fiscal month');
-			return;
-		}
-		creatingMonth = true;
-		try {
-			const response = await createFiscalMonth(createMonthValue);
-			await loadMonths(createMonthValue);
-			createDialogOpen = false;
-			toast.success(
-				response.created
-					? `${formatFiscalMes(createMonthValue)} created`
-					: `${formatFiscalMes(createMonthValue)} already exists`
-			);
-		} catch (e) {
-			const msg =
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to create fiscal month';
-			toast.error(msg);
-		} finally {
-			creatingMonth = false;
-		}
-	}
-
-	function handleCreateMonthSubmit(event: SubmitEvent) {
-		event.preventDefault();
-		void handleCreateMonth();
+		return `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, '0')}`;
 	}
 
 	async function handleAddWithdraw(event: SubmitEvent) {
 		event.preventDefault();
-		if (!selectedMonth) {
-			toast.error('Selecione um mês fiscal');
-			return;
-		}
-
-		const form = event.currentTarget as HTMLFormElement;
-		const formData = new FormData(form);
-		const dateValue = String(formData.get('withdraw_date') ?? addWithdrawDate ?? '').trim();
-		const amountValue = String(formData.get('amount_brl') ?? addWithdrawAmount ?? '').trim();
-		const notesValue = String(formData.get('notes') ?? addWithdrawNotes ?? '').trim();
-
-		if (!dateValue) {
+		if (!selectedMonth) return;
+		const amount = parseAmountInput(addWithdrawAmount);
+		if (!addWithdrawDate) {
 			toast.error('Informe a data do saque');
 			return;
 		}
-
-		const amount = parseAmountInput(amountValue);
 		if (amount === null) {
 			toast.error('Informe um valor válido maior que zero');
 			return;
 		}
-
 		addingWithdraw = true;
 		try {
-			const created = await createWithdraw({
+			await createWithdraw({
 				fiscal_mes: selectedMonth,
 				amount_brl: amount,
-				withdraw_date: dateValue,
-				notes: notesValue || null
+				withdraw_date: addWithdrawDate,
+				notes: addWithdrawNotes.trim() || null
 			});
-			const nextItems = [created, ...withdrawItems.filter((item) => item.id !== created.id)];
-			withdrawItems = nextItems;
-			withdrawSummary = computeLocalSummary(nextItems);
 			resetAddWithdrawForm();
 			toast.success('Saque adicionado');
-			void loadWithdraws(selectedMonth);
+			await loadWithdraws(selectedMonth);
+			await loadFluxo(selectedMonth);
 		} catch (e) {
-			const msg =
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao adicionar saque';
-			toast.error(msg);
+			toast.error(
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao adicionar saque'
+			);
 		} finally {
 			addingWithdraw = false;
 		}
@@ -303,19 +239,15 @@
 			editDialogOpen = false;
 			editingWithdraw = null;
 			await loadWithdraws(selectedMonth);
-			toast.success('Withdrawal updated');
+			await loadFluxo(selectedMonth);
+			toast.success('Saque atualizado');
 		} catch (e) {
-			const msg =
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to update withdrawal';
-			toast.error(msg);
+			toast.error(
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao atualizar saque'
+			);
 		} finally {
 			savingWithdraw = false;
 		}
-	}
-
-	function openDeleteWithdraw(item: WithdrawEntry) {
-		deletingWithdraw = item;
-		deleteDialogOpen = true;
 	}
 
 	async function handleDeleteWithdraw() {
@@ -323,46 +255,28 @@
 		await deleteWithdraw(deletingWithdraw.id);
 		deletingWithdraw = null;
 		await loadWithdraws(selectedMonth);
-		toast.success('Withdrawal deleted');
+		await loadFluxo(selectedMonth);
+		toast.success('Saque excluído');
 	}
 
-	const activeWithdrawSummary = $derived(withdrawSummary ?? emptyWithdrawSummary());
+	const activeSummary = $derived(withdrawSummary ?? emptyWithdrawSummary());
+	const targetBrl = $derived(activeSummary.target_brl);
 
-	const withdrawProgress = $derived(
-		Math.min(100, (activeWithdrawSummary.total_brl / activeWithdrawSummary.target_brl) * 100)
-	);
+	const pctOfTarget = (value: number) =>
+		Math.min(100, Math.max(0, (value / targetBrl) * 100));
 
-	const previousIncomePct = $derived(
-		Math.min(
-			100,
-			(activeWithdrawSummary.previous_month_income_brl / activeWithdrawSummary.target_brl) * 100
-		)
+	const casaNeedPct = $derived(
+		fluxo ? pctOfTarget(fluxo.coverage.primary_share_brl) : 0
 	);
+	const saquesPct = $derived(pctOfTarget(activeSummary.total_brl));
+	const incomePct = $derived(pctOfTarget(activeSummary.previous_month_income_brl));
 
 	const withdrawZone = $derived<'safe' | 'warning' | 'over'>(
-		activeWithdrawSummary.over_target_brl
+		activeSummary.over_target_brl
 			? 'over'
-			: activeWithdrawSummary.total_brl <= activeWithdrawSummary.previous_month_income_brl
+			: activeSummary.total_brl <= activeSummary.previous_month_income_brl
 				? 'safe'
 				: 'warning'
-	);
-
-	const withdrawStatusClass = $derived(
-		withdrawZone === 'over'
-			? 'text-red-400'
-			: withdrawZone === 'safe'
-				? 'text-emerald-400'
-				: 'text-amber-400'
-	);
-
-	const withdrawStatusLabel = $derived(
-		withdrawZone === 'over'
-			? `Acima da meta: ${formatBrl(activeWithdrawSummary.over_target_brl)}`
-			: withdrawZone === 'safe'
-				? activeWithdrawSummary.previous_month_income_brl > 0
-					? 'Dentro da receita do mês anterior'
-					: `Faltam ${formatBrl(activeWithdrawSummary.remaining_brl)}`
-				: `Acima da receita: ${formatBrl(activeWithdrawSummary.total_brl - activeWithdrawSummary.previous_month_income_brl)}`
 	);
 
 	const withdrawProgressFillClass = $derived(
@@ -372,6 +286,21 @@
 				? 'bg-emerald-600'
 				: 'bg-amber-500'
 	);
+
+	const coverageHero = $derived.by(() => {
+		if (!fluxo) return null;
+		const { coverage } = fluxo;
+		if (coverage.covers_household) {
+			return {
+				text: `Cobre, sobram ${formatBrl(coverage.surplus_brl)}`,
+				class: 'text-emerald-400'
+			};
+		}
+		return {
+			text: `Faltam ${formatBrl(coverage.shortfall_brl)}`,
+			class: 'text-amber-400'
+		};
+	});
 
 	type CheckItem = {
 		label: string;
@@ -384,39 +313,39 @@
 	};
 
 	const checks = $derived<CheckItem[]>(
-		completeness
+		fluxo?.completeness
 			? [
 					{
 						label: 'Notas Fiscais',
 						icon: FileText,
-						count: completeness.nfs_count,
-						ok: completeness.nfs_ok,
+						count: fluxo.completeness.nfs_count,
+						ok: fluxo.completeness.nfs_ok,
 						required: 2,
 						href: `/nfs?fiscal_mes=${selectedMonth}`
 					},
 					{
 						label: 'Boletos c/ Recibo',
 						icon: Receipt,
-						count: completeness.boletos_with_receipt_count,
-						ok: completeness.boletos_ok,
+						count: fluxo.completeness.boletos_with_receipt_count,
+						ok: fluxo.completeness.boletos_ok,
 						required: 1,
 						href: `/boletos?fiscal_mes=${selectedMonth}`
 					},
 					{
 						label: 'DARFs c/ Recibo',
 						icon: Landmark,
-						count: completeness.darfs_with_receipt_count,
-						ok: completeness.darfs_ok,
+						count: fluxo.completeness.darfs_with_receipt_count,
+						ok: fluxo.completeness.darfs_ok,
 						required: 1,
 						href: `/darfs?fiscal_mes=${selectedMonth}`
 					},
-					...(completeness.irpj_csll_required
+					...(fluxo.completeness.irpj_csll_required
 						? [
 								{
 									label: 'IRPJ/CSLL c/ Recibo',
 									icon: Landmark,
-									count: completeness.irpj_csll_with_receipt_count,
-									ok: completeness.irpj_csll_ok,
+									count: fluxo.completeness.irpj_csll_with_receipt_count,
+									ok: fluxo.completeness.irpj_csll_ok,
 									required: 1,
 									href: `/irpj-csll?fiscal_mes=${selectedMonth}`
 								}
@@ -425,16 +354,16 @@
 					{
 						label: 'Extratos c/ Caixinha',
 						icon: WalletCards,
-						count: completeness.extratos_caixinha_count,
-						ok: completeness.extratos_ok,
+						count: fluxo.completeness.extratos_caixinha_count,
+						ok: fluxo.completeness.extratos_ok,
 						required: 1,
 						href: `/extratos?fiscal_mes=${selectedMonth}`
 					},
 					{
 						label: 'Higlobe',
 						icon: DollarSign,
-						count: completeness.extratos_higlobe_count,
-						ok: completeness.higlobe_ok,
+						count: fluxo.completeness.extratos_higlobe_count,
+						ok: fluxo.completeness.higlobe_ok,
 						required: 1,
 						href: `/extratos?fiscal_mes=${selectedMonth}`,
 						optional: true
@@ -445,24 +374,31 @@
 </script>
 
 <div class="space-y-6">
-	<PageHeader title="Dashboard" description="Fiscal month completeness overview">
+	<PageHeader
+		title="Fluxo"
+		description="Saques cobrem sua parte da casa? O que sobra na empresa?"
+	>
 		{#snippet actions()}
-			<Button onclick={openCreateMonthDialog}>
+			<Button
+				onclick={() => {
+					createMonthValue = selectedMonth || getCurrentMonthValue();
+					createDialogOpen = true;
+				}}
+			>
 				<Plus class="h-4 w-4" />
-				Create fiscal month
+				Criar mês fiscal
 			</Button>
 		{/snippet}
 	</PageHeader>
 
-	<!-- Month selector -->
-	<div class="flex items-center gap-3">
-		<label for="month-select" class="text-sm font-medium text-muted-foreground">Fiscal Month</label>
+	<div class="flex flex-wrap items-center gap-3">
+		<label for="fluxo-month" class="text-sm font-medium text-muted-foreground">Mês</label>
 		{#if loading}
 			<div class="h-9 w-40 animate-pulse rounded-md bg-muted"></div>
 		{:else if months.length > 0}
 			<select
-				id="month-select"
-				class="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+				id="fluxo-month"
+				class="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 				bind:value={selectedMonth}
 			>
 				{#each months as m}
@@ -470,76 +406,165 @@
 				{/each}
 			</select>
 		{:else}
-			<span class="text-sm text-muted-foreground">No fiscal months found</span>
+			<span class="text-sm text-muted-foreground">Nenhum mês fiscal</span>
+		{/if}
+
+		{#if fluxo}
+			<Badge variant={fluxo.casa.saved ? 'default' : 'outline'}>
+				Casa: {fluxo.casa.saved ? 'salva' : 'em aberto'}
+			</Badge>
+			<Badge
+				variant={fluxo.completeness.month_complete ? 'default' : 'outline'}
+				class={fluxo.completeness.month_complete ? '' : 'border-amber-500/50 text-amber-400'}
+			>
+				Documentos:
+				{fluxo.completeness.month_complete
+					? 'completo'
+					: `faltam ${fluxo.completeness_missing_count}`}
+			</Badge>
 		{/if}
 	</div>
 
-	<!-- Overall status -->
-	{#if completeness}
-		{@const complete = completeness.month_complete}
-		<div
-			class={cn(
-				'flex items-center gap-3 rounded-lg border px-4 py-3',
-				complete
-					? 'border-emerald-500/30 bg-emerald-500/5'
-					: 'border-amber-500/30 bg-amber-500/5'
-			)}
-		>
-			{#if complete}
-				<CheckCircle2 class="h-5 w-5 text-emerald-400" />
-				<span class="text-sm font-medium text-emerald-400">
-					{formatFiscalMes(selectedMonth)} is complete
-				</span>
-			{:else}
-				<AlertCircle class="h-5 w-5 text-amber-400" />
-				<span class="text-sm font-medium text-amber-400">
-					{formatFiscalMes(selectedMonth)} has missing items
-				</span>
-			{/if}
-		</div>
-	{/if}
+	{#if fluxo && selectedMonth}
+		<p class="text-sm text-muted-foreground">
+			A casa de {formatFiscalMes(selectedMonth)} é coberta com saques de
+			{formatFiscalMes(selectedMonth)}, comparados à receita de
+			{formatFiscalMes(fluxo.previous_fiscal_mes)}.
+		</p>
 
-	<!-- Completeness cards -->
-	{#if completeness}
-		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-			{#each checks as item}
-				<a href={item.href} class="block group">
-					<Card.Root
-						class="transition-colors group-hover:border-muted-foreground/30 h-full"
-					>
-						<Card.Header class="pb-2">
-							<div class="flex items-center justify-between">
-								<div class="flex items-center gap-2 text-muted-foreground">
-									<item.icon class="h-4 w-4" />
-									<Card.Title class="text-sm font-medium">{item.label}</Card.Title>
-								</div>
-								{#if item.optional}
-									<Badge variant="outline" class="text-[10px] px-1.5 py-0">optional</Badge>
-								{/if}
-							</div>
-						</Card.Header>
-						<Card.Content>
-							<div class="flex items-end justify-between">
-								<span class="text-3xl font-bold tabular-nums">
-									{item.count}
-									<span class="text-lg text-muted-foreground font-normal">
-										/ {item.required}
+		{#if coverageHero}
+			<div class="rounded-lg border border-border bg-card px-5 py-4">
+				<p class={cn('text-2xl font-bold tabular-nums', coverageHero.class)}>
+					{coverageHero.text}
+				</p>
+				<p class="mt-1 text-sm text-muted-foreground">
+					Sua parte {formatBrl(fluxo.coverage.primary_share_brl)} · Casa toda
+					{formatBrl(fluxo.coverage.household_total_brl)} · Saques
+					{formatBrl(fluxo.coverage.saques_brl)}
+				</p>
+			</div>
+		{/if}
+
+		<div class="space-y-2">
+			<div class="relative h-3 overflow-hidden rounded-full bg-muted">
+				{#if incomePct > 0}
+					<div class="absolute inset-y-0 left-0 bg-emerald-500/30" style={`width: ${incomePct}%`}></div>
+				{/if}
+				{#if incomePct < 100}
+					<div
+						class="absolute inset-y-0 bg-amber-500/25"
+						style={`left: ${incomePct}%; width: ${100 - incomePct}%`}
+					></div>
+				{/if}
+				<div
+					class={cn('absolute inset-y-0 left-0 rounded-full transition-all', withdrawProgressFillClass)}
+					style={`width: ${saquesPct}%`}
+				></div>
+				{#if casaNeedPct > 0}
+					<div
+						class="absolute inset-y-0 w-0.5 bg-foreground/80"
+						style={`left: ${casaNeedPct}%`}
+						title="Necessidade da casa"
+					></div>
+				{/if}
+				{#if incomePct > 0 && incomePct < 100}
+					<div
+						class="absolute inset-y-0 w-px bg-background/70"
+						style={`left: ${incomePct}%`}
+					></div>
+				{/if}
+			</div>
+			<div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
+				<span class="flex items-center gap-1.5">
+					<span class="h-2 w-2 rounded-full bg-foreground/60"></span>
+					Casa (sua parte) {formatBrl(fluxo.coverage.primary_share_brl)}
+				</span>
+				<span class="flex items-center gap-1.5">
+					<span class="h-2 w-2 rounded-full bg-emerald-600"></span>
+					Saques {formatBrl(fluxo.coverage.saques_brl)}
+				</span>
+				{#if activeSummary.previous_month_income_brl > 0}
+					<span class="flex items-center gap-1.5">
+						<span class="h-2 w-2 rounded-full bg-emerald-500/50"></span>
+						Receita {formatFiscalMes(fluxo.previous_fiscal_mes)}
+						{formatBrl(activeSummary.previous_month_income_brl)}
+					</span>
+				{/if}
+				<span class="flex items-center gap-1.5">
+					<span class="h-2 w-2 rounded-full bg-amber-500/50"></span>
+					Meta {formatBrl(targetBrl)}
+				</span>
+			</div>
+		</div>
+
+		<div class="grid gap-4 md:grid-cols-2">
+			<Card.Root>
+				<Card.Header class="pb-2">
+					<div class="flex items-center gap-2">
+						<Building2 class="h-4 w-4 text-muted-foreground" />
+						<Card.Title class="text-base">Restante na empresa</Card.Title>
+					</div>
+				</Card.Header>
+				<Card.Content class="space-y-2">
+					<p class="text-2xl font-bold tabular-nums">
+						{formatBrl(fluxo.company.restante_brl)}
+						{#if fluxo.company.restante_estimated}
+							<Badge variant="outline" class="ml-2 text-xs">estimado</Badge>
+						{/if}
+					</p>
+					<p class="text-sm text-muted-foreground">
+						NFs {formatBrl(fluxo.company.nf_income_brl)} · Impostos
+						{formatBrl(fluxo.company.taxes_brl)}
+						{#if fluxo.company.saldo_final_brl != null}
+							· Saldo extrato {formatBrl(fluxo.company.saldo_final_brl)}
+						{/if}
+					</p>
+					<div class="flex gap-2 pt-1">
+						<a href="/extratos?fiscal_mes={selectedMonth}" class="text-sm text-chart-1 hover:underline">
+							Extratos
+						</a>
+						<a href="/analytics" class="text-sm text-chart-1 hover:underline">Analytics</a>
+					</div>
+				</Card.Content>
+			</Card.Root>
+
+			<Card.Root>
+				<Card.Header class="pb-2">
+					<div class="flex items-center gap-2">
+						<Home class="h-4 w-4 text-muted-foreground" />
+						<Card.Title class="text-base">Acerto da casa</Card.Title>
+					</div>
+				</Card.Header>
+				<Card.Content class="space-y-2">
+					{#if fluxo.casa.person_names.length > 0}
+						<div class="space-y-1 text-sm">
+							{#each fluxo.casa.person_names as name, i}
+								<div class="flex justify-between gap-4">
+									<span class="text-muted-foreground">{name} no cartão</span>
+									<span class="tabular-nums font-medium">
+										{formatBrl(fluxo.casa.nubank_per_person[i] ?? 0)}
 									</span>
-								</span>
-								{#if item.ok}
-									<CheckCircle2 class="h-5 w-5 text-emerald-400" />
-								{:else}
-									<AlertCircle class="h-5 w-5 text-amber-400" />
-								{/if}
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<p class="text-sm text-muted-foreground">Casa ainda não fechada.</p>
+					{/if}
+					{#each fluxo.casa.reimbursements as reimb, i}
+						{#if reimb > 0}
+							<div class="flex items-center gap-2 text-sm text-amber-400">
+								<AlertCircle class="h-4 w-4 shrink-0" />
+								{fluxo.casa.person_names[i]} deve receber {formatBrl(reimb)}
 							</div>
-						</Card.Content>
-					</Card.Root>
-				</a>
-			{/each}
+						{/if}
+					{/each}
+					<a href="/casa?mes={selectedMonth}" class="text-sm text-chart-1 hover:underline">
+						{fluxo.casa.saved ? 'Ver / editar casa' : `Fechar a casa de ${formatFiscalMes(selectedMonth)}`}
+					</a>
+				</Card.Content>
+			</Card.Root>
 		</div>
-	{/if}
 
-	{#if selectedMonth}
 		<Card.Root>
 			<Card.Header>
 				<div class="flex items-center gap-2">
@@ -547,87 +572,11 @@
 					<Card.Title>Saques</Card.Title>
 				</div>
 				<Card.Description>
-					Registre saques em BRL conforme ocorrem. Verde até a receita do mês anterior, amarelo até
-					{formatBrl(50_000)}, vermelho acima disso.
+					Registre saques em BRL. A barra acima compara saques com sua parte da casa e a receita do
+					mês anterior.
 				</Card.Description>
 			</Card.Header>
-			<Card.Content class="space-y-6">
-				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-					<div>
-						<p class="text-sm text-muted-foreground">Total sacado</p>
-						<p class="text-2xl font-bold tabular-nums">
-							{formatBrl(activeWithdrawSummary.total_brl)}
-						</p>
-					</div>
-					<div>
-						<p class="text-sm text-muted-foreground">Receita mês anterior</p>
-						<p class="text-2xl font-bold tabular-nums">
-							{formatBrl(activeWithdrawSummary.previous_month_income_brl)}
-						</p>
-					</div>
-					<div>
-						<p class="text-sm text-muted-foreground">Meta</p>
-						<p class="text-2xl font-bold tabular-nums">
-							{formatBrl(activeWithdrawSummary.target_brl)}
-						</p>
-					</div>
-					<div>
-						<p class="text-sm text-muted-foreground">Status</p>
-						<p class={cn('text-lg font-bold tabular-nums sm:text-xl', withdrawStatusClass)}>
-							{withdrawStatusLabel}
-						</p>
-					</div>
-				</div>
-
-				<div class="space-y-2">
-					<div class="flex items-center justify-between text-xs text-muted-foreground">
-						<span>Progresso</span>
-						<span>{withdrawProgress.toFixed(0)}%</span>
-					</div>
-					<div class="relative h-2 overflow-hidden rounded-full bg-muted">
-						{#if previousIncomePct > 0}
-							<div
-								class="absolute inset-y-0 left-0 bg-emerald-500/35"
-								style={`width: ${previousIncomePct}%`}
-							></div>
-						{/if}
-						{#if previousIncomePct < 100}
-							<div
-								class="absolute inset-y-0 bg-amber-500/35"
-								style={`left: ${previousIncomePct}%; width: ${100 - previousIncomePct}%`}
-							></div>
-						{/if}
-						<div
-							class={cn('absolute inset-y-0 left-0 rounded-full transition-all', withdrawProgressFillClass)}
-							style={`width: ${withdrawProgress}%`}
-						></div>
-						{#if previousIncomePct > 0 && previousIncomePct < 100}
-							<div
-								class="absolute inset-y-0 w-px bg-background/70"
-								style={`left: ${previousIncomePct}%`}
-							></div>
-						{/if}
-					</div>
-					<div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
-						{#if activeWithdrawSummary.previous_month_income_brl > 0}
-							<span class="flex items-center gap-1.5">
-								<span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
-								Receita mês anterior
-								<span class="font-medium tabular-nums text-foreground">
-									{formatBrl(activeWithdrawSummary.previous_month_income_brl)}
-								</span>
-							</span>
-						{/if}
-						<span class="flex items-center gap-1.5">
-							<span class="h-2 w-2 shrink-0 rounded-full bg-amber-500"></span>
-							Meta
-							<span class="font-medium tabular-nums text-foreground">
-								{formatBrl(activeWithdrawSummary.target_brl)}
-							</span>
-						</span>
-					</div>
-				</div>
-
+			<Card.Content class="space-y-4">
 				<form
 					class="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-[1fr_1fr_1.5fr_auto] sm:items-end"
 					novalidate
@@ -635,18 +584,12 @@
 				>
 					<div class="space-y-2">
 						<label for="add-withdraw-date" class="text-sm font-medium">Data</label>
-						<Input
-							id="add-withdraw-date"
-							name="withdraw_date"
-							type="date"
-							bind:value={addWithdrawDate}
-						/>
+						<Input id="add-withdraw-date" type="date" bind:value={addWithdrawDate} />
 					</div>
 					<div class="space-y-2">
 						<label for="add-withdraw-amount" class="text-sm font-medium">Valor (BRL)</label>
 						<Input
 							id="add-withdraw-amount"
-							name="amount_brl"
 							type="text"
 							inputmode="decimal"
 							placeholder="0,00"
@@ -657,92 +600,130 @@
 						<label for="add-withdraw-notes" class="text-sm font-medium">Observações</label>
 						<Input
 							id="add-withdraw-notes"
-							name="notes"
 							type="text"
 							placeholder="Opcional"
 							bind:value={addWithdrawNotes}
 						/>
 					</div>
-					<Button type="submit" disabled={addingWithdraw || !selectedMonth}>
+					<Button type="submit" disabled={addingWithdraw}>
 						<Plus class="h-4 w-4" />
 						{addingWithdraw ? 'Adicionando...' : 'Adicionar saque'}
 					</Button>
 				</form>
 
-				<div class="space-y-3">
-					<h3 class="text-sm font-medium">Saques registrados</h3>
-
-					{#if withdrawLoading && withdrawItems.length === 0}
-						<div class="h-20 animate-pulse rounded-md bg-muted"></div>
-					{:else}
-						<div class="rounded-lg border border-border">
-							<Table.Table>
-								<Table.TableHeader>
+				<div class="rounded-lg border border-border">
+					<Table.Table>
+						<Table.TableHeader>
+							<Table.TableRow>
+								<Table.TableHead>Data</Table.TableHead>
+								<Table.TableHead class="text-right">Valor</Table.TableHead>
+								<Table.TableHead>Observações</Table.TableHead>
+								<Table.TableHead class="w-[100px] text-right">Ações</Table.TableHead>
+							</Table.TableRow>
+						</Table.TableHeader>
+						<Table.TableBody>
+							{#if withdrawLoading && withdrawItems.length === 0}
+								<Table.TableRow>
+									<Table.TableCell colspan={4} class="text-center text-muted-foreground">
+										Carregando...
+									</Table.TableCell>
+								</Table.TableRow>
+							{:else if withdrawItems.length === 0}
+								<Table.TableRow>
+									<Table.TableCell colspan={4} class="text-center text-muted-foreground">
+										Nenhum saque. A casa pede {formatBrl(fluxo.coverage.primary_share_brl)}.
+									</Table.TableCell>
+								</Table.TableRow>
+							{:else}
+								{#each withdrawItems as item (item.id)}
 									<Table.TableRow>
-										<Table.TableHead>Data</Table.TableHead>
-										<Table.TableHead class="text-right">Valor</Table.TableHead>
-										<Table.TableHead>Observações</Table.TableHead>
-										<Table.TableHead class="w-[100px] text-right">Ações</Table.TableHead>
+										<Table.TableCell class="tabular-nums">
+											{formatWithdrawDate(item.withdraw_date)}
+										</Table.TableCell>
+										<Table.TableCell class="text-right tabular-nums font-medium">
+											{formatBrl(item.amount_brl)}
+										</Table.TableCell>
+										<Table.TableCell class="text-muted-foreground">
+											{item.notes?.trim() || '\u2014'}
+										</Table.TableCell>
+										<Table.TableCell class="text-right">
+											<div class="flex justify-end gap-1">
+												<Button
+													variant="ghost"
+													size="icon"
+													class="h-8 w-8"
+													onclick={() => openEditWithdraw(item)}
+												>
+													<Pencil class="h-4 w-4" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="icon"
+													class="h-8 w-8 text-destructive"
+													onclick={() => {
+														deletingWithdraw = item;
+														deleteDialogOpen = true;
+													}}
+												>
+													<Trash2 class="h-4 w-4" />
+												</Button>
+											</div>
+										</Table.TableCell>
 									</Table.TableRow>
-								</Table.TableHeader>
-								<Table.TableBody>
-									{#if withdrawItems.length === 0}
-										<Table.TableRow>
-											<Table.TableCell colspan={4} class="text-center text-muted-foreground">
-												Nenhum saque registrado neste mês.
-											</Table.TableCell>
-										</Table.TableRow>
-									{:else}
-										{#each withdrawItems as item (item.id)}
-											<Table.TableRow>
-												<Table.TableCell class="tabular-nums">
-													{formatWithdrawDate(item.withdraw_date)}
-												</Table.TableCell>
-												<Table.TableCell class="text-right tabular-nums font-medium">
-													{formatBrl(item.amount_brl)}
-												</Table.TableCell>
-												<Table.TableCell class="text-muted-foreground">
-													{item.notes?.trim() || '\u2014'}
-												</Table.TableCell>
-												<Table.TableCell class="text-right">
-													<div class="flex justify-end gap-1">
-														<Button
-															variant="ghost"
-															size="icon"
-															class="h-8 w-8"
-															title="Editar"
-															onclick={() => openEditWithdraw(item)}
-														>
-															<Pencil class="h-4 w-4" />
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															class="h-8 w-8 text-destructive hover:text-destructive"
-															title="Excluir"
-															onclick={() => openDeleteWithdraw(item)}
-														>
-															<Trash2 class="h-4 w-4" />
-														</Button>
-													</div>
-												</Table.TableCell>
-											</Table.TableRow>
-										{/each}
-									{/if}
-								</Table.TableBody>
-							</Table.Table>
-						</div>
-					{/if}
+								{/each}
+							{/if}
+						</Table.TableBody>
+					</Table.Table>
 				</div>
 			</Card.Content>
 		</Card.Root>
+
+		<div>
+			<button
+				type="button"
+				class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+				onclick={() => (docsExpanded = !docsExpanded)}
+			>
+				{#if docsExpanded}
+					<ChevronUp class="h-4 w-4" />
+				{:else}
+					<ChevronDown class="h-4 w-4" />
+				{/if}
+				Documentos fiscais
+			</button>
+			{#if docsExpanded}
+				<div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+					{#each checks as item}
+						<a href={item.href} class="block group">
+							<Card.Root class="transition-colors group-hover:border-muted-foreground/30">
+								<Card.Content class="flex items-center justify-between py-3">
+									<div class="flex items-center gap-2">
+										<item.icon class="h-4 w-4 text-muted-foreground" />
+										<span class="text-sm font-medium">{item.label}</span>
+									</div>
+									<div class="flex items-center gap-2">
+										<span class="text-sm tabular-nums">
+											{item.count}/{item.required}
+										</span>
+										{#if item.ok}
+											<CheckCircle2 class="h-4 w-4 text-emerald-400" />
+										{:else}
+											<AlertCircle class="h-4 w-4 text-amber-400" />
+										{/if}
+									</div>
+								</Card.Content>
+							</Card.Root>
+						</a>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	{/if}
 
 	{#if !loading && months.length === 0}
 		<Card.Root>
 			<Card.Content class="py-12 text-center">
-				<FileText class="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-				<p class="text-muted-foreground">No data yet. Start by uploading documents.</p>
+				<p class="text-muted-foreground">Comece criando um mês fiscal ou fechando a casa.</p>
 			</Card.Content>
 		</Card.Root>
 	{/if}
@@ -750,25 +731,40 @@
 
 <Dialog.Root bind:open={createDialogOpen}>
 	<Dialog.Content>
-		<form class="space-y-4" onsubmit={handleCreateMonthSubmit}>
+		<form
+			class="space-y-4"
+			onsubmit={(e) => {
+				e.preventDefault();
+				if (!createMonthValue) return;
+				creatingMonth = true;
+				createFiscalMonth(createMonthValue)
+					.then(() => loadMonths(createMonthValue))
+					.then(() => {
+						createDialogOpen = false;
+						toast.success(`Mês ${formatFiscalMes(createMonthValue)} criado`);
+					})
+					.catch((err) =>
+						toast.error(
+							err instanceof ApiError ? formatApiErrorMessage(err.body) : 'Falha ao criar mês'
+						)
+					)
+					.finally(() => (creatingMonth = false));
+			}}
+		>
 			<Dialog.Header>
-				<Dialog.Title>Create fiscal month</Dialog.Title>
-				<Dialog.Description>
-					Create an empty fiscal month so it appears on the dashboard before any uploads.
-				</Dialog.Description>
+				<Dialog.Title>Criar mês fiscal</Dialog.Title>
+				<Dialog.Description>Adiciona o mês à lista antes de uploads ou saques.</Dialog.Description>
 			</Dialog.Header>
-
 			<div class="space-y-2">
-				<label for="create-fiscal-month" class="text-sm font-medium">Fiscal month</label>
+				<label for="create-fiscal-month" class="text-sm font-medium">Mês fiscal</label>
 				<Input id="create-fiscal-month" type="month" bind:value={createMonthValue} required />
 			</div>
-
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={() => (createDialogOpen = false)}>
-					Cancel
+					Cancelar
 				</Button>
 				<Button type="submit" disabled={creatingMonth}>
-					{creatingMonth ? 'Creating...' : 'Create'}
+					{creatingMonth ? 'Criando...' : 'Criar'}
 				</Button>
 			</Dialog.Footer>
 		</form>
@@ -780,14 +776,11 @@
 		<form class="space-y-4" onsubmit={handleSaveWithdraw}>
 			<Dialog.Header>
 				<Dialog.Title>Editar saque</Dialog.Title>
-				<Dialog.Description>Atualize os dados do saque selecionado.</Dialog.Description>
 			</Dialog.Header>
-
 			<div class="space-y-2">
 				<label for="edit-withdraw-date" class="text-sm font-medium">Data</label>
 				<Input id="edit-withdraw-date" type="date" bind:value={editWithdrawDate} required />
 			</div>
-
 			<div class="space-y-2">
 				<label for="edit-withdraw-amount" class="text-sm font-medium">Valor (BRL)</label>
 				<Input
@@ -799,12 +792,10 @@
 					required
 				/>
 			</div>
-
 			<div class="space-y-2">
 				<label for="edit-withdraw-notes" class="text-sm font-medium">Observações</label>
 				<Input id="edit-withdraw-notes" type="text" bind:value={editWithdrawNotes} />
 			</div>
-
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={() => (editDialogOpen = false)}>
 					Cancelar
@@ -820,7 +811,7 @@
 <ConfirmDialog
 	bind:open={deleteDialogOpen}
 	title="Excluir saque"
-	description="Tem certeza que deseja excluir este saque? Esta ação não pode ser desfeita."
+	description="Tem certeza? Esta ação não pode ser desfeita."
 	confirmLabel="Excluir"
 	onconfirm={handleDeleteWithdraw}
 />

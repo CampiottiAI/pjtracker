@@ -22,7 +22,16 @@ import type {
 	WithdrawEntry,
 	WithdrawListResponse,
 	CreateWithdrawPayload,
-	PatchWithdrawPayload
+	PatchWithdrawPayload,
+	CasaPerson,
+	CasaFixedBill,
+	CasaExpenseItem,
+	CasaSplitPayload,
+	CasaWorkspaceResponse,
+	CasaSummary,
+	CasaComputeSplitPayload,
+	FluxoResponse,
+	FluxoSeriesResponse
 } from './types';
 
 /**
@@ -633,6 +642,75 @@ export async function updateWithdraw(
 
 export async function deleteWithdraw(id: number): Promise<void> {
 	await apiJson(`/withdraws/${id}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// Casa
+// ---------------------------------------------------------------------------
+
+export async function listCasaPeople(): Promise<{ items: CasaPerson[] }> {
+	return apiJson<{ items: CasaPerson[] }>('/casa/people');
+}
+
+export async function createCasaPerson(name: string, id?: string): Promise<CasaPerson> {
+	return apiJson<CasaPerson>('/casa/people', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ name, id })
+	});
+}
+
+export async function deleteCasaPerson(personId: string): Promise<void> {
+	await apiJson(`/casa/people/${encodeURIComponent(personId)}`, { method: 'DELETE' });
+}
+
+export async function listCasaFixedBills(): Promise<{ items: CasaFixedBill[] }> {
+	return apiJson<{ items: CasaFixedBill[] }>('/casa/fixed-bills');
+}
+
+export async function updateCasaFixedBills(items: CasaFixedBill[]): Promise<{ items: CasaFixedBill[] }> {
+	return apiJson<{ items: CasaFixedBill[] }>('/casa/fixed-bills', {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ items })
+	});
+}
+
+export async function getCasaWorkspace(fiscalMes: string): Promise<CasaWorkspaceResponse> {
+	return apiJson<CasaWorkspaceResponse>(
+		`/casa/workspace?fiscal_mes=${encodeURIComponent(fiscalMes)}`
+	);
+}
+
+export async function computeCasaSplit(payload: CasaComputeSplitPayload): Promise<CasaSplitPayload> {
+	return apiJson<CasaSplitPayload>('/casa/compute-split', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+}
+
+export async function saveCasaMonth(
+	fiscalMes: string,
+	payload: CasaComputeSplitPayload
+): Promise<CasaSummary> {
+	return apiJson<CasaSummary>(`/casa/months/${encodeURIComponent(fiscalMes)}`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Fluxo
+// ---------------------------------------------------------------------------
+
+export async function getFluxo(fiscalMes: string): Promise<FluxoResponse> {
+	return apiJson<FluxoResponse>(`/fluxo?fiscal_mes=${encodeURIComponent(fiscalMes)}`);
+}
+
+export async function getFluxoSeries(): Promise<FluxoSeriesResponse> {
+	return apiJson<FluxoSeriesResponse>('/fluxo/series');
 }
 
 // ---------------------------------------------------------------------------

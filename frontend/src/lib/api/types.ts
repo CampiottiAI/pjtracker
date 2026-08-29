@@ -272,3 +272,129 @@ export type PatchWithdrawPayload = {
 	withdraw_date?: string | null;
 	notes?: string | null;
 };
+
+// ---------------------------------------------------------------------------
+// Casa (household)
+// ---------------------------------------------------------------------------
+
+export type CasaPerson = {
+	id: string;
+	name: string;
+};
+
+export type CasaFixedBill = {
+	name: string;
+	value: number;
+	paid_by: string;
+};
+
+export type CasaExpenseItem = {
+	description: string;
+	amount: number;
+	paid_by: string;
+};
+
+export type CasaSplitPayload = {
+	person_ids: string[];
+	person_names: string[];
+	amounts: number[];
+	other_expenses: CasaExpenseItem[];
+	fixed_bills: CasaFixedBill[];
+	nubank: number;
+	pcts: number[];
+	total: number;
+	nubank_per_person: number[];
+	reimbursements: number[];
+	cc_reserved_amount: number;
+	cc_reserved_person_id: string | null;
+	primary_person_id: string;
+	primary_share_brl: number;
+	primary_pay_now_brl: number;
+};
+
+export type CasaWorkspaceResponse = {
+	fiscal_mes: string;
+	saved: boolean;
+	people: CasaPerson[];
+	fixed_bills: CasaFixedBill[];
+	other_expenses: CasaExpenseItem[];
+	nubank: number;
+	person_ids: string[];
+	pcts: number[];
+	cc_reserved_amount: number;
+	cc_reserved_person_id: string | null;
+	split: CasaSplitPayload;
+};
+
+export type CasaSummary = {
+	saved: boolean;
+	estimated: boolean;
+	fiscal_mes: string;
+	total_brl: number;
+	household_total_brl: number;
+	primary_share_brl: number;
+	primary_pay_now_brl: number;
+	person_ids: string[];
+	person_names: string[];
+	nubank_per_person: number[];
+	reimbursements: number[];
+	pcts: number[];
+	nubank: number;
+};
+
+export type CasaComputeSplitPayload = {
+	fiscal_mes: string;
+	person_ids: string[];
+	pcts: number[];
+	nubank: number;
+	fixed_bills: CasaFixedBill[];
+	other_expenses: CasaExpenseItem[];
+	cc_reserved_amount?: number;
+	cc_reserved_person_id?: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Fluxo
+// ---------------------------------------------------------------------------
+
+export type FluxoCoverage = {
+	covers_household: boolean;
+	surplus_brl: number;
+	shortfall_brl: number;
+	saques_brl: number;
+	primary_share_brl: number;
+	household_total_brl: number;
+};
+
+export type FluxoCompany = {
+	saldo_final_brl: number | null;
+	has_extrato: boolean;
+	restante_brl: number;
+	restante_estimated: boolean;
+	taxes_brl: number;
+	nf_income_brl: number;
+};
+
+export type FluxoResponse = {
+	fiscal_mes: string;
+	previous_fiscal_mes: string;
+	withdraw_summary: WithdrawSummary;
+	casa: CasaSummary;
+	coverage: FluxoCoverage;
+	company: FluxoCompany;
+	completeness: CompletenessResponse;
+	completeness_missing_count: number;
+};
+
+export type FluxoSeriesPoint = {
+	fiscal_mes: string;
+	saques_brl: number;
+	primary_share_brl: number;
+	household_total_brl: number;
+	previous_month_income_brl: number;
+	casa_saved: boolean;
+};
+
+export type FluxoSeriesResponse = {
+	points: FluxoSeriesPoint[];
+};
