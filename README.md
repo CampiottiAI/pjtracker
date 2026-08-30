@@ -8,6 +8,19 @@ Company management tools for Brazil. Currently includes a **Nota Fiscal tracker*
 uv sync
 ```
 
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| [`./scripts/dev.sh`](#dev-both-servers) | FastAPI + Vite dev servers (reload / HMR). Bind: `DEV_HOST` (default `0.0.0.0`) |
+| [`./scripts/prod.sh`](#production-pi--lan) | Build frontend, run uvicorn (no reload) + Vite preview. For Pi / LAN |
+| [`./scripts/backup.sh`](#backup-google-drive-via-rclone) | Snapshot `pjtracker.db`, `pdfs/`, `images/` (optional rclone upload to Drive) |
+| [`./scripts/restore.sh`](#restore) | Apply a `backup.sh` archive into the current folder (`pjtracker.db`, `pdfs/`, `images/`) |
+| [`uv run python scripts/import_casa_data.py`](#import-casa-data) | Import household data from a casa project into `data/casa/` |
+| [`uv run pjtracker-check`](#deadline-checks) | Fiscal deadline checks (pro-labore withdraw, previous-month DARF receipt); optional email |
+
+`scripts/_common.sh` is sourced by `dev.sh` and `prod.sh` (Maritaca token, process cleanup). Do not run it directly.
+
 ## API (FastAPI)
 
 ```bash
@@ -122,10 +135,67 @@ Cron example (daily 03:00):
 
 ### Restore
 
-1. Stop the service.
-2. Download: `rclone copy gdrive:pjtracker-backups/<file>.tar.gz .`
-3. Extract at the repo root (overwrites `pjtracker.db`, `pdfs/`, `images/`): `tar -xzf pjtracker-YYYYMMDD-HHMMSS.tar.gz`
-4. Start again with `./scripts/prod.sh`.
+Stop the API/UI first. `./scripts/restore.sh` unpacks a `backup.sh` archive into the **current directory** (`pjtracker.db`, `pdfs/`, `images/`). SQLite WAL/SHM files next to the DB are removed so they cannot replay onto the restored snapshot. Folders present in the archive replace the destination folders; missing archive folders are left as-is.
+
+```bash
+./scripts/restore.sh --dry-run --latest              # show newest local tar, no write
+./scripts/restore.sh pjtracker-20260830-030000.tar.gz
+./scripts/restore.sh --latest                        # newest local pjtracker-*.tar.gz
+./scripts/restore.sh --from-remote                   # download newest rclone backup, then restore
+./scripts/restore.sh --from-remote --dry-run
+./scripts/restore.sh --force --latest                # overwrite without prompt
+```
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PJTRACKER_DB_PATH` | `<cwd>/pjtracker.db` | restore next to this DB (pdfs/images live next to it) |
+| `RCLONE_REMOTE` | `gdrive` | rclone remote name (`--from-remote`) |
+| `RCLONE_PATH` | `pjtracker-backups` | folder on the remote (`--from-remote`) |
+
+Run from the folder that should receive the data (usually the repo root). `--force` is required when stdin is not a TTY and the destination already has data. Then start again with `./scripts/dev.sh` or `./scripts/prod.sh`.
+
+## Import casa data
+
+Copies bills, people, fixed bills, cars, and car maintenance (JSON + files) from a casa project into `data/casa/`. Rewrites maintenance file paths from `data/maintenance/` to `data/casa/maintenance/`.
+
+By default, JSON files are merged (casa wins on duplicate keys). Use `--overwrite` to replace destination files entirely.
+
+```bash
+uv run python scripts/import_casa_data.py /path/to/casa
+uv run python scripts/import_casa_data.py /path/to/casa --dry-run
+uv run python scripts/import_casa_data.py /path/to/casa --overwrite
+```
+
+Pass the casa project root (folder containing `data/people.json` or `data/bills_history.json`). Restart the API after importing if it is already running.
+
+## Deadline checks
+
+Runs registered fiscal deadline checks against the local SQLite DB and optionally emails failures via Gmail SMTP. Current checks: pro-labore withdraw and previous-month DARF receipt.
+
+```bash
+uv run pjtracker-check --dry-run          # print results only; do not send email
+uv run pjtracker-check                    # run due checks; email on failure
+uv run pjtracker-check --force-all        # run all checks, ignoring due windows
+uv run pjtracker-check --date 2026-08-15  # simulate "today"
+```
+
+Requires a Gmail App Password (Google Account → Security → 2-Step Verification → App passwords). Email is sent only when a check fails (unless `--dry-run`).
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PJTRACKER_SMTP_USER` | — | SMTP login (required to send email) |
+| `PJTRACKER_SMTP_PASSWORD` | — | Gmail App Password |
+| `PJTRACKER_ALERT_TO` | — | Recipient |
+| `PJTRACKER_ALERT_FROM` | SMTP user | From address |
+| `PJTRACKER_SMTP_HOST` | `smtp.gmail.com` | SMTP host |
+| `PJTRACKER_SMTP_PORT` | `587` | SMTP port |
+| `PJTRACKER_DB_PATH` | `<repo>/pjtracker.db` | override DB (pdfs/images live next to it) |
+
+Cron example (daily 09:00):
+
+```cron
+0 9 * * * cd /path/to/pjtracker && uv run pjtracker-check >> /tmp/pjtracker-check.log 2>&1
+```
 
 ## Nota Fiscal Tracker
 
