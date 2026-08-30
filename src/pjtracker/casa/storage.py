@@ -37,12 +37,22 @@ class ExpenseItem(TypedDict):
     description: str
     amount: float
     paid_by: str
+    split: NotRequired[bool]
+
+
+class CreditCard(TypedDict):
+    name: str
+    value: float
+
+
+DEFAULT_CARD_NAME = "Nubank"
 
 
 class MonthRecord(TypedDict):
     year: int
     month: int
     nubank: float
+    cards: NotRequired[list[CreditCard]]
     fixed_bills: NotRequired[list[FixedBill]]
     person_ids: NotRequired[list[str]]
     amounts: NotRequired[list[float]]
@@ -106,18 +116,63 @@ def list_saved_fiscal_meses() -> list[str]:
     ]
 
 
+def nubank_from_cards(cards: list[CreditCard]) -> float:
+    return float(sum(c["value"] for c in cards))
+
+
+def normalize_cards(
+    cards: list[CreditCard] | list[dict] | None,
+    nubank: float,
+) -> list[CreditCard]:
+    """Prefer explicit cards; otherwise treat a single nubank total as one Nubank card."""
+    if cards:
+        out: list[CreditCard] = []
+        for c in cards:
+            name = str(c.get("name") or DEFAULT_CARD_NAME).strip() or DEFAULT_CARD_NAME
+            value = float(c.get("value") or 0.0)
+            if value < -1e-9:
+                raise ValueError("card value cannot be negative")
+            out.append(CreditCard({"name": name, "value": max(0.0, value)}))
+        return out
+    if nubank > 1e-9:
+        return [CreditCard({"name": DEFAULT_CARD_NAME, "value": float(nubank)})]
+    return []
+
+
+def expense_counts_in_split(expense: ExpenseItem | dict) -> bool:
+    return bool(expense.get("split", True))
+
+
+def normalize_expense(expense: dict) -> ExpenseItem:
+    return ExpenseItem(
+        {
+            "description": str(expense.get("description") or ""),
+            "amount": float(expense["amount"]),
+            "paid_by": str(expense["paid_by"]),
+            "split": expense_counts_in_split(expense),
+        }
+    )
+
+
 def _normalize_other_expenses(
     record: MonthRecord,
     person_ids: list[str],
 ) -> list[ExpenseItem]:
     if record.get("other_expenses"):
-        return [ExpenseItem(e) for e in record["other_expenses"]]
+        return [normalize_expense(e) for e in record["other_expenses"]]
     items = record.get("items") or {}
     out: list[ExpenseItem] = []
     for pid in person_ids:
         for val in items.get(pid, []):
             out.append(
-                ExpenseItem({"description": "", "amount": float(val), "paid_by": pid})
+                ExpenseItem(
+                    {
+                        "description": "",
+                        "amount": float(val),
+                        "paid_by": pid,
+                        "split": True,
+                    }
+                )
             )
     legacy_map = {
         "rael": record.get("rael_items") or [],
@@ -128,7 +183,14 @@ def _normalize_other_expenses(
             continue
         for val in vals:
             out.append(
-                ExpenseItem({"description": "", "amount": float(val), "paid_by": pid})
+                ExpenseItem(
+                    {
+                        "description": "",
+                        "amount": float(val),
+                        "paid_by": pid,
+                        "split": True,
+                    }
+                )
             )
     return out
 
@@ -136,7 +198,8 @@ def _normalize_other_expenses(
 def normalize_month_record(r: MonthRecord, people: list[Person]) -> dict:
     year = r["year"]
     month = r["month"]
-    nubank = r["nubank"]
+    cards = normalize_cards(r.get("cards"), float(r.get("nubank") or 0.0))
+    nubank = nubank_from_cards(cards)
     fixed_bills = r.get("fixed_bills") or []
 
     if "person_ids" in r and r["person_ids"]:
@@ -147,6 +210,7 @@ def normalize_month_record(r: MonthRecord, people: list[Person]) -> dict:
             "year": year,
             "month": month,
             "nubank": nubank,
+            "cards": cards,
             "fixed_bills": fixed_bills,
             "person_ids": person_ids,
             "amounts": r.get("amounts") or [],
@@ -179,6 +243,7 @@ def normalize_month_record(r: MonthRecord, people: list[Person]) -> dict:
         "year": year,
         "month": month,
         "nubank": nubank,
+        "cards": cards,
         "fixed_bills": fixed_bills,
         "person_ids": person_ids,
         "amounts": [rael, fer],
@@ -204,6 +269,7 @@ def save_month_record(
     pcts: list[float],
     nubank: float,
     *,
+    cards: list[CreditCard] | None = None,
     fixed_bills: list[FixedBill] | None = None,
     split_result: dict | None = None,
 ) -> dict:
@@ -212,6 +278,9 @@ def save_month_record(
     records = load_history()
     key = (year, month)
     records = [r for r in records if (r["year"], r["month"]) != key]
+
+    saved_cards = normalize_cards(cards, nubank)
+    nubank = nubank_from_cards(saved_cards)
 
     total = split_result["total"] if split_result else (sum(amounts) + nubank)
     nubank_per_person = split_result["nubank_per_person"] if split_result else []
@@ -229,9 +298,10 @@ def save_month_record(
         "year": year,
         "month": month,
         "nubank": nubank,
+        "cards": [dict(c) for c in saved_cards],
         "person_ids": list(person_ids),
         "amounts": list(amounts),
-        "other_expenses": [dict(e) for e in other_expenses],
+        "other_expenses": [dict(normalize_expense(e)) for e in other_expenses],
         "pcts": list(pcts),
         "total": total,
         "nubank_per_person": list(nubank_per_person),
@@ -330,7 +400,11 @@ def compute_amounts_from_inputs(
     for p in people:
         pid = p["id"]
         fixed_sum = sum(b["value"] for b in fixed_bills if b["paid_by"] == pid)
-        other_sum = sum(e["amount"] for e in other_expenses if e["paid_by"] == pid)
+        other_sum = sum(
+            e["amount"]
+            for e in other_expenses
+            if e["paid_by"] == pid and expense_counts_in_split(e)
+        )
         amounts.append(fixed_sum + other_sum)
     return amounts
 
@@ -359,6 +433,31 @@ def primary_person_share(total: float, pcts: list[float], people: list[Person]) 
     if ix >= len(pcts):
         return 0.0
     return round(total * pcts[ix], 2)
+
+
+def primary_assigned_brl(
+    person_ids: list[str],
+    amounts: list[float],
+    other_expenses: list[ExpenseItem],
+    nubank_per_person: list[float],
+) -> float:
+    """Cash assigned to the primary person: what they paid + card still due.
+
+    Includes personal (non-split) extras. Does not subtract reimbursements
+    others owe them — those bills already left their pocket.
+    """
+    if PRIMARY_PERSON_ID in person_ids:
+        ix = person_ids.index(PRIMARY_PERSON_ID)
+    else:
+        ix = 0
+    paid = float(amounts[ix]) if ix < len(amounts) else 0.0
+    personal = sum(
+        float(e["amount"])
+        for e in other_expenses
+        if e.get("paid_by") == PRIMARY_PERSON_ID and not expense_counts_in_split(e)
+    )
+    card = float(nubank_per_person[ix]) if ix < len(nubank_per_person) else 0.0
+    return round(paid + personal + max(0.0, card), 2)
 
 
 def primary_pay_now(

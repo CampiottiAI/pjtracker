@@ -40,9 +40,7 @@
 		Trash2,
 		Banknote,
 		Home,
-		Building2,
-		ChevronDown,
-		ChevronUp
+		Building2
 	} from 'lucide-svelte';
 
 	let months = $state<string[]>([]);
@@ -52,7 +50,6 @@
 	let withdrawSummary = $state<WithdrawSummary | null>(null);
 	let withdrawLoading = $state(false);
 	let loading = $state(true);
-	let docsExpanded = $state(false);
 
 	let createDialogOpen = $state(false);
 	let createMonthValue = $state('');
@@ -376,7 +373,7 @@
 <div class="space-y-6">
 	<PageHeader
 		title="Fluxo"
-		description="Saques cobrem sua parte da casa? O que sobra na empresa?"
+		description="Saques cobrem o que você gastou na casa? O que sobra na empresa?"
 	>
 		{#snippet actions()}
 			<Button
@@ -427,10 +424,38 @@
 
 	{#if fluxo && selectedMonth}
 		<p class="text-sm text-muted-foreground">
-			A casa de {formatFiscalMes(selectedMonth)} é coberta com saques de
+			O gasto da casa de {formatFiscalMes(selectedMonth)} atribuído a você é coberto com saques de
 			{formatFiscalMes(selectedMonth)}, comparados à receita de
 			{formatFiscalMes(fluxo.previous_fiscal_mes)}.
 		</p>
+
+		<div>
+			<h2 class="mb-3 text-sm font-medium">Documentos fiscais</h2>
+			<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+				{#each checks as item}
+					<a href={item.href} class="block group">
+						<Card.Root class="transition-colors group-hover:border-muted-foreground/30">
+							<Card.Content class="flex items-center justify-between py-3">
+								<div class="flex items-center gap-2">
+									<item.icon class="h-4 w-4 text-muted-foreground" />
+									<span class="text-sm font-medium">{item.label}</span>
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="text-sm tabular-nums">
+										{item.count}/{item.required}
+									</span>
+									{#if item.ok}
+										<CheckCircle2 class="h-4 w-4 text-emerald-400" />
+									{:else}
+										<AlertCircle class="h-4 w-4 text-amber-400" />
+									{/if}
+								</div>
+							</Card.Content>
+						</Card.Root>
+					</a>
+				{/each}
+			</div>
+		</div>
 
 		{#if coverageHero}
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
@@ -438,7 +463,7 @@
 					{coverageHero.text}
 				</p>
 				<p class="mt-1 text-sm text-muted-foreground">
-					Sua parte {formatBrl(fluxo.coverage.primary_share_brl)} · Casa toda
+					Seu gasto {formatBrl(fluxo.coverage.primary_share_brl)} · Casa toda
 					{formatBrl(fluxo.coverage.household_total_brl)} · Saques
 					{formatBrl(fluxo.coverage.saques_brl)}
 				</p>
@@ -464,7 +489,7 @@
 					<div
 						class="absolute inset-y-0 w-0.5 bg-foreground/80"
 						style={`left: ${casaNeedPct}%`}
-						title="Necessidade da casa"
+						title="Seu gasto"
 					></div>
 				{/if}
 				{#if incomePct > 0 && incomePct < 100}
@@ -477,7 +502,7 @@
 			<div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
 				<span class="flex items-center gap-1.5">
 					<span class="h-2 w-2 rounded-full bg-foreground/60"></span>
-					Casa (sua parte) {formatBrl(fluxo.coverage.primary_share_brl)}
+					Casa (seu gasto) {formatBrl(fluxo.coverage.primary_share_brl)}
 				</span>
 				<span class="flex items-center gap-1.5">
 					<span class="h-2 w-2 rounded-full bg-emerald-600"></span>
@@ -572,7 +597,7 @@
 					<Card.Title>Saques</Card.Title>
 				</div>
 				<Card.Description>
-					Registre saques em BRL. A barra acima compara saques com sua parte da casa e a receita do
+					Registre saques em BRL. A barra acima compara saques com o que você gastou na casa e a receita do
 					mês anterior.
 				</Card.Description>
 			</Card.Header>
@@ -631,7 +656,7 @@
 							{:else if withdrawItems.length === 0}
 								<Table.TableRow>
 									<Table.TableCell colspan={4} class="text-center text-muted-foreground">
-										Nenhum saque. A casa pede {formatBrl(fluxo.coverage.primary_share_brl)}.
+										Nenhum saque. Seu gasto é {formatBrl(fluxo.coverage.primary_share_brl)}.
 									</Table.TableCell>
 								</Table.TableRow>
 							{:else}
@@ -677,47 +702,6 @@
 				</div>
 			</Card.Content>
 		</Card.Root>
-
-		<div>
-			<button
-				type="button"
-				class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-				onclick={() => (docsExpanded = !docsExpanded)}
-			>
-				{#if docsExpanded}
-					<ChevronUp class="h-4 w-4" />
-				{:else}
-					<ChevronDown class="h-4 w-4" />
-				{/if}
-				Documentos fiscais
-			</button>
-			{#if docsExpanded}
-				<div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-					{#each checks as item}
-						<a href={item.href} class="block group">
-							<Card.Root class="transition-colors group-hover:border-muted-foreground/30">
-								<Card.Content class="flex items-center justify-between py-3">
-									<div class="flex items-center gap-2">
-										<item.icon class="h-4 w-4 text-muted-foreground" />
-										<span class="text-sm font-medium">{item.label}</span>
-									</div>
-									<div class="flex items-center gap-2">
-										<span class="text-sm tabular-nums">
-											{item.count}/{item.required}
-										</span>
-										{#if item.ok}
-											<CheckCircle2 class="h-4 w-4 text-emerald-400" />
-										{:else}
-											<AlertCircle class="h-4 w-4 text-amber-400" />
-										{/if}
-									</div>
-								</Card.Content>
-							</Card.Root>
-						</a>
-					{/each}
-				</div>
-			{/if}
-		</div>
 	{/if}
 
 	{#if !loading && months.length === 0}

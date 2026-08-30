@@ -4,17 +4,20 @@ from __future__ import annotations
 
 from pjtracker.casa.bills_logic import compute_split_n
 from pjtracker.casa.storage import (
+    CreditCard,
     ExpenseItem,
     FixedBill,
     Person,
     compute_amounts_from_inputs,
-    estimate_necessidade_from_fixed_bills,
     get_month,
     load_fixed_bills,
     load_people,
+    normalize_cards,
+    normalize_expense,
     normalize_month_record,
+    nubank_from_cards,
     primary_pay_now,
-    primary_person_share,
+    primary_assigned_brl,
     PRIMARY_PERSON_ID,
 )
 
@@ -38,7 +41,11 @@ def build_split_payload(
     nubank: float,
     cc_reserved_amount: float = 0.0,
     cc_reserved_person_id: str | None = None,
+    cards: list[CreditCard] | None = None,
 ) -> dict:
+    cards = normalize_cards(cards, nubank)
+    nubank = nubank_from_cards(cards)
+    other_expenses = [normalize_expense(e) for e in other_expenses]
     amounts = compute_amounts_from_inputs(people, fixed_bills, other_expenses)
     cc_ix: int | None = None
     if cc_reserved_amount > 1e-9 and cc_reserved_person_id:
@@ -61,6 +68,7 @@ def build_split_payload(
         "other_expenses": [dict(e) for e in other_expenses],
         "fixed_bills": [dict(b) for b in fixed_bills],
         "nubank": nubank,
+        "cards": [dict(c) for c in cards],
         "pcts": pcts,
         "total": split["total"],
         "nubank_per_person": split["nubank_per_person"],
@@ -68,7 +76,12 @@ def build_split_payload(
         "cc_reserved_amount": split["cc_reserved_amount"],
         "cc_reserved_person_id": cc_reserved_person_id,
         "primary_person_id": PRIMARY_PERSON_ID,
-        "primary_share_brl": primary_person_share(split["total"], pcts, people),
+        "primary_share_brl": primary_assigned_brl(
+            person_ids,
+            amounts,
+            other_expenses,
+            split["nubank_per_person"],
+        ),
         "primary_pay_now_brl": primary_pay_now(
             split["nubank_per_person"],
             split["reimbursements"],
@@ -87,13 +100,19 @@ def get_casa_summary_for_month(fiscal_mes: str) -> dict:
         pcts = normalized["pcts"]
         total = normalized["total"]
         person_ids = normalized["person_ids"]
+        assigned = primary_assigned_brl(
+            person_ids,
+            normalized["amounts"],
+            normalized["other_expenses"],
+            normalized["nubank_per_person"],
+        )
         return {
             "saved": True,
             "estimated": False,
             "fiscal_mes": fiscal_mes,
             "total_brl": total,
             "household_total_brl": total,
-            "primary_share_brl": primary_person_share(total, pcts, people),
+            "primary_share_brl": assigned,
             "primary_pay_now_brl": primary_pay_now(
                 normalized["nubank_per_person"],
                 normalized["reimbursements"],
@@ -109,26 +128,35 @@ def get_casa_summary_for_month(fiscal_mes: str) -> dict:
             "reimbursements": normalized["reimbursements"],
             "pcts": pcts,
             "nubank": normalized["nubank"],
+            "cards": normalized["cards"],
         }
 
     fixed_bills = load_fixed_bills()
     pcts = default_pcts_for_people(people)
-    estimated_total = sum(b["value"] for b in fixed_bills)
-    primary_share = estimate_necessidade_from_fixed_bills(people, fixed_bills, pcts)
+    person_ids = [p["id"] for p in people]
+    estimated = build_split_payload(
+        people,
+        fixed_bills,
+        [],
+        person_ids,
+        pcts,
+        0.0,
+    )
     return {
         "saved": False,
         "estimated": True,
         "fiscal_mes": fiscal_mes,
-        "total_brl": round(estimated_total, 2),
-        "household_total_brl": round(estimated_total, 2),
-        "primary_share_brl": primary_share,
-        "primary_pay_now_brl": primary_share,
-        "person_ids": [p["id"] for p in people],
+        "total_brl": round(estimated["total"], 2),
+        "household_total_brl": round(estimated["total"], 2),
+        "primary_share_brl": estimated["primary_share_brl"],
+        "primary_pay_now_brl": estimated["primary_pay_now_brl"],
+        "person_ids": person_ids,
         "person_names": [p["name"] for p in people],
-        "nubank_per_person": [],
-        "reimbursements": [],
+        "nubank_per_person": estimated["nubank_per_person"],
+        "reimbursements": estimated["reimbursements"],
         "pcts": pcts,
         "nubank": 0.0,
+        "cards": [],
     }
 
 
@@ -145,6 +173,7 @@ def get_workspace(fiscal_mes: str) -> dict:
             "fixed_bills": normalized["fixed_bills"],
             "other_expenses": normalized["other_expenses"],
             "nubank": normalized["nubank"],
+            "cards": normalized["cards"],
             "person_ids": normalized["person_ids"],
             "pcts": normalized["pcts"],
             "cc_reserved_amount": normalized["cc_reserved_amount"],
@@ -158,6 +187,7 @@ def get_workspace(fiscal_mes: str) -> dict:
                 normalized["nubank"],
                 cc_reserved_amount=normalized["cc_reserved_amount"],
                 cc_reserved_person_id=normalized["cc_reserved_person_id"],
+                cards=normalized["cards"],
             ),
         }
 
@@ -172,6 +202,7 @@ def get_workspace(fiscal_mes: str) -> dict:
         "fixed_bills": fixed_bills,
         "other_expenses": other_expenses,
         "nubank": 0.0,
+        "cards": [],
         "person_ids": person_ids,
         "pcts": pcts,
         "cc_reserved_amount": 0.0,

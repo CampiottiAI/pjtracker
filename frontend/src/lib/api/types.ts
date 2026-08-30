@@ -292,6 +292,12 @@ export type CasaExpenseItem = {
 	description: string;
 	amount: number;
 	paid_by: string;
+	split: boolean;
+};
+
+export type CasaCreditCard = {
+	name: string;
+	value: number;
 };
 
 export type CasaSplitPayload = {
@@ -301,6 +307,7 @@ export type CasaSplitPayload = {
 	other_expenses: CasaExpenseItem[];
 	fixed_bills: CasaFixedBill[];
 	nubank: number;
+	cards: CasaCreditCard[];
 	pcts: number[];
 	total: number;
 	nubank_per_person: number[];
@@ -319,6 +326,7 @@ export type CasaWorkspaceResponse = {
 	fixed_bills: CasaFixedBill[];
 	other_expenses: CasaExpenseItem[];
 	nubank: number;
+	cards: CasaCreditCard[];
 	person_ids: string[];
 	pcts: number[];
 	cc_reserved_amount: number;
@@ -340,6 +348,7 @@ export type CasaSummary = {
 	reimbursements: number[];
 	pcts: number[];
 	nubank: number;
+	cards: CasaCreditCard[];
 };
 
 export type CasaComputeSplitPayload = {
@@ -347,6 +356,7 @@ export type CasaComputeSplitPayload = {
 	person_ids: string[];
 	pcts: number[];
 	nubank: number;
+	cards: CasaCreditCard[];
 	fixed_bills: CasaFixedBill[];
 	other_expenses: CasaExpenseItem[];
 	cc_reserved_amount?: number;

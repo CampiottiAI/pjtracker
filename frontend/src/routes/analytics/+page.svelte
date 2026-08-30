@@ -218,8 +218,8 @@
 	{#if fluxoPoints.length > 0}
 		<Card.Root>
 			<Card.Header>
-				<Card.Title class="text-sm">Saques vs sua parte da casa</Card.Title>
-				<Card.Description>Por mês fiscal — saques da PJ e necessidade da casa (sua parte).</Card.Description>
+				<Card.Title class="text-sm">Saques vs seu gasto da casa</Card.Title>
+				<Card.Description>Por mês fiscal — saques da PJ e o que você gastou na casa.</Card.Description>
 			</Card.Header>
 			<Card.Content>
 				<div class="rounded-lg border">
@@ -228,7 +228,7 @@
 							<Table.TableRow>
 								<Table.TableHead>Mês</Table.TableHead>
 								<Table.TableHead class="text-right">Saques</Table.TableHead>
-								<Table.TableHead class="text-right">Sua parte casa</Table.TableHead>
+								<Table.TableHead class="text-right">Seu gasto casa</Table.TableHead>
 								<Table.TableHead class="text-right">Diferença</Table.TableHead>
 								<Table.TableHead>Casa</Table.TableHead>
 							</Table.TableRow>

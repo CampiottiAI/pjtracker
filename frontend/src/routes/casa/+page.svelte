@@ -15,6 +15,7 @@
 		updateCasaFixedBills
 	} from '$lib/api/client.js';
 	import type {
+		CasaCreditCard,
 		CasaExpenseItem,
 		CasaFixedBill,
 		CasaPerson,
@@ -41,7 +42,7 @@
 	let people = $state<CasaPerson[]>([]);
 	let fixedBills = $state<CasaFixedBill[]>([]);
 	let otherExpenses = $state<CasaExpenseItem[]>([]);
-	let nubank = $state(0);
+	let cards = $state<CasaCreditCard[]>([]);
 	let pcts = $state<number[]>([]);
 	let personIds = $state<string[]>([]);
 	let ccReservedAmount = $state(0);
@@ -61,6 +62,10 @@
 	let newExpenseDesc = $state('');
 	let newExpenseAmount = $state('');
 	let newExpensePaidBy = $state('');
+	let newExpenseSplit = $state(true);
+
+	let newCardName = $state('');
+	let newCardValue = $state('');
 
 	function parseAmount(value: string): number | null {
 		let raw = value.trim();
@@ -77,8 +82,15 @@
 	function applyWorkspace(ws: CasaWorkspaceResponse) {
 		people = ws.people;
 		fixedBills = [...ws.fixed_bills];
-		otherExpenses = [...ws.other_expenses];
-		nubank = ws.nubank;
+		otherExpenses = ws.other_expenses.map((e) => ({
+			...e,
+			split: e.split !== false
+		}));
+		cards = ws.cards?.length
+			? [...ws.cards]
+			: ws.nubank > 0
+				? [{ name: 'Nubank', value: ws.nubank }]
+				: [];
 		pcts = [...ws.pcts];
 		personIds = [...ws.person_ids];
 		ccReservedAmount = ws.cc_reserved_amount;
@@ -134,7 +146,8 @@
 				fiscal_mes: selectedMonth,
 				person_ids: personIds,
 				pcts,
-				nubank,
+				nubank: cardsTotal,
+				cards,
 				fixed_bills: fixedBills,
 				other_expenses: otherExpenses,
 				cc_reserved_amount: ccReservedAmount,
@@ -164,6 +177,13 @@
 
 	$effect(() => {
 		if (loading || !selectedMonth) return;
+		void cards;
+		void fixedBills;
+		void otherExpenses;
+		void pcts;
+		void personIds;
+		void ccReservedAmount;
+		void ccReservedPersonId;
 		const t = setTimeout(() => void refreshSplit(), 300);
 		return () => clearTimeout(t);
 	});
@@ -195,10 +215,11 @@
 		}
 		otherExpenses = [
 			...otherExpenses,
-			{ description: desc, amount: val, paid_by: newExpensePaidBy }
+			{ description: desc, amount: val, paid_by: newExpensePaidBy, split: newExpenseSplit }
 		];
 		newExpenseDesc = '';
 		newExpenseAmount = '';
+		newExpenseSplit = true;
 		markDirty();
 	}
 
@@ -207,9 +228,63 @@
 		markDirty();
 	}
 
+	function toggleExpenseSplit(index: number, split: boolean) {
+		const next = [...otherExpenses];
+		next[index] = { ...next[index], split };
+		otherExpenses = next;
+		markDirty();
+	}
+
+	function addCard() {
+		const name = newCardName.trim();
+		const val = parseAmount(newCardValue);
+		if (!name || val === null) {
+			toast.error('Nome e valor válido obrigatórios');
+			return;
+		}
+		cards = [...cards, { name, value: val }];
+		newCardName = '';
+		newCardValue = '';
+		markDirty();
+	}
+
+	function removeCard(index: number) {
+		cards = cards.filter((_, i) => i !== index);
+		markDirty();
+	}
+
+	function updateCardName(index: number, name: string) {
+		const next = [...cards];
+		next[index] = { ...next[index], name };
+		cards = next;
+		markDirty();
+	}
+
+	function updateCardValue(index: number, raw: string) {
+		const n = Number.parseFloat(raw);
+		const next = [...cards];
+		next[index] = { ...next[index], value: Number.isFinite(n) && n >= 0 ? n : 0 };
+		cards = next;
+		markDirty();
+	}
+
+	function parsePctInput(raw: string): number | null {
+		const normalized = raw.trim().replace(',', '.');
+		if (!normalized) return null;
+		const v = Number.parseFloat(normalized);
+		if (!Number.isFinite(v)) return null;
+		return Math.min(100, Math.max(0, v));
+	}
+
+	function formatPctLabel(pct: number): string {
+		const v = pct * 100;
+		if (Math.abs(v - Math.round(v)) < 0.05) return String(Math.round(v));
+		return v.toFixed(1).replace(/\.0$/, '');
+	}
+
 	function onPctChange(index: number, raw: string) {
-		const v = Number.parseInt(raw, 10);
-		if (!Number.isFinite(v)) return;
+		const v = parsePctInput(raw);
+		if (v === null) return;
 		const newPcts = [...pcts];
 		if (personIds.length === 2 && index === 0) {
 			newPcts[0] = v / 100;
@@ -238,7 +313,8 @@
 				fiscal_mes: selectedMonth,
 				person_ids: personIds,
 				pcts,
-				nubank,
+				nubank: cardsTotal,
+				cards,
 				fixed_bills: fixedBills,
 				other_expenses: otherExpenses,
 				cc_reserved_amount: ccReservedAmount,
@@ -282,6 +358,7 @@
 	const personName = (id: string) => people.find((p) => p.id === id)?.name ?? id;
 	const pctSum = $derived(pcts.reduce((a, b) => a + b, 0));
 	const pctValid = $derived(Math.abs(pctSum - 1) < 0.01);
+	const cardsTotal = $derived(cards.reduce((a, c) => a + c.value, 0));
 </script>
 
 <div class="space-y-6">
@@ -386,7 +463,9 @@
 				<Card.Root>
 					<Card.Header>
 						<Card.Title class="text-base">Outras despesas</Card.Title>
-						<Card.Description>Com descrição e quem pagou.</Card.Description>
+						<Card.Description>
+							Com descrição e quem pagou. Desmarque “Dividir” se for só de quem pagou.
+						</Card.Description>
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div class="rounded-lg border border-border">
@@ -396,17 +475,28 @@
 										<Table.TableHead>Descrição</Table.TableHead>
 										<Table.TableHead class="text-right">Valor</Table.TableHead>
 										<Table.TableHead>Pago por</Table.TableHead>
+										<Table.TableHead class="w-20 text-center">Dividir</Table.TableHead>
 										<Table.TableHead class="w-12"></Table.TableHead>
 									</Table.TableRow>
 								</Table.TableHeader>
 								<Table.TableBody>
 									{#each otherExpenses as exp, i}
-										<Table.TableRow>
+										<Table.TableRow class={cn(!exp.split && 'text-muted-foreground')}>
 											<Table.TableCell>{exp.description || '—'}</Table.TableCell>
 											<Table.TableCell class="text-right tabular-nums">
 												{formatBrl(exp.amount)}
 											</Table.TableCell>
 											<Table.TableCell>{personName(exp.paid_by)}</Table.TableCell>
+											<Table.TableCell class="text-center">
+												<input
+													type="checkbox"
+													class="h-4 w-4 accent-foreground"
+													checked={exp.split !== false}
+													aria-label={`Dividir ${exp.description || 'despesa'} no acerto`}
+													onchange={(e) =>
+														toggleExpenseSplit(i, (e.currentTarget as HTMLInputElement).checked)}
+												/>
+											</Table.TableCell>
 											<Table.TableCell>
 												<Button
 													variant="ghost"
@@ -420,7 +510,7 @@
 										</Table.TableRow>
 									{:else}
 										<Table.TableRow>
-											<Table.TableCell colspan={4} class="text-center text-muted-foreground">
+											<Table.TableCell colspan={5} class="text-center text-muted-foreground">
 												Nenhuma despesa extra.
 											</Table.TableCell>
 										</Table.TableRow>
@@ -428,7 +518,7 @@
 								</Table.TableBody>
 							</Table.Table>
 						</div>
-						<div class="grid gap-2 sm:grid-cols-4">
+						<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto_auto] sm:items-center">
 							<Input placeholder="Descrição" bind:value={newExpenseDesc} />
 							<Input placeholder="Valor" bind:value={newExpenseAmount} inputmode="decimal" />
 							<select
@@ -439,6 +529,14 @@
 									<option value={p.id}>{p.name}</option>
 								{/each}
 							</select>
+							<label class="flex h-9 items-center gap-2 text-sm whitespace-nowrap">
+								<input
+									type="checkbox"
+									class="h-4 w-4 accent-foreground"
+									bind:checked={newExpenseSplit}
+								/>
+								Dividir
+							</label>
 							<Button variant="outline" onclick={addExpense}>
 								<Plus class="h-4 w-4" />
 								Adicionar
@@ -449,25 +547,77 @@
 
 				<Card.Root>
 					<Card.Header>
-						<Card.Title class="text-base">Cartão</Card.Title>
+						<Card.Title class="text-base">Cartões</Card.Title>
+						<Card.Description>Faturas do mês — um cartão por nome e valor.</Card.Description>
 					</Card.Header>
 					<Card.Content class="space-y-4">
+						<div class="rounded-lg border border-border">
+							<Table.Table>
+								<Table.TableHeader>
+									<Table.TableRow>
+										<Table.TableHead>Nome</Table.TableHead>
+										<Table.TableHead class="text-right">Valor</Table.TableHead>
+										<Table.TableHead class="w-12"></Table.TableHead>
+									</Table.TableRow>
+								</Table.TableHeader>
+								<Table.TableBody>
+									{#each cards as card, i}
+										<Table.TableRow>
+											<Table.TableCell>
+												<Input
+													value={card.name}
+													aria-label={`Nome do cartão ${i + 1}`}
+													oninput={(e) =>
+														updateCardName(i, (e.currentTarget as HTMLInputElement).value)}
+												/>
+											</Table.TableCell>
+											<Table.TableCell class="text-right">
+												<input
+													type="number"
+													min="0"
+													step="0.01"
+													class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm tabular-nums"
+													value={card.value}
+													aria-label={`Valor do cartão ${card.name || i + 1}`}
+													oninput={(e) =>
+														updateCardValue(i, (e.currentTarget as HTMLInputElement).value)}
+												/>
+											</Table.TableCell>
+											<Table.TableCell>
+												<Button
+													variant="ghost"
+													size="icon"
+													class="h-8 w-8"
+													onclick={() => removeCard(i)}
+												>
+													<Trash2 class="h-4 w-4" />
+												</Button>
+											</Table.TableCell>
+										</Table.TableRow>
+									{:else}
+										<Table.TableRow>
+											<Table.TableCell colspan={3} class="text-center text-muted-foreground">
+												Nenhum cartão.
+											</Table.TableCell>
+										</Table.TableRow>
+									{/each}
+								</Table.TableBody>
+							</Table.Table>
+						</div>
+						<div class="grid gap-2 sm:grid-cols-3">
+							<Input placeholder="Nome (ex. Nubank)" bind:value={newCardName} />
+							<Input placeholder="Valor" bind:value={newCardValue} inputmode="decimal" />
+							<Button variant="outline" onclick={addCard}>
+								<Plus class="h-4 w-4" />
+								Adicionar
+							</Button>
+						</div>
+						{#if cards.length > 0}
+							<p class="text-sm text-muted-foreground">
+								Total das faturas {formatBrl(cardsTotal)}
+							</p>
+						{/if}
 						<div class="grid gap-4 sm:grid-cols-2">
-							<div class="space-y-2">
-								<label for="nubank" class="text-sm font-medium">Fatura total (R$)</label>
-								<input
-									id="nubank"
-									type="number"
-									min="0"
-									step="100"
-									class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-									value={nubank}
-									oninput={(e) => {
-										nubank = Number((e.currentTarget as HTMLInputElement).value) || 0;
-										markDirty();
-									}}
-								/>
-							</div>
 							<div class="space-y-2">
 								<label for="cc-reserved" class="text-sm font-medium">Fatia exclusiva (R$)</label>
 								<input
@@ -518,23 +668,39 @@
 					<Card.Content class="space-y-4">
 						{#if personIds.length === 2}
 							<div class="space-y-2">
-								<label for="pct-slider-0" class="text-sm font-medium">
+								<label for="pct-input-0" class="text-sm font-medium">
 									{personName(personIds[0])} %
 								</label>
-								<input
-									id="pct-slider-0"
-									type="range"
-									min="0"
-									max="100"
-									step="5"
-									value={Math.round(pcts[0] * 100)}
-									class="w-full"
-									oninput={(e) =>
-										onPctChange(0, (e.currentTarget as HTMLInputElement).value)}
-								/>
+								<div class="flex items-center gap-2">
+									<input
+										id="pct-slider-0"
+										type="range"
+										min="0"
+										max="100"
+										step="0.1"
+										value={pcts[0] * 100}
+										class="flex-1"
+										aria-label={`${personName(personIds[0])} percentual`}
+										oninput={(e) =>
+											onPctChange(0, (e.currentTarget as HTMLInputElement).value)}
+									/>
+									<input
+										id="pct-input-0"
+										type="number"
+										min="0"
+										max="100"
+										step="0.1"
+										inputmode="decimal"
+										class="flex h-9 w-20 rounded-md border border-input bg-transparent px-2 text-sm tabular-nums"
+										value={pcts[0] * 100}
+										oninput={(e) =>
+											onPctChange(0, (e.currentTarget as HTMLInputElement).value)}
+									/>
+									<span class="text-sm text-muted-foreground">%</span>
+								</div>
 								<p class="text-xs text-muted-foreground">
-									{personName(personIds[0])} {Math.round(pcts[0] * 100)}% ·
-									{personName(personIds[1])} {Math.round(pcts[1] * 100)}%
+									{personName(personIds[0])} {formatPctLabel(pcts[0])}% ·
+									{personName(personIds[1])} {formatPctLabel(pcts[1])}%
 								</p>
 							</div>
 						{:else}
@@ -545,8 +711,10 @@
 										type="number"
 										min="0"
 										max="100"
-										class="flex h-9 w-20 rounded-md border border-input bg-transparent px-2 text-sm"
-										value={Math.round(pcts[i] * 100)}
+										step="0.1"
+										inputmode="decimal"
+										class="flex h-9 w-20 rounded-md border border-input bg-transparent px-2 text-sm tabular-nums"
+										value={pcts[i] * 100}
 										oninput={(e) =>
 											onPctChange(i, (e.currentTarget as HTMLInputElement).value)}
 									/>

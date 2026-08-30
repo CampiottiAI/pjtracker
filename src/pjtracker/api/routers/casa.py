@@ -14,6 +14,9 @@ from pjtracker.casa.storage import (
     list_saved_fiscal_meses,
     load_fixed_bills,
     load_people,
+    normalize_cards,
+    normalize_expense,
+    nubank_from_cards,
     person_used_in_fixed_bills,
     person_used_in_history,
     remove_person,
@@ -40,13 +43,20 @@ class ExpenseItemInput(BaseModel):
     description: str = ""
     amount: float = Field(gt=0)
     paid_by: str = Field(min_length=1)
+    split: bool = True
+
+
+class CreditCardInput(BaseModel):
+    name: str = Field(min_length=1)
+    value: float = Field(ge=0)
 
 
 class ComputeSplitRequest(BaseModel):
     fiscal_mes: str
     person_ids: list[str] = Field(min_length=1)
     pcts: list[float] = Field(min_length=1)
-    nubank: float = Field(ge=0)
+    nubank: float = Field(default=0.0, ge=0)
+    cards: list[CreditCardInput] = Field(default_factory=list)
     fixed_bills: list[FixedBillInput] = Field(default_factory=list)
     other_expenses: list[ExpenseItemInput] = Field(default_factory=list)
     cc_reserved_amount: float = Field(default=0.0, ge=0)
@@ -67,6 +77,29 @@ class SaveMonthRequest(ComputeSplitRequest):
 
 class FixedBillsUpdate(BaseModel):
     items: list[FixedBillInput]
+
+
+def _expenses_from_payload(payload: ComputeSplitRequest) -> list[dict]:
+    return [
+        dict(
+            normalize_expense(
+                {
+                    "description": e.description.strip(),
+                    "amount": e.amount,
+                    "paid_by": e.paid_by.strip(),
+                    "split": e.split,
+                }
+            )
+        )
+        for e in payload.other_expenses
+    ]
+
+
+def _cards_from_payload(payload: ComputeSplitRequest) -> list[dict]:
+    return normalize_cards(
+        [{"name": c.name.strip(), "value": c.value} for c in payload.cards],
+        payload.nubank,
+    )
 
 
 @router.get("/people")
@@ -142,14 +175,7 @@ def compute_split_endpoint(payload: ComputeSplitRequest) -> dict:
         {"name": b.name.strip(), "value": b.value, "paid_by": b.paid_by.strip()}
         for b in payload.fixed_bills
     ]
-    expenses = [
-        {
-            "description": e.description.strip(),
-            "amount": e.amount,
-            "paid_by": e.paid_by.strip(),
-        }
-        for e in payload.other_expenses
-    ]
+    expenses = _expenses_from_payload(payload)
     try:
         return build_split_payload(
             people,
@@ -160,6 +186,7 @@ def compute_split_endpoint(payload: ComputeSplitRequest) -> dict:
             payload.nubank,
             cc_reserved_amount=payload.cc_reserved_amount,
             cc_reserved_person_id=payload.cc_reserved_person_id,
+            cards=_cards_from_payload(payload),
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
@@ -179,15 +206,10 @@ def save_month(fiscal_mes: str, payload: SaveMonthRequest) -> dict:
         {"name": b.name.strip(), "value": b.value, "paid_by": b.paid_by.strip()}
         for b in payload.fixed_bills
     ]
-    expenses = [
-        {
-            "description": e.description.strip(),
-            "amount": e.amount,
-            "paid_by": e.paid_by.strip(),
-        }
-        for e in payload.other_expenses
-    ]
+    expenses = _expenses_from_payload(payload)
     amounts = compute_amounts_from_inputs(people, fixed, expenses)
+    cards = _cards_from_payload(payload)
+    nubank = nubank_from_cards(cards)
     cc_ix: int | None = None
     if payload.cc_reserved_amount > 1e-9 and payload.cc_reserved_person_id:
         for i, pid in enumerate(payload.person_ids):
@@ -197,7 +219,7 @@ def save_month(fiscal_mes: str, payload: SaveMonthRequest) -> dict:
     try:
         split = compute_split_n(
             amounts,
-            payload.nubank,
+            nubank,
             payload.pcts,
             cc_reserved_amount=payload.cc_reserved_amount,
             cc_reserved_person_index=cc_ix,
@@ -211,7 +233,8 @@ def save_month(fiscal_mes: str, payload: SaveMonthRequest) -> dict:
         amounts,
         expenses,
         payload.pcts,
-        payload.nubank,
+        nubank,
+        cards=cards,
         fixed_bills=fixed,
         split_result=split,
     )

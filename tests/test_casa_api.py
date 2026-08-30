@@ -83,6 +83,73 @@ def test_casa_save_month_and_fluxo(client: TestClient):
     assert body["casa"]["saved"] is True
     assert body["casa"]["household_total_brl"] > 0
     assert body["coverage"]["primary_share_brl"] > 0
+    assert body["casa"]["nubank"] == 3000.0
+    assert body["casa"]["cards"] == [{"name": "Nubank", "value": 3000.0}]
+
+
+def test_casa_save_multiple_cards(client: TestClient):
+    with temporary_casa_paths():
+        payload = {
+            "fiscal_mes": "2026-08",
+            "person_ids": ["rael", "fer"],
+            "pcts": [0.6, 0.4],
+            "cards": [
+                {"name": "Nubank", "value": 2000.0},
+                {"name": "Inter", "value": 1000.0},
+            ],
+            "fixed_bills": [{"name": "Internet", "value": 100.0, "paid_by": "rael"}],
+            "other_expenses": [],
+            "cc_reserved_amount": 0.0,
+            "cc_reserved_person_id": None,
+        }
+        save_r = client.put("/api/v1/casa/months/2026-08", json=payload)
+        assert save_r.status_code == 200
+        assert save_r.json()["nubank"] == 3000.0
+        assert len(save_r.json()["cards"]) == 2
+
+        split_r = client.post("/api/v1/casa/compute-split", json=payload)
+        assert split_r.status_code == 200
+        assert split_r.json()["nubank"] == 3000.0
+        assert split_r.json()["total"] == 3100.0
+
+        ws = client.get("/api/v1/casa/workspace", params={"fiscal_mes": "2026-08"})
+        assert ws.status_code == 200
+        body = ws.json()
+        assert body["cards"] == [
+            {"name": "Nubank", "value": 2000.0},
+            {"name": "Inter", "value": 1000.0},
+        ]
+        assert body["nubank"] == 3000.0
+
+
+def test_casa_personal_expense_excluded_from_split(client: TestClient):
+    with temporary_casa_paths():
+        payload = {
+            "fiscal_mes": "2026-08",
+            "person_ids": ["rael", "fer"],
+            "pcts": [0.6, 0.4],
+            "nubank": 0.0,
+            "cards": [],
+            "fixed_bills": [],
+            "other_expenses": [
+                {"description": "Mercado", "amount": 100.0, "paid_by": "rael", "split": True},
+                {"description": "Presente", "amount": 80.0, "paid_by": "rael", "split": False},
+            ],
+        }
+        split_r = client.post("/api/v1/casa/compute-split", json=payload)
+        assert split_r.status_code == 200
+        body = split_r.json()
+        assert body["total"] == 100.0
+        assert body["amounts"] == [100.0, 0.0]
+        assert body["other_expenses"][1]["split"] is False
+        assert body["primary_share_brl"] == 180.0
+
+        save_r = client.put("/api/v1/casa/months/2026-08", json=payload)
+        assert save_r.status_code == 200
+        ws = client.get("/api/v1/casa/workspace", params={"fiscal_mes": "2026-08"})
+        expenses = ws.json()["other_expenses"]
+        assert expenses[1]["split"] is False
+        assert ws.json()["split"]["total"] == 100.0
 
 
 def test_casa_workspace_unsaved(client: TestClient):
