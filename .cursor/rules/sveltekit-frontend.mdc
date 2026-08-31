@@ -1,0 +1,14 @@
+---
+description: Svelte 5 frontend conventions for pjtracker
+globs: frontend/**/*.svelte, frontend/**/*.ts
+alwaysApply: false
+---
+
+# SvelteKit frontend
+
+- Svelte 5 runes only (`$state`, `$derived`, `$effect`, `$props`). No new stores.
+- Client-side loading only — no `+page.server.ts`.
+- Call `$lib/api/client.ts` helpers; add types in `$lib/api/types.ts`. Never raw `fetch` in pages.
+- Format money and fiscal months with `$lib/utils/format.ts`.
+- Reuse `BoletoLikePage` for boleto-like domains. Use `$lib/components/ui/` + sonner toasts.
+- Upload UX is drop → parse-preview → confirm → save. Dark theme tokens from `app.css`.

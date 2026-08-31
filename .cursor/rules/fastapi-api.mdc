@@ -1,0 +1,14 @@
+---
+description: FastAPI routers, persistence, and parse-preview flow
+globs: src/pjtracker/api/**/*.py, src/pjtracker/app.py, src/pjtracker/parsers/**/*.py
+alwaysApply: false
+---
+
+# API and persistence
+
+- Prefix is `/api/v1`. No auth. Routers stay thin; DB and file I/O stay in `pjtracker.app`.
+- New document types follow parse-preview (no save) → create (multipart) → JSON patches → dedicated download routes.
+- `fiscal_mes` is `YYYY-MM`. Do not expose filesystem `pdf_path` as the way to fetch files.
+- Completeness rules live in `api/services/fiscal_months.py` (required NF/boleto/DARF/extrato counts; IRPJ/CSLL on quarter-end months).
+- Tests: temp DB/pdf/image dirs (see `tests/test_api.py`). Mock parsers; do not call Maritaca or EasyOCR.
+- Do not add features to the Streamlit app.
