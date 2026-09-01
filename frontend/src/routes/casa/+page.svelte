@@ -201,6 +201,26 @@
 		markDirty();
 	}
 
+	function patchFixedBill(index: number, patch: Partial<CasaFixedBill>) {
+		const next = [...fixedBills];
+		next[index] = { ...next[index], ...patch };
+		fixedBills = next;
+		markDirty();
+	}
+
+	function updateFixedBillName(index: number, name: string) {
+		patchFixedBill(index, { name });
+	}
+
+	function updateFixedBillValue(index: number, raw: string) {
+		const n = Number.parseFloat(raw);
+		patchFixedBill(index, { value: Number.isFinite(n) && n >= 0 ? n : 0 });
+	}
+
+	function updateFixedBillPaidBy(index: number, paid_by: string) {
+		patchFixedBill(index, { paid_by });
+	}
+
 	function removeFixedBill(index: number) {
 		fixedBills = fixedBills.filter((_, i) => i !== index);
 		markDirty();
@@ -415,11 +435,42 @@
 								<Table.TableBody>
 									{#each fixedBills as bill, i}
 										<Table.TableRow>
-											<Table.TableCell>{bill.name}</Table.TableCell>
-											<Table.TableCell class="text-right tabular-nums">
-												{formatBrl(bill.value)}
+											<Table.TableCell>
+												<Input
+													value={bill.name}
+													aria-label={`Nome da conta fixa ${i + 1}`}
+													oninput={(e) =>
+														updateFixedBillName(i, (e.currentTarget as HTMLInputElement).value)}
+												/>
 											</Table.TableCell>
-											<Table.TableCell>{personName(bill.paid_by)}</Table.TableCell>
+											<Table.TableCell class="text-right">
+												<input
+													type="number"
+													min="0"
+													step="0.01"
+													class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm tabular-nums"
+													value={bill.value}
+													aria-label={`Valor de ${bill.name || `conta fixa ${i + 1}`}`}
+													oninput={(e) =>
+														updateFixedBillValue(i, (e.currentTarget as HTMLInputElement).value)}
+												/>
+											</Table.TableCell>
+											<Table.TableCell>
+												<select
+													class="flex h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+													value={bill.paid_by}
+													aria-label={`Pago por ${bill.name || `conta fixa ${i + 1}`}`}
+													onchange={(e) =>
+														updateFixedBillPaidBy(
+															i,
+															(e.currentTarget as HTMLSelectElement).value
+														)}
+												>
+													{#each people as p}
+														<option value={p.id}>{p.name}</option>
+													{/each}
+												</select>
+											</Table.TableCell>
 											<Table.TableCell>
 												<Button
 													variant="ghost"
