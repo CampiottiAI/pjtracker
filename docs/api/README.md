@@ -685,6 +685,34 @@ Validation note:
 
 - invalid month format returns `422`
 
+### Download month document pack
+
+`GET /fiscal-months/{fiscal_mes}/pack`
+
+Returns a zip archive (`application/zip`) with all documents for the fiscal month:
+
+- NF PDFs and their associated images (`nfs/`)
+- Extrato, caixinha, and higlobe PDFs when present (`extratos/`)
+
+Zip layout example:
+
+```text
+nfs/nf_{id}_{verification_code}.pdf
+nfs/nf_{id}_{verification_code}_img_{image_id}.png
+extratos/extrato_{id}.pdf
+extratos/caixinha_{id}.pdf
+extratos/higlobe_{id}.pdf
+```
+
+Response headers include `Content-Disposition: attachment; filename="documents_pj_{fiscal_mes}.zip"`.
+
+Errors:
+
+- `422` when `fiscal_mes` is not `YYYY-MM`
+- `404` when no readable files exist for that month
+
+Boletos, DARFs, and IRPJ/CSLL are not included in the pack.
+
 ## Analytics
 
 ### NF series

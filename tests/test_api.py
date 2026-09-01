@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import tempfile
+import zipfile
 from contextlib import contextmanager
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,9 +23,12 @@ from pjtracker.app import (
     save_caixinha_pdf,
     save_extrato_entry,
     save_extrato_pdf,
+    save_higlobe_pdf,
+    save_image,
     save_irpj_csll_entry,
     save_irpj_csll_pdf,
     save_nf_entry,
+    save_nf_image,
     save_pdf,
 )
 from pjtracker.parsers.boleto_parser import BoletoParsed, ReceiptParsed
@@ -870,3 +875,84 @@ def test_fiscal_months_include_withdraw_only_month(client: TestClient):
         response = client.get("/api/v1/fiscal-months")
     assert response.status_code == 200
     assert "2026-04" in response.json()["months"]
+
+
+def test_fiscal_month_pack_download(client: TestClient):
+    with temporary_app_paths() as root:
+        init_db()
+        fiscal_mes = "2025-03"
+
+        nf_pdf = save_pdf(b"%PDF-nf", "CODE123", "01/03/2025 00:00:00", 100.0)
+        inserted, nf_id = save_nf_entry(
+            company="Acme",
+            usd=100.0,
+            rate=5.0,
+            spread=3.0,
+            brl_no_spread=500.0,
+            brl_with_spread=485.0,
+            nf_date="01/03/2025 00:00:00",
+            verification_code="CODE123",
+            payment_via=None,
+            pdf_path=f"/other/host/pjtracker/pdfs/{nf_pdf.name}",
+            fiscal_mes=fiscal_mes,
+        )
+        assert inserted
+
+        img_path = save_image(b"\x89PNG", nf_id, "image/png")
+        save_nf_image(nf_id, str(img_path.relative_to(root)))
+
+        extrato_pdf = save_extrato_pdf(
+            b"%PDF-extrato",
+            period_start="01/03/2025",
+            period_end="31/03/2025",
+        )
+        caixinha_pdf = save_caixinha_pdf(
+            b"%PDF-caixinha",
+            period_start="01/03/2025",
+            period_end="31/03/2025",
+        )
+        higlobe_pdf = save_higlobe_pdf(
+            b"%PDF-higlobe",
+            period_start="01/03/2025",
+            period_end="31/03/2025",
+        )
+        inserted_ext, extrato_id = save_extrato_entry(
+            extrato_pdf_path=f"/other/host/pjtracker/pdfs/{extrato_pdf.name}",
+            caixinha_pdf_path=f"/other/host/pjtracker/pdfs/{caixinha_pdf.name}",
+            higlobe_pdf_path=f"/other/host/pjtracker/pdfs/{higlobe_pdf.name}",
+            period_start="01/03/2025",
+            period_end="31/03/2025",
+            fiscal_mes=fiscal_mes,
+        )
+        assert inserted_ext
+
+        response = client.get(f"/api/v1/fiscal-months/{fiscal_mes}/pack")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert "documents_pj_2025-03.zip" in response.headers.get("content-disposition", "")
+
+    with zipfile.ZipFile(BytesIO(response.content)) as zf:
+        names = set(zf.namelist())
+        assert f"nfs/nf_{nf_id}_CODE123.pdf" in names
+        assert any(
+            n.startswith(f"nfs/nf_{nf_id}_CODE123_img_") and n.endswith(".png") for n in names
+        )
+        assert f"extratos/extrato_{extrato_id}.pdf" in names
+        assert f"extratos/caixinha_{extrato_id}.pdf" in names
+        assert f"extratos/higlobe_{extrato_id}.pdf" in names
+        assert zf.read(f"nfs/nf_{nf_id}_CODE123.pdf") == b"%PDF-nf"
+
+
+def test_fiscal_month_pack_empty_returns_404(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        response = client.get("/api/v1/fiscal-months/2025-09/pack")
+    assert response.status_code == 404
+
+
+def test_fiscal_month_pack_rejects_invalid_format(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        response = client.get("/api/v1/fiscal-months/not-a-month/pack")
+    assert response.status_code == 422

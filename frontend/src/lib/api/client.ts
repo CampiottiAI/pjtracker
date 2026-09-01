@@ -613,6 +613,12 @@ export async function getCompleteness(fiscalMes: string): Promise<CompletenessRe
 	return apiJson<CompletenessResponse>(`/fiscal-months/${fiscalMes}/completeness`);
 }
 
+export async function downloadFiscalMonthPack(
+	fiscalMes: string
+): Promise<{ blob: Blob; filename?: string }> {
+	return downloadBlob(`/fiscal-months/${encodeURIComponent(fiscalMes)}/pack`);
+}
+
 // ---------------------------------------------------------------------------
 // Withdraws
 // ---------------------------------------------------------------------------

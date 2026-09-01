@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import io
+import zipfile
+from pathlib import Path
+
+from pjtracker.api.services.paths import resolve_stored_path
 from pjtracker.app import (
     get_boletos,
     get_darfs,
@@ -9,6 +14,7 @@ from pjtracker.app import (
     get_extratos,
     get_irpj_cslls,
     get_nf_entries,
+    get_nf_images,
     get_withdraw_fiscal_months,
 )
 from pjtracker.casa.storage import list_saved_fiscal_meses
@@ -101,3 +107,63 @@ def month_completeness(fm: str) -> dict:
             and len(extratos_com_caixinha) >= REQUIRED_EXTRATO_COM_CAIXINHA
         ),
     }
+
+
+def _safe_verification_code(code: str | None) -> str:
+    if not code or not str(code).strip():
+        return "nofc"
+    safe = "".join(c if c.isalnum() else "_" for c in str(code).strip())
+    return safe[:40] or "nofc"
+
+
+def _add_file_to_zip(zf: zipfile.ZipFile, arcname: str, path: Path) -> bool:
+    if not path.is_file():
+        return False
+    zf.write(path, arcname)
+    return True
+
+
+def build_fiscal_month_pack(fiscal_mes: str) -> bytes | None:
+    """Build zip bytes for NF/extrato documents in a fiscal month. Returns None if empty."""
+    buffer = io.BytesIO()
+    added = 0
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for nf in get_nf_entries(fiscal_mes=fiscal_mes):
+            nf_id = nf["id"]
+            code = _safe_verification_code(nf.get("verification_code"))
+            raw_pdf = nf.get("pdf_path")
+            if raw_pdf:
+                path = resolve_stored_path(raw_pdf)
+                if path and _add_file_to_zip(zf, f"nfs/nf_{nf_id}_{code}.pdf", path):
+                    added += 1
+            for img in get_nf_images(nf_id):
+                image_id = img["id"]
+                raw_img = img.get("image_path")
+                if not raw_img:
+                    continue
+                path = resolve_stored_path(raw_img)
+                if path:
+                    ext = path.suffix or ".png"
+                    arcname = f"nfs/nf_{nf_id}_{code}_img_{image_id}{ext}"
+                    if _add_file_to_zip(zf, arcname, path):
+                        added += 1
+
+        for extrato in get_extratos(fiscal_mes=fiscal_mes):
+            extrato_id = extrato["id"]
+            for field, arc_suffix in (
+                ("extrato_pdf_path", "extrato"),
+                ("caixinha_pdf_path", "caixinha"),
+                ("higlobe_pdf_path", "higlobe"),
+            ):
+                raw = extrato.get(field)
+                if not raw:
+                    continue
+                path = resolve_stored_path(raw)
+                if path and _add_file_to_zip(
+                    zf, f"extratos/{arc_suffix}_{extrato_id}.pdf", path
+                ):
+                    added += 1
+
+    if added == 0:
+        return None
+    return buffer.getvalue()

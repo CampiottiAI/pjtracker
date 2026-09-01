@@ -6,10 +6,12 @@
 		createFiscalMonth,
 		createWithdraw,
 		deleteWithdraw,
+		downloadFiscalMonthPack,
 		formatApiErrorMessage,
 		getFluxo,
 		listFiscalMonths,
 		listWithdraws,
+		triggerDownload,
 		updateWithdraw
 	} from '$lib/api/client.js';
 	import type {
@@ -40,7 +42,8 @@
 		Trash2,
 		Banknote,
 		Home,
-		Building2
+		Building2,
+		Download
 	} from 'lucide-svelte';
 
 	let months = $state<string[]>([]);
@@ -69,6 +72,7 @@
 
 	let deleteDialogOpen = $state(false);
 	let deletingWithdraw = $state<WithdrawEntry | null>(null);
+	let downloadingPack = $state(false);
 
 	const WITHDRAW_TARGET_BRL = 50_000;
 
@@ -256,6 +260,22 @@
 		toast.success('Saque excluído');
 	}
 
+	async function handleDownloadPack() {
+		if (!selectedMonth || downloadingPack) return;
+		downloadingPack = true;
+		try {
+			const { blob, filename } = await downloadFiscalMonthPack(selectedMonth);
+			triggerDownload(blob, filename ?? `documents_pj_${selectedMonth}.zip`);
+			toast.success('Download iniciado');
+		} catch (e) {
+			toast.error(
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao baixar documentos'
+			);
+		} finally {
+			downloadingPack = false;
+		}
+	}
+
 	const activeSummary = $derived(withdrawSummary ?? emptyWithdrawSummary());
 	const targetBrl = $derived(activeSummary.target_brl);
 
@@ -402,6 +422,15 @@
 					<option value={m}>{formatFiscalMes(m)}</option>
 				{/each}
 			</select>
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={handleDownloadPack}
+				disabled={!selectedMonth || downloadingPack}
+			>
+				<Download class="h-4 w-4" />
+				{downloadingPack ? 'Baixando…' : 'Baixar documentos'}
+			</Button>
 		{:else}
 			<span class="text-sm text-muted-foreground">Nenhum mês fiscal</span>
 		{/if}
