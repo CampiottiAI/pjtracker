@@ -304,12 +304,29 @@
 				: 'bg-amber-500'
 	);
 
-	const coverageHero = $derived.by(() => {
+	const receitaHero = $derived.by(() => {
+		if (!fluxo) return null;
+		const receita = activeSummary.previous_month_income_brl;
+		const saques = fluxo.coverage.saques_brl;
+		const leftover = receita - saques;
+		if (leftover >= 0) {
+			return {
+				text: `Sobram ${formatBrl(leftover)}`,
+				class: 'text-emerald-400'
+			};
+		}
+		return {
+			text: `Saques acima da receita ${formatBrl(-leftover)}`,
+			class: 'text-amber-400'
+		};
+	});
+
+	const saqueLeftover = $derived.by(() => {
 		if (!fluxo) return null;
 		const { coverage } = fluxo;
 		if (coverage.covers_household) {
 			return {
-				text: `Cobre, sobram ${formatBrl(coverage.surplus_brl)}`,
+				text: `Sobram do saque ${formatBrl(coverage.surplus_brl)}`,
 				class: 'text-emerald-400'
 			};
 		}
@@ -318,6 +335,11 @@
 			class: 'text-amber-400'
 		};
 	});
+
+	const showCompanyRemainder = $derived(
+		fluxo != null &&
+			(!fluxo.company.restante_estimated || fluxo.company.nf_income_brl > 0)
+	);
 
 	type CheckItem = {
 		label: string;
@@ -393,7 +415,7 @@
 <div class="space-y-6">
 	<PageHeader
 		title="Fluxo"
-		description="Saques cobrem o que você gastou na casa? O que sobra na empresa?"
+		description="O que sobra da receita após os saques — e do saque após o seu gasto na casa."
 	>
 		{#snippet actions()}
 			<Button
@@ -453,9 +475,8 @@
 
 	{#if fluxo && selectedMonth}
 		<p class="text-sm text-muted-foreground">
-			O gasto da casa de {formatFiscalMes(selectedMonth)} atribuído a você é coberto com saques de
-			{formatFiscalMes(selectedMonth)}, comparados à receita de
-			{formatFiscalMes(fluxo.previous_fiscal_mes)}.
+			Receita de {formatFiscalMes(fluxo.previous_fiscal_mes)} menos saques de
+			{formatFiscalMes(selectedMonth)}; abaixo, seu gasto na casa e o que sobra do saque.
 		</p>
 
 		<div>
@@ -486,15 +507,19 @@
 			</div>
 		</div>
 
-		{#if coverageHero}
+		{#if receitaHero && saqueLeftover}
 			<div class="rounded-lg border border-border bg-card px-5 py-4">
-				<p class={cn('text-2xl font-bold tabular-nums', coverageHero.class)}>
-					{coverageHero.text}
+				<p class={cn('text-2xl font-bold tabular-nums', receitaHero.class)}>
+					{receitaHero.text}
 				</p>
 				<p class="mt-1 text-sm text-muted-foreground">
-					Seu gasto {formatBrl(fluxo.coverage.primary_share_brl)} · Casa toda
-					{formatBrl(fluxo.coverage.household_total_brl)} · Saques
+					Receita {formatFiscalMes(fluxo.previous_fiscal_mes)}
+					{formatBrl(activeSummary.previous_month_income_brl)} · Saques
 					{formatBrl(fluxo.coverage.saques_brl)}
+				</p>
+				<p class="mt-3 border-t border-border pt-3 text-sm text-muted-foreground">
+					Seu gasto {formatBrl(fluxo.coverage.primary_share_brl)} ·
+					<span class={saqueLeftover.class}>{saqueLeftover.text}</span>
 				</p>
 			</div>
 		{/if}
@@ -560,19 +585,25 @@
 					</div>
 				</Card.Header>
 				<Card.Content class="space-y-2">
-					<p class="text-2xl font-bold tabular-nums">
-						{formatBrl(fluxo.company.restante_brl)}
-						{#if fluxo.company.restante_estimated}
-							<Badge variant="outline" class="ml-2 text-xs">estimado</Badge>
-						{/if}
-					</p>
-					<p class="text-sm text-muted-foreground">
-						NFs {formatBrl(fluxo.company.nf_income_brl)} · Impostos
-						{formatBrl(fluxo.company.taxes_brl)}
-						{#if fluxo.company.saldo_final_brl != null}
-							· Saldo extrato {formatBrl(fluxo.company.saldo_final_brl)}
-						{/if}
-					</p>
+					{#if showCompanyRemainder}
+						<p class="text-2xl font-bold tabular-nums">
+							{formatBrl(fluxo.company.restante_brl)}
+							{#if fluxo.company.restante_estimated}
+								<Badge variant="outline" class="ml-2 text-xs">estimado</Badge>
+							{/if}
+						</p>
+						<p class="text-sm text-muted-foreground">
+							NFs {formatBrl(fluxo.company.nf_income_brl)} · Impostos
+							{formatBrl(fluxo.company.taxes_brl)}
+							{#if fluxo.company.saldo_final_brl != null}
+								· Saldo extrato {formatBrl(fluxo.company.saldo_final_brl)}
+							{/if}
+						</p>
+					{:else}
+						<p class="text-sm text-muted-foreground">
+							Envie o extrato ou as NFs do mês para ver o saldo na empresa.
+						</p>
+					{/if}
 					<div class="flex gap-2 pt-1">
 						<a href="/extratos?fiscal_mes={selectedMonth}" class="text-sm text-chart-1 hover:underline">
 							Extratos
