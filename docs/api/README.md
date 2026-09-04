@@ -739,6 +739,7 @@ Create response is the saved record. If analysis fails, the record is still kept
 - `POST /cars/maintenance/{id}/attachments` multipart `file` (images, PDFs, videos)
 - `GET /cars/maintenance/{id}/source`
 - `GET /cars/maintenance/{id}/attachments/{att_id}`
+- `DELETE /cars/maintenance/{id}/attachments/{att_id}` — removes one anexo (not the source quote)
 
 Prefer download routes over `source.path` / `attachments[].path`.
 

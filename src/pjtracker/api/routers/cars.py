@@ -77,7 +77,12 @@ def _file_response(relative_path: str, filename: str, mime_type: str) -> FileRes
         raise HTTPException(status_code=404, detail="File not found")
     if not maintenance_storage.is_under_maintenance_files(path):
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(path, media_type=mime_type or None, filename=filename)
+    return FileResponse(
+        path,
+        media_type=mime_type or None,
+        filename=filename,
+        content_disposition_type="inline",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +141,15 @@ def download_maintenance_attachment(record_id: str, att_id: str) -> FileResponse
         if att["id"] == att_id:
             return _file_response(att["path"], att["filename"], att["mime_type"])
     raise HTTPException(status_code=404, detail="Attachment not found")
+
+
+@router.delete("/maintenance/{record_id}/attachments/{att_id}", status_code=204)
+def delete_maintenance_attachment(record_id: str, att_id: str) -> None:
+    record = maintenance_storage.get_record(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Maintenance record not found")
+    if not maintenance_storage.delete_attachment(record_id, att_id):
+        raise HTTPException(status_code=404, detail="Attachment not found")
 
 
 # ---------------------------------------------------------------------------

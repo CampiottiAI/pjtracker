@@ -13,10 +13,13 @@
 		createMaintenance,
 		getMaintenance,
 		deleteMaintenance,
-		addMaintenanceAttachment
+		addMaintenanceAttachment,
+		deleteMaintenanceAttachment,
+		apiFileUrl
 	} from '$lib/api/client.js';
 	import type {
 		Car,
+		MaintenanceAttachment,
 		MaintenanceExtracted,
 		MaintenanceRecord,
 		MaintenanceVeiculo
@@ -40,10 +43,9 @@
 		Loader2,
 		ArrowLeft,
 		FileText,
-		Video,
-		Image as ImageIcon,
 		Settings2,
-		Paperclip
+		Paperclip,
+		Play
 	} from 'lucide-svelte';
 
 	let cars = $state<Car[]>([]);
@@ -83,6 +85,8 @@
 	let deleteRecordOpen = $state(false);
 	let deleteCarOpen = $state(false);
 	let deleteCarTarget = $state<Car | null>(null);
+	let deleteAttOpen = $state(false);
+	let deleteAttTarget = $state<MaintenanceAttachment | null>(null);
 
 	const selectedCar = $derived(cars.find((c) => c.id === selectedCarId) ?? null);
 
@@ -298,6 +302,20 @@
 		} finally {
 			attaching = false;
 			if (attachInputEl) attachInputEl.value = '';
+		}
+	}
+
+	async function confirmDeleteAttachment() {
+		if (!selectedRecord || !deleteAttTarget) return;
+		try {
+			await deleteMaintenanceAttachment(selectedRecord.id, deleteAttTarget.id);
+			selectedRecord = await getMaintenance(selectedRecord.id);
+			toast.success('Anexo removido');
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao remover');
+		} finally {
+			deleteAttOpen = false;
+			deleteAttTarget = null;
 		}
 	}
 
@@ -544,34 +562,96 @@
 			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
 				<button
 					type="button"
-					class="flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-left hover:bg-accent/40"
+					class="group relative flex aspect-square flex-col overflow-hidden rounded-lg border border-border bg-card text-left hover:border-accent-foreground/30"
 					onclick={() => openSourcePreview(selectedRecord!)}
 				>
-					{#if isImageMime(selectedRecord.source.mime_type)}
-						<ImageIcon class="h-10 w-10 text-muted-foreground" />
-					{:else if isVideoMime(selectedRecord.source.mime_type)}
-						<Video class="h-10 w-10 text-muted-foreground" />
-					{:else}
-						<FileText class="h-10 w-10 text-muted-foreground" />
-					{/if}
-					<span class="w-full truncate text-center text-xs">{selectedRecord.source.filename}</span>
-					<Badge variant="secondary" class="text-[10px]">Fonte</Badge>
+					<div class="relative min-h-0 flex-1 bg-muted/40">
+						{#if isImageMime(selectedRecord.source.mime_type)}
+							<img
+								src={apiFileUrl(`/cars/maintenance/${selectedRecord.id}/source`)}
+								alt={selectedRecord.source.filename}
+								class="h-full w-full object-cover"
+								loading="lazy"
+							/>
+						{:else if isVideoMime(selectedRecord.source.mime_type)}
+							<video
+								src={apiFileUrl(`/cars/maintenance/${selectedRecord.id}/source`)}
+								class="h-full w-full object-cover"
+								preload="metadata"
+								muted
+								playsinline
+							></video>
+							<span
+								class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/25"
+							>
+								<Play class="h-8 w-8 text-white drop-shadow" />
+							</span>
+						{:else}
+							<div class="flex h-full items-center justify-center">
+								<FileText class="h-10 w-10 text-muted-foreground" />
+							</div>
+						{/if}
+					</div>
+					<div class="flex items-center gap-1 border-t border-border px-2 py-1.5">
+						<span class="min-w-0 flex-1 truncate text-xs">{selectedRecord.source.filename}</span>
+						<Badge variant="secondary" class="shrink-0 text-[10px]">Fonte</Badge>
+					</div>
 				</button>
 				{#each selectedRecord.attachments ?? [] as att}
-					<button
-						type="button"
-						class="flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-left hover:bg-accent/40"
-						onclick={() => openAttachmentPreview(selectedRecord!.id, att.id, att.filename)}
+					<div
+						class="group relative flex aspect-square flex-col overflow-hidden rounded-lg border border-border bg-card"
 					>
-						{#if isImageMime(att.mime_type)}
-							<ImageIcon class="h-10 w-10 text-muted-foreground" />
-						{:else if isVideoMime(att.mime_type)}
-							<Video class="h-10 w-10 text-muted-foreground" />
-						{:else}
-							<FileText class="h-10 w-10 text-muted-foreground" />
-						{/if}
-						<span class="w-full truncate text-center text-xs">{att.filename}</span>
-					</button>
+						<button
+							type="button"
+							class="relative min-h-0 flex-1 bg-muted/40 text-left"
+							onclick={() => openAttachmentPreview(selectedRecord!.id, att.id, att.filename)}
+						>
+							{#if isImageMime(att.mime_type)}
+								<img
+									src={apiFileUrl(
+										`/cars/maintenance/${selectedRecord.id}/attachments/${att.id}`
+									)}
+									alt={att.filename}
+									class="h-full w-full object-cover"
+									loading="lazy"
+								/>
+							{:else if isVideoMime(att.mime_type)}
+								<video
+									src={apiFileUrl(
+										`/cars/maintenance/${selectedRecord.id}/attachments/${att.id}`
+									)}
+									class="h-full w-full object-cover"
+									preload="metadata"
+									muted
+									playsinline
+								></video>
+								<span
+									class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/25"
+								>
+									<Play class="h-8 w-8 text-white drop-shadow" />
+								</span>
+							{:else}
+								<div class="flex h-full items-center justify-center">
+									<FileText class="h-10 w-10 text-muted-foreground" />
+								</div>
+							{/if}
+						</button>
+						<button
+							type="button"
+							class="absolute right-1.5 top-1.5 rounded-md bg-background/90 p-1 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-destructive hover:text-destructive-foreground group-hover:opacity-100 focus:opacity-100"
+							aria-label={`Remover ${att.filename}`}
+							onclick={(e) => {
+								e.stopPropagation();
+								deleteAttTarget = att;
+								deleteAttOpen = true;
+							}}
+						>
+							<Trash2 class="h-3.5 w-3.5" />
+						</button>
+						<div class="border-t border-border px-2 py-1.5">
+							<span class="block truncate text-xs">{att.filename}</span>
+						</div>
+					</div>
 				{/each}
 			</div>
 		</Tabs.Content>
@@ -949,6 +1029,14 @@
 	description="Os orçamentos deste carro não serão apagados automaticamente."
 	confirmLabel="Remover"
 	onconfirm={confirmDeleteCar}
+/>
+
+<ConfirmDialog
+	bind:open={deleteAttOpen}
+	title="Remover anexo?"
+	description="Este arquivo será apagado. O orçamento (fonte) permanece."
+	confirmLabel="Remover"
+	onconfirm={confirmDeleteAttachment}
 />
 
 <FilePreviewDialog

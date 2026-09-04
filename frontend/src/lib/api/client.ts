@@ -819,3 +819,19 @@ export async function addMaintenanceAttachment(
 		form
 	);
 }
+
+export async function deleteMaintenanceAttachment(
+	recordId: string,
+	attId: string
+): Promise<void> {
+	await apiJson(
+		`/cars/maintenance/${encodeURIComponent(recordId)}/attachments/${encodeURIComponent(attId)}`,
+		{ method: 'DELETE' }
+	);
+}
+
+/** Absolute-or-same-origin URL for embedding a download route in <img>/<video>. */
+export function apiFileUrl(path: string): string {
+	const p = path.startsWith('/') ? path : `/${path}`;
+	return `${getApiBaseUrl()}${p}`;
+}

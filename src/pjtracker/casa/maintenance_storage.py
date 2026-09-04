@@ -222,6 +222,31 @@ def add_attachment(
     return None
 
 
+def delete_attachment(record_id: str, att_id: str) -> bool:
+    """Remove one attachment from a record and delete its file. Returns False if not found."""
+    records = _load_raw()
+    for i, r in enumerate(records):
+        if r["id"] != record_id:
+            continue
+        attachments = list(r.get("attachments") or [])
+        kept: list[AttachmentFile] = []
+        removed: AttachmentFile | None = None
+        for att in attachments:
+            if att["id"] == att_id:
+                removed = att
+            else:
+                kept.append(att)
+        if removed is None:
+            return False
+        records[i] = {**r, "attachments": kept}
+        _save_raw(records)
+        path = resolve_file_path(removed["path"])
+        if path.is_file() and is_under_maintenance_files(path):
+            path.unlink(missing_ok=True)
+        return True
+    return False
+
+
 def delete_record(record_id: str) -> bool:
     records = _load_raw()
     new_records = [r for r in records if r["id"] != record_id]

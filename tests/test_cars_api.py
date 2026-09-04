@@ -198,6 +198,17 @@ def test_attachment_and_delete_record(client: TestClient):
         assert dl.status_code == 200
         assert dl.content == b"imagedata"
 
+        removed = client.delete(
+            f"/api/v1/cars/maintenance/{record_id}/attachments/{att_id}"
+        )
+        assert removed.status_code == 204
+        assert (
+            client.get(f"/api/v1/cars/maintenance/{record_id}/attachments/{att_id}").status_code
+            == 404
+        )
+        remaining = client.get(f"/api/v1/cars/maintenance/{record_id}").json()
+        assert remaining["attachments"] == []
+
         deleted = client.delete(f"/api/v1/cars/maintenance/{record_id}")
         assert deleted.status_code == 204
         assert not files_path.exists()
