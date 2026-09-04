@@ -9,14 +9,19 @@ const apiProxy = {
 	}
 };
 
+// mDNS / LAN hostnames (e.g. http://raspi.local:4173). IPs are already allowed.
+const lanHosts = ['.local'];
+
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	server: {
 		host: true,
+		allowedHosts: lanHosts,
 		proxy: apiProxy
 	},
 	preview: {
 		host: true,
+		allowedHosts: lanHosts,
 		proxy: apiProxy
 	}
 });
