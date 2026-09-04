@@ -55,7 +55,10 @@ built-in proxy.
 ### Pages and Routes
 
 ```
-/                 Dashboard
+/                 Fluxo (casa + saques + empresa)
+/casa             Household bills split
+/carros           Cars + maintenance quotes
+/documentos       Document hub
 /nfs              Notas Fiscais
 /boletos          Boletos
 /darfs            DARFs
@@ -215,6 +218,20 @@ A small, typed wrapper around `fetch`:
 - `formatUsd(1000)` → `"US$ 1,000.00"`
 - `formatDateBr("2025-03-15")` → localized date string
 - `formatNumber`, `formatPercent` for general numeric display
+
+---
+
+### Carros (`/carros`)
+
+Own navbar tab (not part of Fluxo or Casa bills). Manage named cars and workshop quotes:
+
+1. Select a car (or manage cars: name, placa, modelo).
+2. Upload a quote (image/PDF) → Maritaca extract → edit header/vehicle/total → save.
+3. On save, the API stores the file under `data/casa/maintenance/` and runs an analysis
+   vs the previous visit for that car.
+4. Detail view: documento, análise, anexos (images/PDFs/videos).
+
+Not tied to fiscal months or completeness.
 
 ---
 

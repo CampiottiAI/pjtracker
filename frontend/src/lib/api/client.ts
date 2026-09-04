@@ -31,7 +31,11 @@ import type {
 	CasaSummary,
 	CasaComputeSplitPayload,
 	FluxoResponse,
-	FluxoSeriesResponse
+	FluxoSeriesResponse,
+	Car,
+	MaintenanceRecord,
+	MaintenancePreview,
+	MaintenanceAttachment
 } from './types';
 
 /**
@@ -726,5 +730,92 @@ export async function getFluxoSeries(): Promise<FluxoSeriesResponse> {
 export async function getNfSeries(dateFrom: string, dateTo: string): Promise<NfSeriesResponse> {
 	return apiJson<NfSeriesResponse>(
 		`/analytics/nf-series?date_from=${dateFrom}&date_to=${dateTo}`
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Cars / maintenance
+// ---------------------------------------------------------------------------
+
+export async function listCars(): Promise<{ items: Car[] }> {
+	return apiJson<{ items: Car[] }>('/cars');
+}
+
+export async function createCar(payload: {
+	name: string;
+	id?: string;
+	placa?: string;
+	modelo?: string;
+}): Promise<Car> {
+	return apiJson<Car>('/cars', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+}
+
+export async function patchCar(
+	carId: string,
+	payload: { name?: string; placa?: string; modelo?: string }
+): Promise<Car> {
+	return apiJson<Car>(`/cars/${encodeURIComponent(carId)}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+}
+
+export async function deleteCar(carId: string): Promise<void> {
+	await apiJson(`/cars/${encodeURIComponent(carId)}`, { method: 'DELETE' });
+}
+
+export async function listCarMaintenance(
+	carId: string
+): Promise<{ items: MaintenanceRecord[] }> {
+	return apiJson<{ items: MaintenanceRecord[] }>(
+		`/cars/${encodeURIComponent(carId)}/maintenance`
+	);
+}
+
+export async function maintenanceParsePreview(
+	carId: string,
+	file: File
+): Promise<MaintenancePreview> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<MaintenancePreview>(
+		`/cars/${encodeURIComponent(carId)}/maintenance/parse-preview`,
+		form
+	);
+}
+
+export async function createMaintenance(
+	carId: string,
+	file: File,
+	extracted: MaintenancePreview['extracted']
+): Promise<MaintenanceRecord> {
+	const form = new FormData();
+	form.append('file', file);
+	form.append('extracted', JSON.stringify(extracted));
+	return apiForm<MaintenanceRecord>(`/cars/${encodeURIComponent(carId)}/maintenance`, form);
+}
+
+export async function getMaintenance(recordId: string): Promise<MaintenanceRecord> {
+	return apiJson<MaintenanceRecord>(`/cars/maintenance/${encodeURIComponent(recordId)}`);
+}
+
+export async function deleteMaintenance(recordId: string): Promise<void> {
+	await apiJson(`/cars/maintenance/${encodeURIComponent(recordId)}`, { method: 'DELETE' });
+}
+
+export async function addMaintenanceAttachment(
+	recordId: string,
+	file: File
+): Promise<MaintenanceAttachment> {
+	const form = new FormData();
+	form.append('file', file);
+	return apiForm<MaintenanceAttachment>(
+		`/cars/maintenance/${encodeURIComponent(recordId)}/attachments`,
+		form
 	);
 }

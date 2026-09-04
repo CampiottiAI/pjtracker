@@ -713,6 +713,35 @@ Errors:
 
 Boletos, DARFs, and IRPJ/CSLL are not included in the pack.
 
+## Cars / maintenance
+
+Household cars and workshop quotes. Data is JSON + files under `data/casa/` (not SQLite). UI route: `/carros` (own navbar tab; not on Fluxo).
+
+### Cars CRUD
+
+- `GET /cars` → `{ items: [...] }` with `id`, `name`, optional `placa`/`modelo`, and `label`
+- `POST /cars` JSON `{ name, id?, placa?, modelo? }` — `id` defaults to a slug of `name`
+- `PATCH /cars/{car_id}` JSON partial update
+- `DELETE /cars/{car_id}` — `409` if it is the last car; does not cascade-delete maintenance records
+
+### Quote flow
+
+1. `POST /cars/{car_id}/maintenance/parse-preview` multipart `file` (image/PDF) — no save; fills missing placa/modelo from the car
+2. User edits extracted fields in the UI
+3. `POST /cars/{car_id}/maintenance` multipart `file` + form `extracted` (JSON string of the edited object) — **does not re-parse**; then runs LLM analysis vs the previous visit for that car
+
+Create response is the saved record. If analysis fails, the record is still kept with `analysis: null` and a `warning` string.
+
+### Records and attachments
+
+- `GET /cars/{car_id}/maintenance` — newest first
+- `GET /cars/maintenance/{id}` / `DELETE /cars/maintenance/{id}`
+- `POST /cars/maintenance/{id}/attachments` multipart `file` (images, PDFs, videos)
+- `GET /cars/maintenance/{id}/source`
+- `GET /cars/maintenance/{id}/attachments/{att_id}`
+
+Prefer download routes over `source.path` / `attachments[].path`.
+
 ## Analytics
 
 ### NF series
@@ -763,6 +792,7 @@ If you are designing the frontend from scratch, this API maps cleanly to these s
 - extrato detail screen: optional attachment management with `/caixinha` and `/higlobe`
 - month dashboard: `GET /fiscal-months`, `GET /fiscal-months/{month}/completeness`
 - analytics page: `GET /analytics/nf-series`
+- cars page: `GET/POST /cars`, parse-preview + create under `/cars/{car_id}/maintenance`, downloads under `/cars/maintenance/{id}/...`
 
 ## Practical gotchas
 
@@ -772,6 +802,7 @@ If you are designing the frontend from scratch, this API maps cleanly to these s
 - Do not assume extrato saved responses contain parsed arrays as arrays; they are stored in JSON string fields.
 - Do not call barcode diff routes unless the saved row says the match status is `mismatch`.
 - Do not expect all create/update flows to return the same semantic shape as preview flows.
+- Cars maintenance create accepts **user-edited** `extracted` JSON and does **not** re-parse the file on save.
 
 ## Minimum frontend contract by domain
 
@@ -783,3 +814,4 @@ If you only need the shortest possible implementation checklist:
 - extratos: upload required `extrato`, optional `caixinha` and `higlobe`, preview before create
 - fiscal months: use list plus completeness endpoints for dashboard/status UI
 - analytics: send date range and render returned `points`
+- cars: manage cars, quote parse-preview → edit → create, then attachments + source download

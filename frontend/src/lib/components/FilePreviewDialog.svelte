@@ -31,6 +31,7 @@
 	let loadSeq = 0;
 
 	const isImage = $derived(mime.startsWith('image/'));
+	const isVideo = $derived(mime.startsWith('video/'));
 	const isPdf = $derived(
 		mime === 'application/pdf' ||
 			mime === 'application/x-pdf' ||
@@ -56,6 +57,12 @@
 		if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
 		if (lower.endsWith('.gif')) return 'image/gif';
 		if (lower.endsWith('.webp')) return 'image/webp';
+		if (lower.endsWith('.mp4') || lower.endsWith('.m4v')) return 'video/mp4';
+		if (lower.endsWith('.mov')) return 'video/quicktime';
+		if (lower.endsWith('.webm')) return 'video/webm';
+		if (lower.endsWith('.avi')) return 'video/x-msvideo';
+		if (lower.endsWith('.mkv')) return 'video/x-matroska';
+		if (lower.endsWith('.mpeg') || lower.endsWith('.mpg')) return 'video/mpeg';
 		return current || '';
 	}
 
@@ -133,6 +140,12 @@
 			{:else if objectUrl && isImage}
 				<div class="flex max-h-[75vh] items-center justify-center p-2">
 					<img src={objectUrl} alt={title} class="max-h-[75vh] max-w-full object-contain" />
+				</div>
+			{:else if objectUrl && isVideo}
+				<div class="flex max-h-[75vh] items-center justify-center p-2">
+					<video src={objectUrl} controls class="max-h-[75vh] max-w-full" title={title}>
+						<track kind="captions" />
+					</video>
 				</div>
 			{:else if objectUrl && isPdf}
 				<iframe title={title} src={objectUrl} class="h-[75vh] w-full border-0"></iframe>

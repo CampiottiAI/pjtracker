@@ -25,6 +25,6 @@ Svelte **5** (runes), SvelteKit 2, Vite 7, Tailwind **4** (`@theme` in `app.css`
 
 ## Routes
 
-`/` Fluxo (casa + saques + empresa), `/casa`, `/documentos`, `/nfs`, `/boletos`, `/darfs`, `/irpj-csll`, `/extratos`, `/analytics`. Navbar in `Navbar.svelte`.
+`/` Fluxo (casa + saques + empresa), `/casa`, `/carros`, `/documentos`, `/nfs`, `/boletos`, `/darfs`, `/irpj-csll`, `/extratos`, `/analytics`. Navbar in `Navbar.svelte`.
 
-Deep links filter by fiscal month. Keep that as the organizing axis.
+Deep links filter by fiscal month for fiscal domains. `/carros` is household-only and not on Fluxo.

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -76,6 +77,77 @@ class DarfPdfExtraido(BaseModel):
     codigo_barras: str | None = Field(
         default=None,
         description="Codigo de barras do DARF exatamente como estiver visivel.",
+    )
+
+
+class ItemOrcamento(BaseModel):
+    codigo: str | None = Field(default=None, description="Codigo do item no orcamento.")
+    descricao: str = Field(description="Descricao do produto ou servico.")
+    quantidade: float | None = Field(default=None, description="Quantidade.")
+    valor_unitario: float | None = Field(
+        default=None, description="Valor unitario em reais."
+    )
+    valor_total: float | None = Field(
+        default=None, description="Valor total da linha em reais."
+    )
+
+
+class VeiculoExtraido(BaseModel):
+    placa: str | None = Field(default=None, description="Placa do veiculo.")
+    modelo: str | None = Field(default=None, description="Modelo do veiculo.")
+    cor: str | None = Field(default=None, description="Cor do veiculo.")
+    ano: int | None = Field(default=None, description="Ano do veiculo.")
+    km: int | None = Field(default=None, description="Quilometragem atual.")
+    chassi: str | None = Field(default=None, description="Numero do chassi.")
+
+
+class OrcamentoExtraido(BaseModel):
+    tipo_documento: str | None = Field(
+        default=None,
+        description="Tipo do documento, por exemplo orcamento ou nota fiscal.",
+    )
+    oficina: str | None = Field(default=None, description="Nome da oficina ou empresa.")
+    data: str | None = Field(
+        default=None,
+        description="Data do documento no formato DD/MM/YYYY.",
+    )
+    cliente: str | None = Field(default=None, description="Nome do cliente.")
+    veiculo: VeiculoExtraido | None = Field(
+        default=None, description="Dados do veiculo."
+    )
+    itens: list[ItemOrcamento] = Field(
+        default_factory=list,
+        description="Lista de produtos e servicos.",
+    )
+    total: float | None = Field(default=None, description="Valor total em reais.")
+    consultor: str | None = Field(
+        default=None, description="Nome do consultor, se houver."
+    )
+    observacoes: str | None = Field(
+        default=None,
+        description="Observacoes ou condicoes, como validade do orcamento.",
+    )
+
+
+class AnaliseManutencao(BaseModel):
+    resumo: str = Field(
+        description=(
+            "Resumo do que esta sendo proposto nesta visita, agrupando itens de "
+            "manutencao de rotina versus extras."
+        ),
+    )
+    mudancas: str | None = Field(
+        default=None,
+        description=(
+            "Comparacao com a visita anterior do mesmo veiculo: itens novos, "
+            "removidos, variacao de preco e quilometragem. Null se nao houver visita anterior."
+        ),
+    )
+    motivo_geral: str = Field(
+        description=(
+            "Provavel motivo geral dos servicos propostos, considerando km, desgaste, "
+            "revisao programada ou possivel upsell."
+        ),
     )
 
 
@@ -317,9 +389,9 @@ def _encode_file_data(file_bytes: bytes) -> str:
 
 def _extract_structured_data(
     *,
-    file_bytes: bytes,
-    filename: str,
-    mime_type: str,
+    file_bytes: bytes | None = None,
+    filename: str = "documento.pdf",
+    mime_type: str = "application/pdf",
     system_prompt: str,
     user_prompt: str,
     schema: type[BaseModel],
@@ -328,6 +400,21 @@ def _extract_structured_data(
         client = _get_client()
     except Exception as exc:
         return LLMExtractionResult(data=None, error=str(exc))
+
+    user_content: list[dict[str, Any]] = []
+    if file_bytes is not None:
+        user_content.append(
+            {
+                "type": "file",
+                "file": {
+                    "filename": filename,
+                    "file_data": (
+                        f"data:{mime_type};base64,{_encode_file_data(file_bytes)}"
+                    ),
+                },
+            }
+        )
+    user_content.append({"type": "text", "text": user_prompt})
 
     try:
         response = client.responses.parse(
@@ -339,21 +426,7 @@ def _extract_structured_data(
                 },
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "type": "file",
-                            "file": {
-                                "filename": filename,
-                                "file_data": (
-                                    f"data:{mime_type};base64,{_encode_file_data(file_bytes)}"
-                                ),
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": user_prompt,
-                        },
-                    ],
+                    "content": user_content,
                 },
             ],
             text_format=schema,
@@ -535,4 +608,62 @@ def extract_nf_pdf(
             "a data de emissao, o codigo de verificacao e o pagamento via."
         ),
         schema=NfPdfExtraida,
+    )
+
+
+def extract_quote(
+    file_bytes: bytes,
+    *,
+    filename: str = "orcamento.pdf",
+    mime_type: str = "application/pdf",
+) -> LLMExtractionResult:
+    """Extract structured data from a maintenance quote image or PDF."""
+    return _extract_structured_data(
+        file_bytes=file_bytes,
+        filename=filename,
+        mime_type=mime_type,
+        system_prompt=(
+            "Voce e um sistema de extracao de dados de orcamentos e notas de "
+            "manutencao veicular no Brasil. Seja preciso e objetivo."
+        ),
+        user_prompt=(
+            "Extraia os dados do documento no formato JSON. "
+            "Inclua oficina, data, cliente, dados do veiculo (placa, modelo, cor, "
+            "ano, km, chassi), todos os itens com codigo, descricao, quantidade e "
+            "valores, total geral, consultor e observacoes."
+        ),
+        schema=OrcamentoExtraido,
+    )
+
+
+def analyze_maintenance(
+    current: dict[str, Any],
+    previous: dict[str, Any] | None = None,
+) -> LLMExtractionResult:
+    """Analyze a maintenance quote and compare with the previous visit if available."""
+    if previous:
+        user_prompt = (
+            "Analise o orcamento atual e compare com a visita anterior do mesmo veiculo.\n\n"
+            f"ORCAMENTO ATUAL:\n{json.dumps(current, ensure_ascii=False, indent=2)}\n\n"
+            f"VISITA ANTERIOR:\n{json.dumps(previous, ensure_ascii=False, indent=2)}\n\n"
+            "Explique o que mudou (itens novos, removidos, variacao de preco e km) "
+            "e o provavel motivo geral dos servicos propostos."
+        )
+    else:
+        user_prompt = (
+            "Analise este orcamento de manutencao veicular. "
+            "Nao ha visita anterior registrada para este veiculo.\n\n"
+            f"ORCAMENTO:\n{json.dumps(current, ensure_ascii=False, indent=2)}\n\n"
+            "Explique o que esta sendo proposto e o provavel motivo geral. "
+            "Deixe mudancas como null."
+        )
+
+    return _extract_structured_data(
+        file_bytes=None,
+        system_prompt=(
+            "Voce e um assistente especializado em manutencao veicular. "
+            "Analise orcamentos de forma clara e pratica, em portugues brasileiro."
+        ),
+        user_prompt=user_prompt,
+        schema=AnaliseManutencao,
     )

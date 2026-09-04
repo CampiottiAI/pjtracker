@@ -10,7 +10,8 @@
 		Menu,
 		X,
 		FolderOpen,
-		FileText
+		FileText,
+		Car
 	} from 'lucide-svelte';
 
 	type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
@@ -18,6 +19,7 @@
 	const primaryItems: NavItem[] = [
 		{ href: '/', label: 'Fluxo', icon: Home },
 		{ href: '/casa', label: 'Casa', icon: Home },
+		{ href: '/carros', label: 'Carros', icon: Car },
 		{ href: '/documentos', label: 'Documentos', icon: FolderOpen },
 		{ href: '/analytics', label: 'Analytics', icon: BarChart3 }
 	];

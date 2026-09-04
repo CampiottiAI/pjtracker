@@ -23,14 +23,14 @@ src/pjtracker/app.py           # SQLite schema, file paths, CRUD helpers (source
 src/pjtracker/api/             # FastAPI: routers + thin services
 src/pjtracker/parsers/         # PDF/image extraction per document type
 src/pjtracker/llm_extraction.py
-src/pjtracker/casa/          # Household split logic + JSON storage (data/casa/)
+src/pjtracker/casa/          # Household split + cars/maintenance JSON (data/casa/)
 src/pjtracker/streamlit/       # Legacy Streamlit UI — do not extend; FastAPI + SvelteKit is the product
 frontend/                      # SvelteKit UI
 tests/                         # pytest (API smoke, parsers, checks)
 docs/api/README.md
 ```
 
-Package is src-layout (`pjtracker` under `src/`). Persistence paths are repo-root: `pjtracker.db`, `pdfs/`, `images/` (`PJTRACKER_DB_PATH` relocates all three).
+Package is src-layout (`pjtracker` under `src/`). Persistence paths are repo-root: `pjtracker.db`, `pdfs/`, `images/` (`PJTRACKER_DB_PATH` relocates all three). House data lives under `data/casa/` (bills JSON, `cars.json`, `maintenance/`).
 
 ## Stack
 
@@ -56,6 +56,7 @@ Upload flow is always **parse-preview (no save) → user confirms → create**. 
 | Extratos | `/extratos` | Main PDF required; optional caixinha + Higlobe |
 | Withdraws | `/withdraws` | BRL withdrawals per fiscal month |
 | Casa | `/casa` | Household bills, split, month snapshots |
+| Cars | `/cars` | Named cars + maintenance quotes (JSON under `data/casa/`); UI `/carros` |
 | Fluxo | `/fluxo` | Aggregated coverage (saques vs casa + empresa) |
 | Fiscal months | `/fiscal-months` | Completeness: 2 NFs, 1 boleto+receipt, 1 DARF+receipt, 1 extrato+caixinha; Higlobe optional |
 | Analytics | `/analytics` | NF time series |

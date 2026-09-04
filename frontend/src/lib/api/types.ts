@@ -408,3 +408,81 @@ export type FluxoSeriesPoint = {
 export type FluxoSeriesResponse = {
 	points: FluxoSeriesPoint[];
 };
+
+// ---------------------------------------------------------------------------
+// Cars / maintenance
+// ---------------------------------------------------------------------------
+
+export type Car = {
+	id: string;
+	name: string;
+	placa?: string | null;
+	modelo?: string | null;
+	label?: string;
+};
+
+export type MaintenanceVeiculo = {
+	placa?: string | null;
+	modelo?: string | null;
+	cor?: string | null;
+	ano?: number | null;
+	km?: number | null;
+	chassi?: string | null;
+};
+
+export type MaintenanceItem = {
+	codigo?: string | null;
+	descricao: string;
+	quantidade?: number | null;
+	valor_unitario?: number | null;
+	valor_total?: number | null;
+};
+
+export type MaintenanceExtracted = {
+	tipo_documento?: string | null;
+	oficina?: string | null;
+	data?: string | null;
+	cliente?: string | null;
+	veiculo?: MaintenanceVeiculo | null;
+	itens?: MaintenanceItem[];
+	total?: number | null;
+	consultor?: string | null;
+	observacoes?: string | null;
+};
+
+export type MaintenanceAnalysis = {
+	resumo: string;
+	mudancas?: string | null;
+	motivo_geral: string;
+};
+
+export type MaintenanceSource = {
+	path: string;
+	filename: string;
+	mime_type: string;
+};
+
+export type MaintenanceAttachment = {
+	id: string;
+	path: string;
+	filename: string;
+	mime_type: string;
+	uploaded_at: string;
+};
+
+export type MaintenanceRecord = {
+	id: string;
+	created_at: string;
+	car_id?: string | null;
+	source: MaintenanceSource;
+	extracted: MaintenanceExtracted;
+	analysis?: MaintenanceAnalysis | null;
+	attachments: MaintenanceAttachment[];
+	warning?: string;
+};
+
+export type MaintenancePreview = {
+	extracted: MaintenanceExtracted;
+	filename: string;
+	mime_type: string;
+};
