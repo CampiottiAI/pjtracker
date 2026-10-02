@@ -79,6 +79,20 @@
 		isDirty = true;
 	}
 
+	function resolvedCcReservedPersonId(): string | null {
+		if (ccReservedAmount > 0) {
+			return ccReservedPersonId ?? personIds[0] ?? null;
+		}
+		return ccReservedPersonId;
+	}
+
+	function syncCcReservedPerson() {
+		const resolved = resolvedCcReservedPersonId();
+		if (resolved != null && ccReservedPersonId !== resolved) {
+			ccReservedPersonId = resolved;
+		}
+	}
+
 	function applyWorkspace(ws: CasaWorkspaceResponse) {
 		people = ws.people;
 		fixedBills = [...ws.fixed_bills];
@@ -95,6 +109,9 @@
 		personIds = [...ws.person_ids];
 		ccReservedAmount = ws.cc_reserved_amount;
 		ccReservedPersonId = ws.cc_reserved_person_id;
+		if (ccReservedAmount > 0 && ccReservedPersonId == null && personIds[0]) {
+			ccReservedPersonId = personIds[0];
+		}
 		isSaved = ws.saved;
 		isDirty = false;
 		split = ws.split;
@@ -142,6 +159,7 @@
 		if (!selectedMonth || personIds.length === 0) return;
 		computing = true;
 		try {
+			syncCcReservedPerson();
 			split = await computeCasaSplit({
 				fiscal_mes: selectedMonth,
 				person_ids: personIds,
@@ -151,7 +169,7 @@
 				fixed_bills: fixedBills,
 				other_expenses: otherExpenses,
 				cc_reserved_amount: ccReservedAmount,
-				cc_reserved_person_id: ccReservedPersonId
+				cc_reserved_person_id: resolvedCcReservedPersonId()
 			});
 		} catch (e) {
 			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Erro no acerto');
@@ -173,6 +191,12 @@
 	$effect(() => {
 		if (!selectedMonth) return;
 		void loadWorkspace();
+	});
+
+	$effect(() => {
+		void ccReservedAmount;
+		void personIds;
+		syncCcReservedPerson();
 	});
 
 	$effect(() => {
@@ -328,6 +352,7 @@
 		if (!selectedMonth) return;
 		saving = true;
 		try {
+			syncCcReservedPerson();
 			await persistFixedBills();
 			await saveCasaMonth(selectedMonth, {
 				fiscal_mes: selectedMonth,
@@ -338,7 +363,7 @@
 				fixed_bills: fixedBills,
 				other_expenses: otherExpenses,
 				cc_reserved_amount: ccReservedAmount,
-				cc_reserved_person_id: ccReservedPersonId
+				cc_reserved_person_id: resolvedCcReservedPersonId()
 			});
 			isSaved = true;
 			isDirty = false;
@@ -681,6 +706,7 @@
 									oninput={(e) => {
 										ccReservedAmount =
 											Number((e.currentTarget as HTMLInputElement).value) || 0;
+										syncCcReservedPerson();
 										markDirty();
 									}}
 								/>
@@ -692,7 +718,7 @@
 								<select
 									id="cc-owner"
 									class="flex h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-									value={ccReservedPersonId ?? personIds[0]}
+									value={resolvedCcReservedPersonId() ?? ''}
 									onchange={(e) => {
 										ccReservedPersonId = (e.currentTarget as HTMLSelectElement).value;
 										markDirty();
