@@ -266,6 +266,8 @@ Form fields:
 - `file`: required PDF
 - `fiscal_mes`: required `YYYY-MM`
 - `images`: optional repeated file field
+- `spread`: optional calculation override, a finite percentage from 0 to 100
+  (e.g. `0.3` means 0.3%). If omitted, uses the spread extracted from the PDF.
 
 Important frontend detail:
 
@@ -312,6 +314,16 @@ Filters:
 Behavior note:
 
 - if `fiscal_mes` is present, the backend uses that filter path instead of the date range path
+
+### Calculation spread
+
+`PATCH /nfs/{nf_id}/spread` accepts JSON `{ "spread": 0.3 }` and returns the
+updated NF row. The spread must be a finite percentage from 0 to 100. This
+recalculates both BRL totals from the stored USD and rate, so analytics, Fluxo,
+and withdrawal calculations use the correction. The PDF and other metadata are
+preserved. A missing NF returns 404; an invalid spread returns 422.
+
+Replacing the PDF extracts its fields again, including the spread.
 
 ### Images
 

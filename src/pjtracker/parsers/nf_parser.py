@@ -247,10 +247,9 @@ def parse_description_block(block_text: str) -> ParsedFields:
 
 def compute_brl(usd: float, rate: float, spread: float) -> BRLResult:
     """Compute BRL without and with spread.
-    Spread is applied to the rate: e.g. spread 3 means 0.3% deducted from the base rate
-    (R$ 5.2011 - 0.30% = R$ 5.1854). So spread value is in tenths of percent."""
+    Spread is a percentage deducted from the base rate: 0.3 means 0.3%."""
     brl_no_spread = round(usd * rate, 2)  # highest: full rate (e.g. 5.2011)
-    effective_rate = rate * (1 - spread / 100)  # spread 3 → 0.3% off the rate
+    effective_rate = rate * (1 - spread / 100)
     brl_with_spread = round(
         usd * effective_rate, 2
     )  # smaller: rate after spread deduction

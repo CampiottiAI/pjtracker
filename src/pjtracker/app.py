@@ -533,6 +533,18 @@ def update_nf_fiscal_mes(nf_id: int, fiscal_mes: str | None) -> None:
         )
 
 
+def update_nf_spread(
+    nf_id: int, spread: float, brl_no_spread: float, brl_with_spread: float
+) -> None:
+    """Update the calculation spread and totals without changing the source PDF."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """UPDATE nf_entries
+            SET spread = ?, brl_no_spread = ?, brl_with_spread = ? WHERE id = ?""",
+            (spread, brl_no_spread, brl_with_spread, nf_id),
+        )
+
+
 def update_nf_pdf(
     nf_id: int,
     pdf_bytes: bytes,

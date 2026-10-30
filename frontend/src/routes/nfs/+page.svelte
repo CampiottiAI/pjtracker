@@ -9,6 +9,7 @@
 		listFiscalMonths,
 		deleteNf,
 		patchNfFiscalMes,
+		patchNfSpread,
 		nfParsePreview,
 		createNf,
 		getNf,
@@ -71,11 +72,24 @@
 	let uploadPreview = $state<NfPreview | null>(null);
 	let uploadFiscalMes = $state('');
 	let uploadSaving = $state(false);
+	let uploadSpread = $state('');
+	const uploadSpreadValid = $derived(validSpread(uploadSpread));
+	const uploadBrl = $derived(
+		uploadPreview?.usd != null && uploadPreview?.rate != null && uploadSpreadValid
+			? Math.round(uploadPreview.usd * uploadPreview.rate * (1 - Number(uploadSpread) / 100) * 100) / 100
+			: null
+	);
 
 	// Detail sheet
 	let detailOpen = $state(false);
 	let detailNf = $state<NfEntry | null>(null);
 	let detailImages = $state<NfImage[]>([]);
+	let detailSpread = $state('');
+	let savingSpread = $state(false);
+
+	function validSpread(value: string): boolean {
+		return String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 100;
+	}
 
 	// File preview
 	let previewOpen = $state(false);
@@ -177,6 +191,7 @@
 		uploadPreviewing = false;
 		uploadPreview = null;
 		uploadFiscalMes = '';
+		uploadSpread = '';
 		uploadSaving = false;
 	}
 
@@ -191,8 +206,10 @@
 		uploadFile = files[0];
 		uploadPreview = null;
 		uploadPreviewing = true;
+		uploadSpread = '';
 		try {
 			uploadPreview = await nfParsePreview(files[0]);
+			uploadSpread = uploadPreview.spread == null ? '' : String(uploadPreview.spread);
 			if (uploadPreview.brl == null) {
 				toast.warning('Could not extract USD/rate from this PDF');
 			}
@@ -207,13 +224,14 @@
 	}
 
 	async function handleSave() {
+		if (!uploadPreview?.brl || !validSpread(uploadSpread)) return;
 		if (!uploadFile || !uploadFiscalMes) {
 			toast.error('PDF and fiscal month are required');
 			return;
 		}
 		uploadSaving = true;
 		try {
-			await createNf(uploadFile, uploadFiscalMes, uploadImages.length > 0 ? uploadImages : undefined);
+			await createNf(uploadFile, uploadFiscalMes, uploadImages.length > 0 ? uploadImages : undefined, Number(uploadSpread));
 			toast.success('NF saved successfully');
 			uploadOpen = false;
 			resetUpload();
@@ -231,6 +249,7 @@
 
 	async function openDetail(nf: NfEntry) {
 		detailNf = nf;
+		detailSpread = String(nf.spread);
 		detailImages = [];
 		replacingPdf = false;
 		addingImages = false;
@@ -239,6 +258,25 @@
 			detailImages = await getNfImages(nf.id);
 		} catch {
 			// images may be empty
+		}
+	}
+
+	async function saveSpread() {
+		if (!detailNf || !validSpread(detailSpread)) return;
+		const nfId = detailNf.id;
+		savingSpread = true;
+		try {
+			const updated = await patchNfSpread(nfId, Number(detailSpread));
+			if (detailNf?.id === nfId) {
+				detailNf = updated;
+				detailSpread = String(updated.spread);
+			}
+			toast.success('Spread updated and BRL totals recalculated');
+			await loadNfs();
+		} catch (e) {
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to update spread');
+		} finally {
+			savingSpread = false;
 		}
 	}
 
@@ -298,6 +336,7 @@
 		replacingPdf = true;
 		try {
 			detailNf = await updateNfPdf(detailNf.id, files[0]);
+			detailSpread = String(detailNf.spread);
 			toast.success('NF PDF replaced');
 			await loadNfs();
 		} catch (e) {
@@ -544,9 +583,9 @@
 							<dd class="tabular-nums">{formatUsd(uploadPreview.usd)}</dd>
 							<dt class="text-muted-foreground">Rate</dt>
 							<dd class="tabular-nums">{formatNumber(uploadPreview.rate, 4)}</dd>
-							<dt class="text-muted-foreground">Spread</dt>
+							<dt class="text-muted-foreground"><label for="upload-spread">Spread (%)</label></dt>
 							<dd class="tabular-nums">
-								{formatPercent(uploadPreview.spread)}
+								<Input id="upload-spread" type="number" min="0" max="100" step="any" bind:value={uploadSpread} disabled={uploadSaving} aria-describedby="upload-spread-help" />
 								{#if uploadPreview.spread_was_default}
 									<Badge variant="outline" class="ml-1 text-[10px] px-1">default</Badge>
 								{/if}
@@ -555,7 +594,7 @@
 								<dt class="text-muted-foreground">BRL (no spread)</dt>
 								<dd class="tabular-nums">{formatBrl(uploadPreview.brl.brl_no_spread)}</dd>
 								<dt class="text-muted-foreground">BRL (with spread)</dt>
-								<dd class="tabular-nums font-medium">{formatBrl(uploadPreview.brl.brl_with_spread)}</dd>
+								<dd class="tabular-nums font-medium">{formatBrl(uploadBrl)}</dd>
 							{/if}
 							<dt class="text-muted-foreground">Date</dt>
 							<dd>{formatDateBr(uploadPreview.nf_date)}</dd>
@@ -568,6 +607,7 @@
 								<Badge variant="secondary" class="text-xs">{uploadPreview.source}</Badge>
 							</dd>
 						</dl>
+						<p id="upload-spread-help" class="mt-3 text-xs text-muted-foreground">Spread used for calculations (0–100%). For 0.3%, enter 0.3. The original PDF is preserved.</p>
 					</Card.Content>
 				</Card.Root>
 			{/if}
@@ -596,7 +636,7 @@
 			<Sheet.SheetFooter>
 				<Button
 					onclick={handleSave}
-					disabled={uploadSaving || !uploadFiscalMes}
+					disabled={uploadSaving || !uploadFiscalMes || !uploadPreview.brl || !uploadSpreadValid}
 					class="w-full sm:w-auto"
 				>
 					{#if uploadSaving}
@@ -635,7 +675,7 @@
 									class="h-7 w-7"
 									title="Replace NF PDF"
 									onclick={openReplacePdfPicker}
-									disabled={replacingPdf}
+									disabled={replacingPdf || savingSpread}
 								>
 									{#if replacingPdf}
 										<Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -693,6 +733,16 @@
 							<dt class="text-muted-foreground">Created</dt>
 							<dd class="text-xs">{detailNf.created_at}</dd>
 						</dl>
+						<form class="space-y-2 border-t border-border pt-4" onsubmit={(event) => { event.preventDefault(); saveSpread(); }}>
+							<label for="detail-spread" class="text-sm font-medium">Calculation spread (%)</label>
+							<div class="flex items-center gap-2">
+								<Input id="detail-spread" type="number" min="0" max="100" step="any" required bind:value={detailSpread} disabled={savingSpread || replacingPdf} aria-describedby="detail-spread-help" />
+								<Button type="submit" disabled={savingSpread || replacingPdf || !validSpread(detailSpread) || Number(detailSpread) === detailNf.spread}>
+									{savingSpread ? 'Saving...' : 'Save spread'}
+									</Button>
+								</div>
+							<p id="detail-spread-help" class="text-xs text-muted-foreground">Recalculates BRL totals used by the system. The original PDF is preserved. For 0.3%, enter 0.3.</p>
+						</form>
 					</Card.Content>
 					<input
 						bind:this={replacePdfInputEl}

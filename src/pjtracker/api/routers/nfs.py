@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 
 from pjtracker.api.errors import conflict
 from pjtracker.api.schemas.common import FISCAL_MES_REGEX, PatchFiscalMes
+from pjtracker.api.schemas.nfs import PatchNfSpread
 from pjtracker.api.services.paths import project_root, resolve_stored_path
 from pjtracker.app import (
     delete_nf,
@@ -23,6 +24,7 @@ from pjtracker.app import (
     save_pdf,
     update_nf_fiscal_mes,
     update_nf_pdf,
+    update_nf_spread,
 )
 from pjtracker.parsers.nf_parser import compute_brl, parse_nf_pdf
 
@@ -67,6 +69,7 @@ async def create_nf(
     file: UploadFile = File(..., description="NF PDF"),
     fiscal_mes: str = Form(..., description="YYYY-MM"),
     images: list[UploadFile] | None = File(None),
+    spread: float | None = Form(None, ge=0, le=100, allow_inf_nan=False),
 ) -> dict:
     fm = fiscal_mes.strip()
     if not FISCAL_MES_REGEX.match(fm):
@@ -82,7 +85,8 @@ async def create_nf(
             status_code=422,
             detail="Could not extract USD and/or rate from PDF",
         )
-    brl = compute_brl(parsed.usd, parsed.rate, parsed.spread)
+    effective_spread = parsed.spread if spread is None else spread
+    brl = compute_brl(parsed.usd, parsed.rate, effective_spread)
     verification_code = parsed.verification_code or "-"
     nf_date = parsed.nf_date
 
@@ -92,7 +96,7 @@ async def create_nf(
         company=parsed.company,
         usd=parsed.usd,
         rate=parsed.rate,
-        spread=parsed.spread,
+        spread=effective_spread,
         brl_no_spread=brl.brl_no_spread,
         brl_with_spread=brl.brl_with_spread,
         nf_date=nf_date,
@@ -156,6 +160,18 @@ def patch_nf(nf_id: int, body: PatchFiscalMes) -> dict:
     row = get_nf_by_id(nf_id)
     assert row
     return _nf_to_json(row)
+
+
+@router.patch("/{nf_id}/spread")
+def patch_nf_spread(nf_id: int, body: PatchNfSpread) -> dict:
+    row = get_nf_by_id(nf_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="NF not found")
+    brl = compute_brl(row["usd"], row["rate"], body.spread)
+    update_nf_spread(nf_id, body.spread, brl.brl_no_spread, brl.brl_with_spread)
+    updated = get_nf_by_id(nf_id)
+    assert updated
+    return _nf_to_json(updated)
 
 
 @router.put("/{nf_id}/pdf")

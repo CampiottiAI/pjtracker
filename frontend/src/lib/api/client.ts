@@ -178,10 +178,11 @@ export async function nfParsePreview(file: File): Promise<NfPreview> {
 	return apiForm<NfPreview>('/nfs/parse-preview', form);
 }
 
-export async function createNf(file: File, fiscalMes: string, images?: File[]): Promise<NfEntry> {
+export async function createNf(file: File, fiscalMes: string, images?: File[], spread?: number): Promise<NfEntry> {
 	const form = new FormData();
 	form.append('file', file);
 	form.append('fiscal_mes', fiscalMes);
+	if (spread !== undefined) form.append('spread', String(spread));
 	if (images) images.forEach((img) => form.append('images', img));
 	return apiForm<NfEntry>('/nfs', form);
 }
@@ -208,6 +209,14 @@ export async function patchNfFiscalMes(id: number, fiscalMes: string | null): Pr
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ fiscal_mes: fiscalMes })
+	});
+}
+
+export async function patchNfSpread(id: number, spread: number): Promise<NfEntry> {
+	return apiJson<NfEntry>(`/nfs/${id}/spread`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ spread })
 	});
 }
 

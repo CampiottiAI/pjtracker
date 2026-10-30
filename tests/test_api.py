@@ -98,6 +98,70 @@ def test_nf_parse_preview_mocked(client: TestClient):
     assert body["brl"]["brl_no_spread"] == 520.0
 
 
+@pytest.mark.parametrize("override, expected_spread, expected_brl", [
+    (None, 3.0, 504.4), ("0.3", 0.3, 518.44), ("0", 0.0, 520.0),
+])
+def test_nf_create_spread_override(client: TestClient, override, expected_spread, expected_brl):
+    fake = NFParsed(
+        company="Acme", usd=100.0, rate=5.2, spread=3.0,
+        spread_was_default=False, nf_date="15/03/2025 12:00:00",
+        verification_code="OVERRIDE", payment_via="Higlobe", source="test",
+    )
+    with temporary_app_paths():
+        init_db()
+        data = {"fiscal_mes": "2025-03"}
+        if override is not None:
+            data["spread"] = override
+        with patch("pjtracker.api.routers.nfs.parse_nf_pdf", return_value=fake):
+            response = client.post(
+                "/api/v1/nfs", data=data,
+                files={"file": ("nf.pdf", b"%PDF-original", "application/pdf")},
+            )
+        assert response.status_code == 200
+        nf = response.json()
+        assert nf["spread"] == expected_spread
+        assert nf["brl_no_spread"] == 520.0
+        assert nf["brl_with_spread"] == expected_brl
+        assert client.get(f"/api/v1/nfs/{nf['id']}/pdf").content == b"%PDF-original"
+
+
+def test_nf_patch_spread_updates_calculations_preserves_document(client: TestClient):
+    with temporary_app_paths():
+        init_db()
+        pdf_path = save_pdf(b"%PDF-original", "SPREAD", "15/03/2025", 100.0)
+        _, nf_id = save_nf_entry(
+            company="Acme", usd=100.0, rate=5.2, spread=3.0,
+            brl_no_spread=520.0, brl_with_spread=504.4,
+            nf_date="15/03/2025", verification_code="SPREAD", payment_via="Higlobe",
+            pdf_path=str(pdf_path), fiscal_mes="2025-03",
+        )
+        original = client.get(f"/api/v1/nfs/{nf_id}").json()
+        for spread, total in [(0.3, 518.44), (0, 520.0)]:
+            response = client.patch(f"/api/v1/nfs/{nf_id}/spread", json={"spread": spread})
+            assert response.status_code == 200
+            assert response.json() == {**original, "spread": spread, "brl_with_spread": total}
+            assert client.get(f"/api/v1/nfs/{nf_id}/pdf").content == b"%PDF-original"
+            series = client.get("/api/v1/analytics/nf-series", params={
+                "date_from": "2025-03-01", "date_to": "2025-03-31",
+            }).json()
+            assert series["points"][0]["brl_with_spread"] == total
+            from pjtracker.api.services.fluxo import _month_nf_income_brl
+            from pjtracker.api.services.withdraws import previous_month_income_brl
+            assert _month_nf_income_brl("2025-03") == total
+            assert previous_month_income_brl("2025-04") == total
+
+        assert client.patch("/api/v1/nfs/999999/spread", json={"spread": 1}).status_code == 404
+
+
+@pytest.mark.parametrize("spread", ["-0.1", "100.1", "nan", "inf", "invalid"])
+def test_nf_reject_invalid_spread(client: TestClient, spread):
+    assert client.patch("/api/v1/nfs/1/spread", json={"spread": spread}).status_code == 422
+    assert client.post(
+        "/api/v1/nfs", data={"fiscal_mes": "2025-03", "spread": spread},
+        files={"file": ("nf.pdf", b"%PDF", "application/pdf")},
+    ).status_code == 422
+
+
 def test_nf_duplicate_returns_409(client: TestClient):
     with temporary_app_paths():
         init_db()
