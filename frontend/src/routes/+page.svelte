@@ -73,13 +73,13 @@
 	let deletingWithdraw = $state<WithdrawEntry | null>(null);
 	let downloadingPack = $state(false);
 
-	const WITHDRAW_TARGET_BRL = 50_000;
+	const WITHDRAW_CEILING_BRL = 50_000;
 
 	function emptyWithdrawSummary(): WithdrawSummary {
 		return {
-			target_brl: WITHDRAW_TARGET_BRL,
+			target_brl: WITHDRAW_CEILING_BRL,
 			total_brl: 0,
-			remaining_brl: WITHDRAW_TARGET_BRL,
+			remaining_brl: WITHDRAW_CEILING_BRL,
 			over_target_brl: 0,
 			target_reached: false,
 			previous_month_income_brl: 0
@@ -276,16 +276,16 @@
 	}
 
 	const activeSummary = $derived(withdrawSummary ?? emptyWithdrawSummary());
-	const targetBrl = $derived(activeSummary.target_brl);
+	const ceilingBrl = $derived(activeSummary.target_brl);
 
-	const pctOfTarget = (value: number) =>
-		Math.min(100, Math.max(0, (value / targetBrl) * 100));
+	const pctOfCeiling = (value: number) =>
+		Math.min(100, Math.max(0, (value / ceilingBrl) * 100));
 
 	const casaNeedPct = $derived(
-		fluxo ? pctOfTarget(fluxo.coverage.primary_share_brl) : 0
+		fluxo ? pctOfCeiling(fluxo.coverage.primary_share_brl) : 0
 	);
-	const saquesPct = $derived(pctOfTarget(activeSummary.total_brl));
-	const incomePct = $derived(pctOfTarget(activeSummary.previous_month_income_brl));
+	const saquesPct = $derived(pctOfCeiling(activeSummary.total_brl));
+	const incomePct = $derived(pctOfCeiling(activeSummary.previous_month_income_brl));
 
 	const withdrawZone = $derived<'safe' | 'warning' | 'over'>(
 		activeSummary.over_target_brl
@@ -303,22 +303,9 @@
 				: 'bg-amber-500'
 	);
 
-	const receitaHero = $derived.by(() => {
-		if (!fluxo) return null;
-		const receita = activeSummary.previous_month_income_brl;
-		const saques = fluxo.coverage.saques_brl;
-		const leftover = receita - saques;
-		if (leftover >= 0) {
-			return {
-				text: `Sobram ${formatBrl(leftover)}`,
-				class: 'text-emerald-400'
-			};
-		}
-		return {
-			text: `Saques acima da receita ${formatBrl(-leftover)}`,
-			class: 'text-amber-400'
-		};
-	});
+	const incomeLeftover = $derived(
+		activeSummary.previous_month_income_brl - (fluxo?.coverage.saques_brl ?? 0)
+	);
 
 	const saqueLeftover = $derived.by(() => {
 		if (!fluxo) return null;
@@ -405,7 +392,7 @@
 <div class="space-y-6">
 	<PageHeader
 		title="Fluxo"
-		description="O que sobra da receita após os saques — e do saque após o seu gasto na casa."
+		description="Receita, saques e sobra do mês."
 	>
 		{#snippet actions()}
 			<Button
@@ -469,6 +456,62 @@
 			{formatFiscalMes(selectedMonth)}; abaixo, seu gasto na casa e o que sobra do saque.
 		</p>
 
+		<section aria-labelledby="receita-heading" class="overflow-hidden rounded-xl border border-border bg-card">
+			<div class="px-5 py-6 sm:px-7 sm:py-7">
+				<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+					<h2 id="receita-heading" class="text-sm font-medium text-muted-foreground">Receita</h2>
+					<span class="text-xs text-muted-foreground">{formatFiscalMes(fluxo.previous_fiscal_mes)}</span>
+				</div>
+				<p class="mt-2 text-3xl font-semibold tracking-tight tabular-nums sm:text-5xl">
+					{formatBrl(activeSummary.previous_month_income_brl)}
+				</p>
+
+				<dl class="mt-6 grid gap-4 border-t border-border pt-5 sm:grid-cols-2 sm:gap-8">
+					<div class="space-y-1.5">
+						<dt class="text-sm text-muted-foreground">Saques</dt>
+						<dd class="text-xl font-medium tabular-nums sm:text-2xl">{formatBrl(fluxo.coverage.saques_brl)}</dd>
+					</div>
+					<div class="space-y-1.5">
+						<dt class="text-sm text-muted-foreground">Sobra</dt>
+						<dd class={cn('text-xl font-medium tabular-nums sm:text-2xl', incomeLeftover < 0 ? 'text-destructive-foreground' : 'text-foreground')}>
+							{formatBrl(incomeLeftover)}
+						</dd>
+						{#if incomeLeftover < 0}
+							<p class="text-xs text-destructive-foreground">Saques acima da receita</p>
+						{/if}
+					</div>
+				</dl>
+			</div>
+
+			<div class="space-y-3 border-t border-border bg-muted/20 px-5 py-4 sm:px-7">
+				<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs">
+					<span class="text-muted-foreground">Saques em relação ao teto</span>
+					<span class="font-medium">Teto {formatBrl(ceilingBrl)}</span>
+				</div>
+				<div class="relative h-2 overflow-hidden rounded-full bg-muted" role="img" aria-label={`Saques ${formatBrl(fluxo.coverage.saques_brl)} de um teto de ${formatBrl(ceilingBrl)}`}>
+					<div class={cn('absolute inset-y-0 left-0 rounded-full transition-all', withdrawProgressFillClass)} style={`width: ${saquesPct}%`}></div>
+					{#if casaNeedPct > 0 && casaNeedPct < 100}
+						<div class="absolute inset-y-0 w-0.5 bg-foreground/80" style={`left: ${casaNeedPct}%`} title="Seu gasto na casa"></div>
+					{/if}
+					{#if incomePct > 0 && incomePct < 100}
+						<div class="absolute inset-y-0 w-px bg-foreground/40" style={`left: ${incomePct}%`} title="Receita"></div>
+					{/if}
+				</div>
+				{#if activeSummary.over_target_brl > 0}
+					<p class="text-xs text-destructive-foreground">{formatBrl(activeSummary.over_target_brl)} acima do teto</p>
+				{/if}
+				{#if saqueLeftover}
+					<div class="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+						<span class="flex items-center gap-1.5">
+							<span class="h-2 w-2 rounded-full bg-foreground/80"></span>
+							Seu gasto na casa {formatBrl(fluxo.coverage.primary_share_brl)}
+						</span>
+						<span class={saqueLeftover.class}>{saqueLeftover.text}</span>
+					</div>
+				{/if}
+			</div>
+		</section>
+
 		<div>
 			<h2 class="mb-3 text-sm font-medium">Documentos fiscais</h2>
 			<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -494,75 +537,6 @@
 						</Card.Root>
 					</a>
 				{/each}
-			</div>
-		</div>
-
-		{#if receitaHero && saqueLeftover}
-			<div class="rounded-lg border border-border bg-card px-5 py-4">
-				<p class={cn('text-2xl font-bold tabular-nums', receitaHero.class)}>
-					{receitaHero.text}
-				</p>
-				<p class="mt-1 text-sm text-muted-foreground">
-					Receita {formatFiscalMes(fluxo.previous_fiscal_mes)}
-					{formatBrl(activeSummary.previous_month_income_brl)} · Saques
-					{formatBrl(fluxo.coverage.saques_brl)}
-				</p>
-				<p class="mt-3 border-t border-border pt-3 text-sm text-muted-foreground">
-					Seu gasto {formatBrl(fluxo.coverage.primary_share_brl)} ·
-					<span class={saqueLeftover.class}>{saqueLeftover.text}</span>
-				</p>
-			</div>
-		{/if}
-
-		<div class="space-y-2">
-			<div class="relative h-3 overflow-hidden rounded-full bg-muted">
-				{#if incomePct > 0}
-					<div class="absolute inset-y-0 left-0 bg-emerald-500/30" style={`width: ${incomePct}%`}></div>
-				{/if}
-				{#if incomePct < 100}
-					<div
-						class="absolute inset-y-0 bg-amber-500/25"
-						style={`left: ${incomePct}%; width: ${100 - incomePct}%`}
-					></div>
-				{/if}
-				<div
-					class={cn('absolute inset-y-0 left-0 rounded-full transition-all', withdrawProgressFillClass)}
-					style={`width: ${saquesPct}%`}
-				></div>
-				{#if casaNeedPct > 0}
-					<div
-						class="absolute inset-y-0 w-0.5 bg-foreground/80"
-						style={`left: ${casaNeedPct}%`}
-						title="Seu gasto"
-					></div>
-				{/if}
-				{#if incomePct > 0 && incomePct < 100}
-					<div
-						class="absolute inset-y-0 w-px bg-background/70"
-						style={`left: ${incomePct}%`}
-					></div>
-				{/if}
-			</div>
-			<div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
-				<span class="flex items-center gap-1.5">
-					<span class="h-2 w-2 rounded-full bg-foreground/60"></span>
-					Casa (seu gasto) {formatBrl(fluxo.coverage.primary_share_brl)}
-				</span>
-				<span class="flex items-center gap-1.5">
-					<span class="h-2 w-2 rounded-full bg-emerald-600"></span>
-					Saques {formatBrl(fluxo.coverage.saques_brl)}
-				</span>
-				{#if activeSummary.previous_month_income_brl > 0}
-					<span class="flex items-center gap-1.5">
-						<span class="h-2 w-2 rounded-full bg-emerald-500/50"></span>
-						Receita {formatFiscalMes(fluxo.previous_fiscal_mes)}
-						{formatBrl(activeSummary.previous_month_income_brl)}
-					</span>
-				{/if}
-				<span class="flex items-center gap-1.5">
-					<span class="h-2 w-2 rounded-full bg-amber-500/50"></span>
-					Meta {formatBrl(targetBrl)}
-				</span>
 			</div>
 		</div>
 
@@ -648,7 +622,7 @@
 				</div>
 				<Card.Description>
 					Registre saques em BRL. A barra acima compara saques com o que você gastou na casa e a receita do
-					mês anterior.
+					mês anterior, com teto de {formatBrl(ceilingBrl)}.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="space-y-4">
