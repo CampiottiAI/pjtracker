@@ -25,6 +25,7 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
+	import UploadProcessButton from '$lib/components/UploadProcessButton.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -164,7 +165,15 @@
 	// Upload
 	// ---------------------------------------------------------------------------
 
+	let uploadRevision = 0;
+
+	function invalidateUpload() {
+		uploadRevision += 1;
+		uploadPreview = null;
+	}
+
 	function resetUpload() {
+		invalidateUpload();
 		uploadExtrato = null;
 		uploadCaixinha = null;
 		uploadHiglobe = null;
@@ -197,6 +206,8 @@
 	}
 
 	async function handlePreview() {
+		if (uploadPreviewing || uploadSaving) return;
+		const revision = uploadRevision;
 		if (!uploadExtrato) {
 			toast.error('Extrato PDF is required');
 			return;
@@ -204,22 +215,26 @@
 		uploadPreview = null;
 		uploadPreviewing = true;
 		try {
-			uploadPreview = await extratoParsePreview(
+			const preview = await extratoParsePreview(
 				uploadExtrato,
 				uploadCaixinha ?? undefined,
 				uploadHiglobe ?? undefined
 			);
-			warnIfProLaboreMissing(uploadPreview.extrato.entries);
+			if (revision !== uploadRevision) return;
+			uploadPreview = preview;
+			warnIfProLaboreMissing(preview.extrato.entries);
 		} catch (e) {
+			if (revision !== uploadRevision) return;
 			toast.error(
 				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Preview failed'
 			);
 		} finally {
-			uploadPreviewing = false;
+			if (revision === uploadRevision) uploadPreviewing = false;
 		}
 	}
 
 	async function handleSave() {
+		if (!uploadPreview || uploadPreviewing || uploadSaving) return;
 		if (!uploadExtrato || !uploadFiscalMes) {
 			toast.error('Extrato PDF and fiscal month are required');
 			return;
@@ -576,7 +591,7 @@
 	<Sheet.SheetContent side="right">
 		<Sheet.SheetHeader>
 			<Sheet.SheetTitle>Upload Extrato</Sheet.SheetTitle>
-			<Sheet.SheetDescription>Upload bank statement and optional attachments.</Sheet.SheetDescription>
+			<Sheet.SheetDescription>Select all files, process documents, review the extracted data, then save.</Sheet.SheetDescription>
 		</Sheet.SheetHeader>
 		<div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
 			<!-- Three file zones -->
@@ -585,6 +600,8 @@
 				<FileDropZone
 					accept=".pdf,application/pdf"
 					bind:file={uploadExtrato}
+					loading={uploadPreviewing || uploadSaving}
+					onchange={invalidateUpload}
 					label="Drop extrato PDF here"
 				/>
 			</div>
@@ -593,6 +610,8 @@
 				<FileDropZone
 					accept=".pdf,application/pdf"
 					bind:file={uploadCaixinha}
+					loading={uploadPreviewing || uploadSaving}
+					onchange={invalidateUpload}
 					label="Drop caixinha PDF here"
 				/>
 			</div>
@@ -601,19 +620,14 @@
 				<FileDropZone
 					accept=".pdf,application/pdf"
 					bind:file={uploadHiglobe}
+					loading={uploadPreviewing || uploadSaving}
+					onchange={invalidateUpload}
 					label="Drop higlobe PDF here"
 				/>
 			</div>
 
-			{#if uploadExtrato && !uploadPreview}
-				<Button onclick={handlePreview} disabled={uploadPreviewing} variant="outline" class="w-full">
-					{#if uploadPreviewing}
-						<Loader2 class="h-4 w-4 animate-spin" />
-						Parsing...
-					{:else}
-						Preview
-					{/if}
-				</Button>
+			{#if !uploadPreview}
+				<UploadProcessButton onclick={handlePreview} loading={uploadPreviewing} disabled={!uploadExtrato || uploadSaving} />
 			{/if}
 
 			<!-- Preview -->

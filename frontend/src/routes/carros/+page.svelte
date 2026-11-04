@@ -27,6 +27,7 @@
 	import { formatBrl } from '$lib/utils/format.js';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
+	import UploadProcessButton from '$lib/components/UploadProcessButton.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -140,7 +141,11 @@
 		await loadHistory();
 	}
 
+	let uploadRevision = 0;
+
 	function clearUpload() {
+		uploadRevision += 1;
+		uploadPreviewing = false;
 		uploadFile = null;
 		editExtracted = null;
 	}
@@ -149,26 +154,31 @@
 		return { placa: null, modelo: null, cor: null, ano: null, km: null, chassi: null };
 	}
 
-	async function handleFileSelected(files: File[]) {
-		const file = files[0];
-		if (!file || !selectedCarId) return;
-		uploadFile = file;
-		uploadPreviewing = true;
+	function handleFileSelected(files: File[]) {
+		if (!files[0]) return;
+		uploadRevision += 1;
+		uploadFile = files[0];
 		editExtracted = null;
+	}
+
+	async function handlePreview() {
+		if (!uploadFile || !selectedCarId || uploadPreviewing || uploadSaving) return;
+		const revision = uploadRevision;
+		uploadPreviewing = true;
 		try {
-			const preview = await maintenanceParsePreview(selectedCarId, file);
+			const preview = await maintenanceParsePreview(selectedCarId, uploadFile);
+			if (revision !== uploadRevision) return;
 			editExtracted = {
 				...preview.extracted,
 				veiculo: { ...emptyVeiculo(), ...(preview.extracted.veiculo ?? {}) },
 				itens: preview.extracted.itens ?? []
 			};
 		} catch (e) {
-			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha na extração'
-			);
-			uploadFile = null;
+			if (revision === uploadRevision) {
+				toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha na extração');
+			}
 		} finally {
-			uploadPreviewing = false;
+			if (revision === uploadRevision) uploadPreviewing = false;
 		}
 	}
 
@@ -690,16 +700,21 @@
 				<Card.Header>
 					<Card.Title class="text-base">Novo orçamento</Card.Title>
 					<Card.Description>
-						Envie imagem ou PDF. Revise os dados antes de salvar.
+						Selecione o arquivo, processe os documentos, revise os dados e salve.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content class="space-y-4">
 					<FileDropZone
 						accept=".jpg,.jpeg,.png,.webp,.pdf"
-						loading={uploadPreviewing}
+						loading={uploadPreviewing || uploadSaving}
+						bind:file={uploadFile}
 						label="Solte o orçamento ou clique para escolher"
 						onchange={handleFileSelected}
 					/>
+
+					{#if !editExtracted}
+						<UploadProcessButton onclick={handlePreview} loading={uploadPreviewing} disabled={!uploadFile || uploadSaving} />
+					{/if}
 
 					{#if editExtracted && uploadFile}
 						<div class="space-y-3 rounded-lg border border-border p-3">

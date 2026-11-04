@@ -34,7 +34,6 @@
 		Receipt,
 		Landmark,
 		WalletCards,
-		DollarSign,
 		CheckCircle2,
 		AlertCircle,
 		Plus,
@@ -391,21 +390,12 @@
 							]
 						: []),
 					{
-						label: 'Extratos c/ Caixinha',
+						label: 'Extrato',
 						icon: WalletCards,
 						count: fluxo.completeness.extratos_caixinha_count,
 						ok: fluxo.completeness.extratos_ok,
 						required: 1,
 						href: `/extratos?fiscal_mes=${selectedMonth}`
-					},
-					{
-						label: 'Higlobe',
-						icon: DollarSign,
-						count: fluxo.completeness.extratos_higlobe_count,
-						ok: fluxo.completeness.higlobe_ok,
-						required: 1,
-						href: `/extratos?fiscal_mes=${selectedMonth}`,
-						optional: true
 					}
 				]
 			: []

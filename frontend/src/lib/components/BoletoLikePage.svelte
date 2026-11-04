@@ -20,6 +20,7 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
+	import UploadProcessButton from '$lib/components/UploadProcessButton.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -107,7 +108,6 @@
 	let uploadPreview = $state<BoletoPreview | null>(null);
 	let uploadFiscalMes = $state('');
 	let uploadReceipt = $state<File | null>(null);
-	let uploadReceiptPreviewing = $state(false);
 	let uploadReceiptPreview = $state<ReceiptPreview | null>(null);
 	let uploadReceiptDate = $state('');
 	let uploadReceiptTime = $state('');
@@ -231,12 +231,12 @@
 	// ---------------------------------------------------------------------------
 
 	function resetUpload() {
+		invalidateUpload();
 		uploadFile = null;
 		uploadPreviewing = false;
 		uploadPreview = null;
 		uploadFiscalMes = '';
 		uploadReceipt = null;
-		uploadReceiptPreviewing = false;
 		uploadReceiptPreview = null;
 		uploadReceiptDate = '';
 		uploadReceiptTime = '';
@@ -250,52 +250,44 @@
 		uploadOpen = true;
 	}
 
-	async function handleDocFileSelected(files: File[]) {
-		if (files.length === 0) return;
-		uploadFile = files[0];
+	let uploadRevision = 0;
+
+	function invalidateUpload() {
+		uploadRevision += 1;
 		uploadPreview = null;
+		uploadReceiptPreview = null;
+		uploadReceiptDate = '';
+		uploadReceiptTime = '';
+	}
+
+	async function handlePreview() {
+		if (!uploadFile || uploadPreviewing || uploadSaving) return;
+		const revision = uploadRevision;
 		uploadPreviewing = true;
 		try {
-			uploadPreview = await parsePreviewFn(files[0]);
-		} catch (e) {
-			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Preview failed'
-			);
-		} finally {
-			uploadPreviewing = false;
-		}
-	}
-
-	async function handleReceiptSelected(files: File[]) {
-		if (files.length === 0) return;
-		uploadReceipt = files[0];
-		uploadReceiptPreview = null;
-		uploadReceiptPreviewing = true;
-		try {
-			uploadReceiptPreview = await receiptParsePreview(files[0]);
-			if (uploadReceiptPreview.payment_datetime) {
-				const parts = uploadReceiptPreview.payment_datetime.split(' ');
-				if (parts[0]) {
-					const [dd, mm, yyyy] = parts[0].split('/');
-					if (yyyy && mm && dd) uploadReceiptDate = `${yyyy}-${mm}-${dd}`;
-				}
-				if (parts[1]) uploadReceiptTime = parts[1];
+			const preview = await parsePreviewFn(uploadFile);
+			if (revision !== uploadRevision) return;
+			const receiptPreview = uploadReceipt ? await receiptParsePreview(uploadReceipt) : null;
+			if (revision !== uploadRevision) return;
+			uploadPreview = preview;
+			uploadReceiptPreview = receiptPreview;
+			if (receiptPreview?.payment_datetime) {
+				const [date, time] = receiptPreview.payment_datetime.split(' ');
+				const [dd, mm, yyyy] = date.split('/');
+				if (yyyy && mm && dd) uploadReceiptDate = `${yyyy}-${mm}-${dd}`;
+				uploadReceiptTime = time ?? '';
 			}
 		} catch (e) {
-			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Receipt preview failed'
-			);
+			if (revision === uploadRevision) {
+				toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Preview failed');
+			}
 		} finally {
-			uploadReceiptPreviewing = false;
+			if (revision === uploadRevision) uploadPreviewing = false;
 		}
-	}
-
-	function handleExtraPdfSelected(files: File[]) {
-		if (files.length === 0) return;
-		uploadExtraPdf = files[0];
 	}
 
 	async function handleSave() {
+		if (!uploadPreview || uploadPreviewing || uploadSaving) return;
 		if (!uploadFile || !uploadFiscalMes) {
 			toast.error('PDF and fiscal month are required');
 			return;
@@ -778,7 +770,7 @@
 	<Sheet.SheetContent side="right">
 		<Sheet.SheetHeader>
 			<Sheet.SheetTitle>Upload {domainLabel}</Sheet.SheetTitle>
-			<Sheet.SheetDescription>Upload a PDF and optional receipt.</Sheet.SheetDescription>
+			<Sheet.SheetDescription>Select all files, process documents, review the extracted data, then save.</Sheet.SheetDescription>
 		</Sheet.SheetHeader>
 		<div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
 			<!-- Document PDF -->
@@ -786,12 +778,44 @@
 				<span class="text-sm font-medium">{domainLabel} PDF</span>
 				<FileDropZone
 					accept=".pdf,application/pdf"
-					loading={uploadPreviewing}
+					loading={uploadPreviewing || uploadSaving}
 					bind:file={uploadFile}
-					onchange={handleDocFileSelected}
+					onchange={invalidateUpload}
 					label={`Drop ${domainLabel} PDF here`}
 				/>
 			</div>
+
+			<!-- Receipt (optional) -->
+			<div class="space-y-2">
+				<span class="text-sm font-medium">Receipt Image (optional)</span>
+				<FileDropZone
+					accept="image/*"
+					loading={uploadPreviewing || uploadSaving}
+					bind:file={uploadReceipt}
+					onchange={invalidateUpload}
+					label="Drop receipt image here"
+				/>
+			</div>
+
+			{#if supplementaryPdfLabel}
+				<div class="space-y-2">
+					<span class="text-sm font-medium">{supplementaryPdfLabel}</span>
+					<p class="text-xs text-muted-foreground">
+						Optional. Stored without data extraction alongside the document above.
+					</p>
+					<FileDropZone
+						accept=".pdf,application/pdf"
+						loading={uploadPreviewing || uploadSaving}
+						bind:file={uploadExtraPdf}
+						onchange={invalidateUpload}
+						label="Drop extra PDF here"
+					/>
+				</div>
+			{/if}
+
+			{#if !uploadPreview}
+				<UploadProcessButton onclick={handlePreview} loading={uploadPreviewing} disabled={!uploadFile || uploadSaving} />
+			{/if}
 
 			{#if uploadPreview}
 				<Card.Root>
@@ -811,18 +835,6 @@
 						</dl>
 					</Card.Content>
 				</Card.Root>
-
-				<!-- Receipt (optional) -->
-				<div class="space-y-2">
-					<span class="text-sm font-medium">Receipt Image (optional)</span>
-					<FileDropZone
-						accept="image/*"
-						loading={uploadReceiptPreviewing}
-						bind:file={uploadReceipt}
-						onchange={handleReceiptSelected}
-						label="Drop receipt image here"
-					/>
-				</div>
 
 				{#if uploadReceiptPreview}
 					<Card.Root>
@@ -852,22 +864,6 @@
 							<span class="text-xs font-medium text-muted-foreground">Receipt Time</span>
 							<Input type="time" step="1" bind:value={uploadReceiptTime} />
 						</div>
-					</div>
-				{/if}
-
-				{#if supplementaryPdfLabel}
-					<div class="space-y-2">
-						<span class="text-sm font-medium">{supplementaryPdfLabel}</span>
-						<p class="text-xs text-muted-foreground">
-							Optional. Stored without data extraction alongside the document above.
-						</p>
-						<FileDropZone
-							accept=".pdf,application/pdf"
-							loading={false}
-							bind:file={uploadExtraPdf}
-							onchange={handleExtraPdfSelected}
-							label="Drop extra PDF here"
-						/>
 					</div>
 				{/if}
 

@@ -32,6 +32,7 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
+	import UploadProcessButton from '$lib/components/UploadProcessButton.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -185,7 +186,16 @@
 	// Upload flow
 	// ---------------------------------------------------------------------------
 
+	let uploadRevision = 0;
+
+	function invalidateUpload() {
+		uploadRevision += 1;
+		uploadPreview = null;
+		uploadSpread = '';
+	}
+
 	function resetUpload() {
+		invalidateUpload();
 		uploadFile = null;
 		uploadImages = [];
 		uploadPreviewing = false;
@@ -201,29 +211,27 @@
 		uploadOpen = true;
 	}
 
-	async function handleFileSelected(files: File[]) {
-		if (files.length === 0) return;
-		uploadFile = files[0];
-		uploadPreview = null;
+	async function handlePreview() {
+		if (!uploadFile || uploadPreviewing || uploadSaving) return;
+		const revision = uploadRevision;
 		uploadPreviewing = true;
-		uploadSpread = '';
 		try {
-			uploadPreview = await nfParsePreview(files[0]);
-			uploadSpread = uploadPreview.spread == null ? '' : String(uploadPreview.spread);
-			if (uploadPreview.brl == null) {
-				toast.warning('Could not extract USD/rate from this PDF');
-			}
+			const preview = await nfParsePreview(uploadFile);
+			if (revision !== uploadRevision) return;
+			uploadPreview = preview;
+			uploadSpread = preview.spread == null ? '' : String(preview.spread);
+			if (preview.brl == null) toast.warning('Could not extract USD/rate from this PDF');
 		} catch (e) {
-			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Preview failed'
-			);
-			uploadPreview = null;
+			if (revision === uploadRevision) {
+				toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Preview failed');
+			}
 		} finally {
-			uploadPreviewing = false;
+			if (revision === uploadRevision) uploadPreviewing = false;
 		}
 	}
 
 	async function handleSave() {
+		if (uploadPreviewing || uploadSaving) return;
 		if (!uploadPreview?.brl || !validSpread(uploadSpread)) return;
 		if (!uploadFile || !uploadFiscalMes) {
 			toast.error('PDF and fiscal month are required');
@@ -554,7 +562,7 @@
 	<Sheet.SheetContent side="right">
 		<Sheet.SheetHeader>
 			<Sheet.SheetTitle>Upload Nota Fiscal</Sheet.SheetTitle>
-			<Sheet.SheetDescription>Upload a NF PDF to extract data and save.</Sheet.SheetDescription>
+			<Sheet.SheetDescription>Select all files, process documents, review the extracted data, then save.</Sheet.SheetDescription>
 		</Sheet.SheetHeader>
 		<div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
 			<!-- PDF drop zone -->
@@ -562,12 +570,29 @@
 				<span class="text-sm font-medium">NF PDF</span>
 				<FileDropZone
 					accept=".pdf,application/pdf"
-					loading={uploadPreviewing}
+					loading={uploadPreviewing || uploadSaving}
 					bind:file={uploadFile}
-					onchange={handleFileSelected}
+					onchange={invalidateUpload}
 					label="Drop NF PDF here"
 				/>
 			</div>
+
+			<!-- Image attachments -->
+			<div class="space-y-2">
+				<span class="text-sm font-medium">Image Attachments (optional)</span>
+				<FileDropZone
+					accept="image/*"
+					multiple={true}
+					bind:files={uploadImages}
+					loading={uploadPreviewing || uploadSaving}
+					onchange={invalidateUpload}
+					label="Drop images here"
+				/>
+			</div>
+
+			{#if !uploadPreview}
+				<UploadProcessButton onclick={handlePreview} loading={uploadPreviewing || uploadSaving} disabled={!uploadFile || uploadSaving} />
+			{/if}
 
 			<!-- Preview card -->
 			{#if uploadPreview}
@@ -619,16 +644,6 @@
 					<FiscalMonthPicker bind:value={uploadFiscalMes} {months} />
 				</div>
 
-				<!-- Image attachments -->
-				<div class="space-y-2">
-					<span class="text-sm font-medium">Image Attachments (optional)</span>
-					<FileDropZone
-						accept="image/*"
-						multiple={true}
-						bind:files={uploadImages}
-						label="Drop images here"
-					/>
-				</div>
 			{/if}
 		</div>
 

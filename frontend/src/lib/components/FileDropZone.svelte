@@ -24,7 +24,7 @@
 	let inputEl: HTMLInputElement | undefined = $state();
 
 	function handleFiles(fileList: FileList | null) {
-		if (!fileList || fileList.length === 0) return;
+		if (loading || !fileList || fileList.length === 0) return;
 		const arr = Array.from(fileList);
 		if (multiple) {
 			files = arr;
@@ -53,9 +53,10 @@
 	function handleInput(e: Event) {
 		const target = e.target as HTMLInputElement;
 		handleFiles(target.files);
+		target.value = '';
 	}
 
-	const hasFile = $derived(file !== null || files.length > 0);
+	const hasFile = $derived(multiple ? files.length > 0 : file !== null);
 	const displayName = $derived(
 		multiple ? files.map((f) => f.name).join(', ') : (file?.name ?? '')
 	);
