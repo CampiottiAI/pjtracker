@@ -30,6 +30,30 @@ uv run uvicorn pjtracker.api.main:app --reload
 - Base URL: `http://127.0.0.1:8000/api/v1`
 - Docs: [docs/api/README.md](docs/api/README.md)
 
+### Maritaca extraction
+
+Document extraction and car maintenance analysis use **S5** with native thinking
+(`xhigh`, the model's default) and **Flex** processing. Structured JSON extraction
+and the parse-preview → confirm → save flow stay the same.
+
+Configure the API key with `MARITACA_API_KEY` or `.token`. Optional overrides:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MARITACA_MODEL` | `s5` | Model used for extraction and maintenance analysis |
+| `MARITACA_SERVICE_TIER` | `flex` | Set to `default` for standard processing |
+| `MARITACA_TIMEOUT_SECONDS` | `600` | Timeout per API attempt, including Flex queue time |
+| `MARITACA_BASE_URL` | `https://chat.maritaca.ai/api` | API endpoint |
+
+Flex offers a 50% token discount but can queue requests for up to five minutes
+and return HTTP 429 when capacity is unavailable. The SDK retries transient
+errors twice with backoff; retries remain on the requested tier. There is no
+automatic switch to standard pricing. Restart the API after changing settings.
+
+References: [models](https://docs.maritaca.ai/pt/modelos),
+[Flex tier](https://docs.maritaca.ai/pt/flex-tier),
+[pricing](https://docs.maritaca.ai/pt/precos).
+
 ## Frontend (SvelteKit)
 
 The web UI lives in [`frontend`](frontend). Use Node/npm there; Python tooling stays on `uv` at the repo root.

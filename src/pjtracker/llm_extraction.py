@@ -16,7 +16,9 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL = os.getenv("MARITACA_MODEL", "sabiazinho-4")
+# S5 reasons natively (xhigh by default); no extra thinking flag is needed.
+DEFAULT_MODEL = os.getenv("MARITACA_MODEL", "s5")
+DEFAULT_SERVICE_TIER = os.getenv("MARITACA_SERVICE_TIER", "flex")
 DEFAULT_BASE_URL = os.getenv("MARITACA_BASE_URL", "https://chat.maritaca.ai/api")
 TOKEN_PATH = PROJECT_ROOT / ".token"
 
@@ -380,7 +382,14 @@ def _get_client() -> OpenAI:
     api_key = _read_api_key()
     if not api_key:
         raise RuntimeError("API key da Maritaca nao configurada.")
-    return OpenAI(api_key=api_key, base_url=DEFAULT_BASE_URL)
+    return OpenAI(
+        api_key=api_key,
+        base_url=DEFAULT_BASE_URL,
+        # Flex can queue for five minutes before generation starts. The SDK
+        # retries transient errors (including 429) twice with backoff.
+        timeout=float(os.getenv("MARITACA_TIMEOUT_SECONDS", "600")),
+        max_retries=2,
+    )
 
 
 def _encode_file_data(file_bytes: bytes) -> str:
@@ -419,6 +428,7 @@ def _extract_structured_data(
     try:
         response = client.responses.parse(
             model=DEFAULT_MODEL,
+            service_tier=DEFAULT_SERVICE_TIER,
             input=[
                 {
                     "role": "system",
