@@ -27,7 +27,9 @@
 	import { formatBrl } from '$lib/utils/format.js';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
-	import UploadProcessButton from '$lib/components/UploadProcessButton.svelte';
+	import UploadActions from '$lib/components/UploadActions.svelte';
+	import UploadSteps from '$lib/components/UploadSteps.svelte';
+	import UploadFiles from '$lib/components/UploadFiles.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -67,6 +69,7 @@
 	let savingCar = $state(false);
 
 	// Upload / preview
+	let uploadOpen = $state(false);
 	let uploadFile = $state<File | null>(null);
 	let uploadPreviewing = $state(false);
 	let uploadSaving = $state(false);
@@ -79,7 +82,7 @@
 	// Preview dialog
 	let previewOpen = $state(false);
 	let previewPath = $state<string | null>(null);
-	let previewTitle = $state('Preview');
+	let previewTitle = $state('Visualização');
 	let previewFallback = $state('file');
 
 	// Delete dialogs
@@ -193,6 +196,7 @@
 				toast.success('Orçamento salvo');
 			}
 			clearUpload();
+			uploadOpen = false;
 			await loadHistory();
 			selectedRecord = record;
 			detailTab = 'analise';
@@ -695,26 +699,191 @@
 			</select>
 		</div>
 
-		<div class="grid gap-6 lg:grid-cols-2">
+		<div class="flex justify-end">
+			<Button onclick={() => { clearUpload(); uploadOpen = true; }}><Plus class="h-4 w-4" />Novo orçamento</Button>
+		</div>
+		<div class="grid gap-6">
+
 			<Card.Root>
 				<Card.Header>
-					<Card.Title class="text-base">Novo orçamento</Card.Title>
+					<Card.Title class="text-base">Histórico</Card.Title>
 					<Card.Description>
-						Selecione o arquivo, processe os documentos, revise os dados e salve.
+						{#if selectedCar}
+							Visitas de {selectedCar.label ?? selectedCar.name}
+						{/if}
 					</Card.Description>
 				</Card.Header>
-				<Card.Content class="space-y-4">
-					<FileDropZone
+				<Card.Content>
+					{#if loadingHistory}
+						<div class="flex justify-center py-8">
+							<Loader2 class="h-5 w-5 animate-spin text-muted-foreground" />
+						</div>
+					{:else if records.length === 0}
+						<p class="py-6 text-center text-sm text-muted-foreground">
+							Nenhum orçamento ainda.
+						</p>
+					{:else}
+						<ul class="divide-y divide-border">
+							{#each records as r}
+								<li>
+									<button
+										type="button"
+										class="flex w-full items-center justify-between gap-2 px-1 py-3 text-left text-sm hover:bg-accent/40"
+										onclick={() => openRecord(r.id)}
+									>
+										<span class="truncate">{recordLabel(r)}</span>
+										<Eye class="h-4 w-4 shrink-0 text-muted-foreground" />
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+		</div>
+	{/if}
+{/if}
+
+<!-- Manage cars sheet -->
+<Sheet.Root bind:open={manageOpen}>
+	<Sheet.Content class="overflow-y-auto sm:max-w-md">
+		<Sheet.Header>
+			<Sheet.Title>Carros</Sheet.Title>
+			<Sheet.Description>Cadastre e edite os veículos da casa.</Sheet.Description>
+		</Sheet.Header>
+
+		<div class="mt-4 space-y-6">
+			{#each cars as car, i}
+				<div class="space-y-2 rounded-lg border border-border p-3">
+					<div>
+						<label class="text-xs text-muted-foreground" for={`car-name-${car.id}`}>Nome</label>
+						<Input
+							id={`car-name-${car.id}`}
+							value={car.name}
+							oninput={(e) => {
+								const next = [...cars];
+								next[i] = { ...car, name: (e.currentTarget as HTMLInputElement).value };
+								cars = next;
+							}}
+						/>
+					</div>
+					<div class="grid grid-cols-2 gap-2">
+						<div>
+							<label class="text-xs text-muted-foreground" for={`car-placa-${car.id}`}>Placa</label>
+							<Input
+								id={`car-placa-${car.id}`}
+								value={car.placa ?? ''}
+								oninput={(e) => {
+									const next = [...cars];
+									next[i] = { ...car, placa: (e.currentTarget as HTMLInputElement).value };
+									cars = next;
+								}}
+							/>
+						</div>
+						<div>
+							<label class="text-xs text-muted-foreground" for={`car-modelo-${car.id}`}
+								>Modelo</label
+							>
+							<Input
+								id={`car-modelo-${car.id}`}
+								value={car.modelo ?? ''}
+								oninput={(e) => {
+									const next = [...cars];
+									next[i] = { ...car, modelo: (e.currentTarget as HTMLInputElement).value };
+									cars = next;
+								}}
+							/>
+						</div>
+					</div>
+					<div class="flex gap-2">
+						<Button size="sm" onclick={() => handleSaveCar(car)}>Salvar</Button>
+						<Button
+							size="sm"
+							variant="destructive"
+							disabled={cars.length <= 1}
+							onclick={() => {
+								deleteCarTarget = car;
+								deleteCarOpen = true;
+							}}
+						>
+							Remover
+						</Button>
+					</div>
+					<p class="text-[10px] text-muted-foreground">id: {car.id}</p>
+				</div>
+			{/each}
+
+			<div class="space-y-2 rounded-lg border border-dashed border-border p-3">
+				<p class="text-sm font-medium">Novo carro</p>
+				<Input placeholder="Nome" bind:value={newCarName} />
+				<div class="grid grid-cols-2 gap-2">
+					<Input placeholder="Placa" bind:value={newCarPlaca} />
+					<Input placeholder="Modelo" bind:value={newCarModelo} />
+				</div>
+				<Input placeholder="ID (opcional)" bind:value={newCarId} />
+				<Button size="sm" disabled={savingCar} onclick={handleAddCar}>
+					{#if savingCar}
+						<Loader2 class="h-4 w-4 animate-spin" />
+					{:else}
+						<Plus class="h-4 w-4" />
+					{/if}
+					Adicionar
+				</Button>
+			</div>
+		</div>
+	</Sheet.Content>
+</Sheet.Root>
+
+<ConfirmDialog
+	bind:open={deleteRecordOpen}
+	title="Excluir registro?"
+	description="O orçamento e todos os anexos serão removidos permanentemente."
+	confirmLabel="Excluir"
+	onconfirm={confirmDeleteRecord}
+/>
+
+<ConfirmDialog
+	bind:open={deleteCarOpen}
+	title="Remover carro?"
+	description="Os orçamentos deste carro não serão apagados automaticamente."
+	confirmLabel="Remover"
+	onconfirm={confirmDeleteCar}
+/>
+
+<ConfirmDialog
+	bind:open={deleteAttOpen}
+	title="Remover anexo?"
+	description="Este arquivo será apagado. O orçamento (fonte) permanece."
+	confirmLabel="Remover"
+	onconfirm={confirmDeleteAttachment}
+/>
+
+<FilePreviewDialog
+	bind:open={previewOpen}
+	bind:path={previewPath}
+	title={previewTitle}
+	fallbackFilename={previewFallback}
+/>
+
+<Sheet.Sheet bind:open={uploadOpen} onOpenChange={(open) => { if (!open) clearUpload(); }}>
+	<Sheet.SheetContent side="right">
+		<Sheet.SheetHeader>
+			<Sheet.SheetTitle>Novo orçamento</Sheet.SheetTitle>
+			<Sheet.SheetDescription>Envie o orçamento de {selectedCar?.label ?? selectedCar?.name ?? 'manutenção'} e revise os dados antes de salvar.</Sheet.SheetDescription>
+			<UploadSteps ready={!!editExtracted} />
+		</Sheet.SheetHeader>
+		<div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
+
+					<UploadFiles ready={!!editExtracted} count={uploadFile ? 1 : 0}>
+<FileDropZone
 						accept=".jpg,.jpeg,.png,.webp,.pdf"
 						loading={uploadPreviewing || uploadSaving}
 						bind:file={uploadFile}
 						label="Solte o orçamento ou clique para escolher"
 						onchange={handleFileSelected}
 					/>
+			</UploadFiles>
 
-					{#if !editExtracted}
-						<UploadProcessButton onclick={handlePreview} loading={uploadPreviewing} disabled={!uploadFile || uploadSaving} />
-					{/if}
 
 					{#if editExtracted && uploadFile}
 						<div class="space-y-3 rounded-lg border border-border p-3">
@@ -884,179 +1053,18 @@
 								<p class="text-xs text-muted-foreground">Itens são somente leitura.</p>
 							{/if}
 
-							<div class="flex gap-2">
-								<Button disabled={uploadSaving} onclick={handleSave}>
-									{#if uploadSaving}
-										<Loader2 class="h-4 w-4 animate-spin" />
-									{/if}
-									Salvar e analisar
-								</Button>
-								<Button variant="outline" disabled={uploadSaving} onclick={clearUpload}>
-									Cancelar
-								</Button>
-							</div>
 						</div>
 					{/if}
-				</Card.Content>
-			</Card.Root>
-
-			<Card.Root>
-				<Card.Header>
-					<Card.Title class="text-base">Histórico</Card.Title>
-					<Card.Description>
-						{#if selectedCar}
-							Visitas de {selectedCar.label ?? selectedCar.name}
-						{/if}
-					</Card.Description>
-				</Card.Header>
-				<Card.Content>
-					{#if loadingHistory}
-						<div class="flex justify-center py-8">
-							<Loader2 class="h-5 w-5 animate-spin text-muted-foreground" />
-						</div>
-					{:else if records.length === 0}
-						<p class="py-6 text-center text-sm text-muted-foreground">
-							Nenhum orçamento ainda.
-						</p>
-					{:else}
-						<ul class="divide-y divide-border">
-							{#each records as r}
-								<li>
-									<button
-										type="button"
-										class="flex w-full items-center justify-between gap-2 px-1 py-3 text-left text-sm hover:bg-accent/40"
-										onclick={() => openRecord(r.id)}
-									>
-										<span class="truncate">{recordLabel(r)}</span>
-										<Eye class="h-4 w-4 shrink-0 text-muted-foreground" />
-									</button>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</Card.Content>
-			</Card.Root>
 		</div>
-	{/if}
-{/if}
-
-<!-- Manage cars sheet -->
-<Sheet.Root bind:open={manageOpen}>
-	<Sheet.Content class="overflow-y-auto sm:max-w-md">
-		<Sheet.Header>
-			<Sheet.Title>Carros</Sheet.Title>
-			<Sheet.Description>Cadastre e edite os veículos da casa.</Sheet.Description>
-		</Sheet.Header>
-
-		<div class="mt-4 space-y-6">
-			{#each cars as car, i}
-				<div class="space-y-2 rounded-lg border border-border p-3">
-					<div>
-						<label class="text-xs text-muted-foreground" for={`car-name-${car.id}`}>Nome</label>
-						<Input
-							id={`car-name-${car.id}`}
-							value={car.name}
-							oninput={(e) => {
-								const next = [...cars];
-								next[i] = { ...car, name: (e.currentTarget as HTMLInputElement).value };
-								cars = next;
-							}}
-						/>
-					</div>
-					<div class="grid grid-cols-2 gap-2">
-						<div>
-							<label class="text-xs text-muted-foreground" for={`car-placa-${car.id}`}>Placa</label>
-							<Input
-								id={`car-placa-${car.id}`}
-								value={car.placa ?? ''}
-								oninput={(e) => {
-									const next = [...cars];
-									next[i] = { ...car, placa: (e.currentTarget as HTMLInputElement).value };
-									cars = next;
-								}}
-							/>
-						</div>
-						<div>
-							<label class="text-xs text-muted-foreground" for={`car-modelo-${car.id}`}
-								>Modelo</label
-							>
-							<Input
-								id={`car-modelo-${car.id}`}
-								value={car.modelo ?? ''}
-								oninput={(e) => {
-									const next = [...cars];
-									next[i] = { ...car, modelo: (e.currentTarget as HTMLInputElement).value };
-									cars = next;
-								}}
-							/>
-						</div>
-					</div>
-					<div class="flex gap-2">
-						<Button size="sm" onclick={() => handleSaveCar(car)}>Salvar</Button>
-						<Button
-							size="sm"
-							variant="destructive"
-							disabled={cars.length <= 1}
-							onclick={() => {
-								deleteCarTarget = car;
-								deleteCarOpen = true;
-							}}
-						>
-							Remover
-						</Button>
-					</div>
-					<p class="text-[10px] text-muted-foreground">id: {car.id}</p>
-				</div>
-			{/each}
-
-			<div class="space-y-2 rounded-lg border border-dashed border-border p-3">
-				<p class="text-sm font-medium">Novo carro</p>
-				<Input placeholder="Nome" bind:value={newCarName} />
-				<div class="grid grid-cols-2 gap-2">
-					<Input placeholder="Placa" bind:value={newCarPlaca} />
-					<Input placeholder="Modelo" bind:value={newCarModelo} />
-				</div>
-				<Input placeholder="ID (opcional)" bind:value={newCarId} />
-				<Button size="sm" disabled={savingCar} onclick={handleAddCar}>
-					{#if savingCar}
-						<Loader2 class="h-4 w-4 animate-spin" />
-					{:else}
-						<Plus class="h-4 w-4" />
-					{/if}
-					Adicionar
-				</Button>
-			</div>
-		</div>
-	</Sheet.Content>
-</Sheet.Root>
-
-<ConfirmDialog
-	bind:open={deleteRecordOpen}
-	title="Excluir registro?"
-	description="O orçamento e todos os anexos serão removidos permanentemente."
-	confirmLabel="Excluir"
-	onconfirm={confirmDeleteRecord}
-/>
-
-<ConfirmDialog
-	bind:open={deleteCarOpen}
-	title="Remover carro?"
-	description="Os orçamentos deste carro não serão apagados automaticamente."
-	confirmLabel="Remover"
-	onconfirm={confirmDeleteCar}
-/>
-
-<ConfirmDialog
-	bind:open={deleteAttOpen}
-	title="Remover anexo?"
-	description="Este arquivo será apagado. O orçamento (fonte) permanece."
-	confirmLabel="Remover"
-	onconfirm={confirmDeleteAttachment}
-/>
-
-<FilePreviewDialog
-	bind:open={previewOpen}
-	bind:path={previewPath}
-	title={previewTitle}
-	fallbackFilename={previewFallback}
-/>
+		<UploadActions
+			ready={!!editExtracted}
+			processing={uploadPreviewing}
+			saving={uploadSaving}
+			canProcess={!!uploadFile}
+			canSave={!!editExtracted}
+			onprocess={handlePreview}
+			onsave={handleSave}
+			oncancel={() => { uploadOpen = false; clearUpload(); }}
+		/>
+	</Sheet.SheetContent>
+</Sheet.Sheet>

@@ -5,7 +5,7 @@
 	let { class: className, children, ...restProps }: HTMLTableAttributes = $props();
 </script>
 
-<div class="relative w-full overflow-auto">
+<div class="relative w-full overflow-auto bg-card">
 	<table class={cn('w-full caption-bottom text-sm', className)} {...restProps}>
 		{@render children?.()}
 	</table>

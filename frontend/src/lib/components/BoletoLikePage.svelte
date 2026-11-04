@@ -20,7 +20,9 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
-	import UploadProcessButton from '$lib/components/UploadProcessButton.svelte';
+	import UploadActions from '$lib/components/UploadActions.svelte';
+	import UploadSteps from '$lib/components/UploadSteps.svelte';
+	import UploadFiles from '$lib/components/UploadFiles.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -155,7 +157,7 @@
 	// File preview
 	let previewOpen = $state(false);
 	let previewPath = $state<string | null>(null);
-	let previewTitle = $state('Preview');
+	let previewTitle = $state('Visualização');
 	let previewFallback = $state('file');
 
 	// Inline fiscal month edit
@@ -189,7 +191,7 @@
 			items = await listFn(filterMonth || undefined);
 		} catch (e) {
 			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : `Failed to load ${domainLabel}`
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : `Falha ao carregar ${domainLabel}`
 			);
 		} finally {
 			loading = false;
@@ -279,7 +281,7 @@
 			}
 		} catch (e) {
 			if (revision === uploadRevision) {
-				toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Preview failed');
+				toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao processar o documento');
 			}
 		} finally {
 			if (revision === uploadRevision) uploadPreviewing = false;
@@ -289,7 +291,7 @@
 	async function handleSave() {
 		if (!uploadPreview || uploadPreviewing || uploadSaving) return;
 		if (!uploadFile || !uploadFiscalMes) {
-			toast.error('PDF and fiscal month are required');
+			toast.error('Selecione o PDF e o mês fiscal');
 			return;
 		}
 		uploadSaving = true;
@@ -302,12 +304,12 @@
 				uploadReceiptTime || undefined,
 				supplementaryPdfLabel ? uploadExtraPdf ?? undefined : undefined
 			);
-			toast.success(`${domainLabel} saved successfully`);
+			toast.success(`${domainLabel} salvo`);
 			uploadOpen = false;
 			resetUpload();
 			await loadItems();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Save failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao salvar');
 		} finally {
 			uploadSaving = false;
 		}
@@ -342,11 +344,11 @@
 		replacingSupplementaryPdf = true;
 		try {
 			detailItem = await replaceSupplementaryPdfFn(detailItem.id, files[0]);
-			toast.success('Extra PDF updated');
+			toast.success('PDF complementar atualizado');
 			barcodeDiff = null;
 			await loadItems();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Update failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao atualizar');
 		} finally {
 			replacingSupplementaryPdf = false;
 		}
@@ -368,10 +370,10 @@
 		try {
 			await deleteSupplementaryPdfFn(detailItem.id);
 			detailItem = await getFn(detailItem.id);
-			toast.success('Extra PDF removed');
+			toast.success('PDF complementar removido');
 			await loadItems();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Remove failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao remover');
 		} finally {
 			replacingSupplementaryPdf = false;
 		}
@@ -397,10 +399,10 @@
 			resetDetailEdit(detailItem);
 			detailEditing = false;
 			barcodeDiff = null;
-			toast.success(`${domainLabel} reprocessed`);
+			toast.success(`${domainLabel} reprocessado`);
 			await loadItems();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Reprocess failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao reprocessar');
 		} finally {
 			reprocessing = false;
 		}
@@ -461,11 +463,11 @@
 			detailItem = await patchFieldsFn(detailItem.id, payload);
 			detailEditing = false;
 			barcodeDiff = null;
-			toast.success('Fields updated');
+			toast.success('Dados atualizados');
 			await loadItems();
 		} catch (e) {
 			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Save changes failed'
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao salvar alterações'
 			);
 		} finally {
 			detailSaving = false;
@@ -477,7 +479,7 @@
 		try {
 			barcodeDiff = await getBarcodeDiffFn(id);
 		} catch {
-			barcodeDiff = 'Could not load barcode diff.';
+			barcodeDiff = 'Não foi possível comparar os códigos de barras.';
 		} finally {
 			barcodeDiffLoading = false;
 		}
@@ -488,7 +490,7 @@
 			const { blob, filename } = await downloadBlob(path);
 			triggerDownload(blob, filename ?? fallbackName);
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Download failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao baixar');
 		}
 	}
 
@@ -508,11 +510,11 @@
 		replacingPdf = true;
 		try {
 			detailItem = await replacePdfFn(detailItem.id, files[0]);
-			toast.success(`${domainLabel} PDF replaced`);
+			toast.success(`PDF de ${domainLabel} substituído`);
 			barcodeDiff = null;
 			await loadItems();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Replace failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao substituir');
 		} finally {
 			replacingPdf = false;
 		}
@@ -540,7 +542,7 @@
 			}
 		} catch (e) {
 			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Receipt preview failed'
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao processar o recibo'
 			);
 		} finally {
 			replaceReceiptPreviewing = false;
@@ -557,7 +559,7 @@
 				replaceReceiptDate || undefined,
 				replaceReceiptTime || undefined
 			);
-			toast.success('Receipt updated');
+			toast.success('Recibo atualizado');
 			replaceReceiptFile = null;
 			replaceReceiptPreview = null;
 			replaceReceiptDate = '';
@@ -566,7 +568,7 @@
 			barcodeDiff = null;
 			await loadItems();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Receipt update failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao atualizar recibo');
 		} finally {
 			replacingReceipt = false;
 		}
@@ -614,11 +616,11 @@
 	async function saveFm(id: number) {
 		try {
 			await patchFiscalMesFn(id, editingFmValue || null);
-			toast.success('Fiscal month updated');
+			toast.success('Mês fiscal atualizado');
 			editingFmId = null;
 			await loadItems();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Update failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao atualizar');
 		}
 	}
 
@@ -635,11 +637,11 @@
 		if (!deleteTarget) return;
 		try {
 			await deleteFn(deleteTarget.id);
-			toast.success(`${domainLabel} deleted`);
+			toast.success(`${domainLabel} excluído`);
 			deleteTarget = null;
 			await loadItems();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Delete failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao excluir');
 		}
 	}
 
@@ -647,19 +649,19 @@
 		receiptPath: string | null,
 		matchStatus: string | null
 	): { status: 'success' | 'warning' | 'error' | 'neutral'; label: string } {
-		if (!receiptPath) return { status: 'neutral', label: 'No receipt' };
-		if (matchStatus === 'match') return { status: 'success', label: 'Match' };
-		if (matchStatus === 'mismatch') return { status: 'error', label: 'Mismatch' };
-		return { status: 'warning', label: 'Unverified' };
+		if (!receiptPath) return { status: 'neutral', label: 'Sem recibo' };
+		if (matchStatus === 'match') return { status: 'success', label: 'Conferido' };
+		if (matchStatus === 'mismatch') return { status: 'error', label: 'Divergente' };
+		return { status: 'warning', label: 'Não conferido' };
 	}
 </script>
 
 <div class="space-y-6">
-	<PageHeader title={domainLabel} description={`Manage ${domainLabel.toLowerCase()} and receipts`}>
+	<PageHeader title={domainLabel} description={`Documentos de ${domainLabel.toLowerCase()} e recibos de pagamento.`}>
 		{#snippet actions()}
 			<Button onclick={openUpload}>
 				<Plus class="h-4 w-4" />
-				Upload {domainLabel}
+				Enviar {domainLabel}
 			</Button>
 		{/snippet}
 	</PageHeader>
@@ -667,7 +669,7 @@
 	<!-- Filter -->
 	<div class="flex flex-wrap items-end gap-3">
 		<div class="space-y-1">
-			<span class="text-xs font-medium text-muted-foreground">Fiscal Month</span>
+			<span class="text-xs font-medium text-muted-foreground">Mês fiscal</span>
 			<FiscalMonthPicker bind:value={filterMonth} {months} />
 		</div>
 	</div>
@@ -680,7 +682,7 @@
 	{:else if items.length === 0}
 		<Card.Root>
 			<Card.Content class="py-12 text-center">
-				<p class="text-muted-foreground">No {domainLabel.toLowerCase()} found.</p>
+				<p class="text-muted-foreground">Nenhum documento de {domainLabel.toLowerCase()} encontrado.</p>
 			</Card.Content>
 		</Card.Root>
 	{:else}
@@ -689,11 +691,11 @@
 				<Table.TableHeader>
 					<Table.TableRow>
 						{#each [
-							{ key: 'value', label: 'Value' },
-							{ key: 'emission_date', label: 'Emission' },
-							{ key: 'deadline_date', label: 'Deadline' },
-							{ key: 'receipt_match_status', label: 'Receipt' },
-							{ key: 'fiscal_mes', label: 'Fiscal Month' }
+							{ key: 'value', label: 'Valor' },
+							{ key: 'emission_date', label: 'Emissão' },
+							{ key: 'deadline_date', label: 'Vencimento' },
+							{ key: 'receipt_match_status', label: 'Recibo' },
+							{ key: 'fiscal_mes', label: 'Mês fiscal' }
 						] as col}
 							<Table.TableHead>
 								<button
@@ -705,7 +707,7 @@
 								</button>
 							</Table.TableHead>
 						{/each}
-						<Table.TableHead class="w-[100px]">Actions</Table.TableHead>
+						<Table.TableHead class="w-[100px]">Ações</Table.TableHead>
 					</Table.TableRow>
 				</Table.TableHeader>
 				<Table.TableBody>
@@ -746,13 +748,13 @@
 							</Table.TableCell>
 							<Table.TableCell>
 								<div class="flex items-center gap-1">
-									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => openDetail(item)} title="View">
+									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => openDetail(item)} title="Visualizar">
 										<Eye class="h-3.5 w-3.5" />
 									</Button>
-									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => downloadFile(`/${routePrefix}/${item.id}/pdf`, `${routePrefix}_${item.id}.pdf`)} title="Download PDF">
+									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => downloadFile(`/${routePrefix}/${item.id}/pdf`, `${routePrefix}_${item.id}.pdf`)} title="Baixar PDF">
 										<Download class="h-3.5 w-3.5" />
 									</Button>
-									<Button variant="ghost" size="icon" class="h-7 w-7 text-destructive-foreground" onclick={() => confirmDelete(item)} title="Delete">
+									<Button variant="ghost" size="icon" class="h-7 w-7 text-destructive-foreground" onclick={() => confirmDelete(item)} title="Excluir">
 										<Trash2 class="h-3.5 w-3.5" />
 									</Button>
 								</div>
@@ -769,68 +771,67 @@
 <Sheet.Sheet bind:open={uploadOpen} onOpenChange={(o) => { if (!o) resetUpload(); }}>
 	<Sheet.SheetContent side="right">
 		<Sheet.SheetHeader>
-			<Sheet.SheetTitle>Upload {domainLabel}</Sheet.SheetTitle>
-			<Sheet.SheetDescription>Select all files, process documents, review the extracted data, then save.</Sheet.SheetDescription>
+			<Sheet.SheetTitle>Enviar {domainLabel}</Sheet.SheetTitle>
+			<Sheet.SheetDescription>Selecione os arquivos, processe e revise os dados antes de salvar.</Sheet.SheetDescription>
+			<UploadSteps ready={!!uploadPreview} />
 		</Sheet.SheetHeader>
-		<div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-			<!-- Document PDF -->
-			<div class="space-y-2">
-				<span class="text-sm font-medium">{domainLabel} PDF</span>
-				<FileDropZone
-					accept=".pdf,application/pdf"
-					loading={uploadPreviewing || uploadSaving}
-					bind:file={uploadFile}
-					onchange={invalidateUpload}
-					label={`Drop ${domainLabel} PDF here`}
-				/>
-			</div>
-
-			<!-- Receipt (optional) -->
-			<div class="space-y-2">
-				<span class="text-sm font-medium">Receipt Image (optional)</span>
-				<FileDropZone
-					accept="image/*"
-					loading={uploadPreviewing || uploadSaving}
-					bind:file={uploadReceipt}
-					onchange={invalidateUpload}
-					label="Drop receipt image here"
-				/>
-			</div>
-
-			{#if supplementaryPdfLabel}
+		<div class="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-6">
+			<UploadFiles ready={!!uploadPreview} count={[uploadFile, uploadReceipt, uploadExtraPdf].filter(Boolean).length}>
+				<!-- Document PDF -->
 				<div class="space-y-2">
-					<span class="text-sm font-medium">{supplementaryPdfLabel}</span>
-					<p class="text-xs text-muted-foreground">
-						Optional. Stored without data extraction alongside the document above.
-					</p>
+					<span class="text-sm font-medium">{domainLabel} PDF</span>
 					<FileDropZone
 						accept=".pdf,application/pdf"
 						loading={uploadPreviewing || uploadSaving}
-						bind:file={uploadExtraPdf}
+						bind:file={uploadFile}
 						onchange={invalidateUpload}
-						label="Drop extra PDF here"
+						label={`Arraste o PDF de ${domainLabel} ou clique para escolher`}
 					/>
 				</div>
-			{/if}
 
-			{#if !uploadPreview}
-				<UploadProcessButton onclick={handlePreview} loading={uploadPreviewing} disabled={!uploadFile || uploadSaving} />
-			{/if}
+				<!-- Receipt (optional) -->
+				<div class="space-y-2">
+					<span class="text-sm font-medium">Imagem do recibo (opcional)</span>
+					<FileDropZone
+						accept="image/*"
+						loading={uploadPreviewing || uploadSaving}
+						bind:file={uploadReceipt}
+						onchange={invalidateUpload}
+						label="Arraste o recibo ou clique para escolher"
+					/>
+				</div>
+
+				{#if supplementaryPdfLabel}
+					<div class="space-y-2">
+						<span class="text-sm font-medium">{supplementaryPdfLabel}</span>
+						<p class="text-xs text-muted-foreground">
+							Opcional. O arquivo será salvo junto ao documento, sem extração de dados.
+						</p>
+						<FileDropZone
+							accept=".pdf,application/pdf"
+							loading={uploadPreviewing || uploadSaving}
+							bind:file={uploadExtraPdf}
+							onchange={invalidateUpload}
+							label="Arraste o anexo ou clique para escolher"
+						/>
+					</div>
+				{/if}
+			</UploadFiles>
 
 			{#if uploadPreview}
 				<Card.Root>
 					<Card.Header class="pb-3">
-						<Card.Title class="text-sm">Extracted Data</Card.Title>
+						<Card.Title class="text-sm">Dados extraídos</Card.Title>
 					</Card.Header>
 					<Card.Content>
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-							<dt class="text-muted-foreground">Value</dt>
+							<dt class="text-muted-foreground">Valor</dt>
 							<dd class="tabular-nums">{formatBrl(uploadPreview.value)}</dd>
-							<dt class="text-muted-foreground">Emission</dt>
+							<dt class="text-muted-foreground">Emissão</dt>
 							<dd>{formatDateBr(uploadPreview.emission_date)}</dd>
-							<dt class="text-muted-foreground">Deadline</dt>
+							<dt class="text-muted-foreground">Vencimento</dt>
 							<dd>{formatDateBr(uploadPreview.deadline_date)}</dd>
-							<dt class="text-muted-foreground">Barcode</dt>
+							<dt class="text-muted-foreground">Código de barras</dt>
 							<dd class="font-mono text-xs truncate">{uploadPreview.codigo_barras_digits ?? '\u2014'}</dd>
 						</dl>
 					</Card.Content>
@@ -839,15 +840,15 @@
 				{#if uploadReceiptPreview}
 					<Card.Root>
 						<Card.Header class="pb-3">
-							<Card.Title class="text-sm">Receipt Data</Card.Title>
+							<Card.Title class="text-sm">Dados do recibo</Card.Title>
 						</Card.Header>
 						<Card.Content>
 							<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-								<dt class="text-muted-foreground">Value</dt>
+								<dt class="text-muted-foreground">Valor</dt>
 								<dd class="tabular-nums">{formatBrl(uploadReceiptPreview.value)}</dd>
-								<dt class="text-muted-foreground">Date/Time</dt>
+								<dt class="text-muted-foreground">Data e hora</dt>
 								<dd>{uploadReceiptPreview.payment_datetime ?? '\u2014'}</dd>
-								<dt class="text-muted-foreground">Barcode</dt>
+								<dt class="text-muted-foreground">Código de barras</dt>
 								<dd class="font-mono text-xs truncate">{uploadReceiptPreview.codigo_barras_digits ?? '\u2014'}</dd>
 							</dl>
 						</Card.Content>
@@ -857,11 +858,11 @@
 				{#if uploadReceipt}
 					<div class="grid grid-cols-2 gap-3">
 						<div class="space-y-1">
-							<span class="text-xs font-medium text-muted-foreground">Receipt Date</span>
+							<span class="text-xs font-medium text-muted-foreground">Data do recibo</span>
 							<Input type="date" bind:value={uploadReceiptDate} />
 						</div>
 						<div class="space-y-1">
-							<span class="text-xs font-medium text-muted-foreground">Receipt Time</span>
+							<span class="text-xs font-medium text-muted-foreground">Hora do recibo</span>
 							<Input type="time" step="1" bind:value={uploadReceiptTime} />
 						</div>
 					</div>
@@ -869,28 +870,23 @@
 
 				<!-- Fiscal month -->
 				<div class="space-y-2">
-					<span class="text-sm font-medium">Fiscal Month <span class="text-destructive-foreground">*</span></span>
+					<span class="text-sm font-medium">Mês fiscal <span class="text-destructive-foreground">*</span></span>
 					<FiscalMonthPicker bind:value={uploadFiscalMes} {months} />
 				</div>
 			{/if}
 		</div>
 
-		{#if uploadPreview}
-			<Sheet.SheetFooter>
-				<Button
-					onclick={handleSave}
-					disabled={uploadSaving || !uploadFiscalMes}
-					class="w-full sm:w-auto"
-				>
-					{#if uploadSaving}
-						<Loader2 class="h-4 w-4 animate-spin" />
-						Saving...
-					{:else}
-						Save {domainLabel}
-					{/if}
-				</Button>
-			</Sheet.SheetFooter>
-		{/if}
+		<UploadActions
+			ready={!!uploadPreview}
+			processing={uploadPreviewing}
+			saving={uploadSaving}
+			canProcess={!!uploadFile}
+			canSave={!!uploadFiscalMes}
+			onprocess={handlePreview}
+			onsave={handleSave}
+			oncancel={() => { uploadOpen = false; resetUpload(); }}
+		/>
+
 	</Sheet.SheetContent>
 </Sheet.Sheet>
 
@@ -900,7 +896,7 @@
 		<Sheet.SheetHeader class="gap-2 pt-5 pr-14 pb-1">
 			<div class="flex items-start justify-between gap-3">
 				<div class="space-y-1">
-					<Sheet.SheetTitle>{domainLabel} Details</Sheet.SheetTitle>
+					<Sheet.SheetTitle>Detalhes de {domainLabel}</Sheet.SheetTitle>
 					{#if detailItem}
 						<Sheet.SheetDescription>ID: {detailItem.id} &middot; {formatFiscalMes(detailItem.fiscal_mes)}</Sheet.SheetDescription>
 					{/if}
@@ -909,20 +905,20 @@
 					<div class="flex items-center gap-2 shrink-0">
 						{#if detailEditing}
 							<Button variant="outline" size="sm" onclick={cancelDetailEdit} disabled={detailSaving}>
-								Cancel
+								Cancelar
 							</Button>
 							<Button size="sm" onclick={saveDetailEdit} disabled={detailSaving}>
 								{#if detailSaving}
 									<Loader2 class="h-4 w-4 animate-spin" />
-									Saving...
+									Salvando…
 								{:else}
-									Save changes
+									Salvar alterações
 								{/if}
 							</Button>
 						{:else}
 							<Button variant="outline" size="sm" onclick={startDetailEdit}>
 								<Pencil class="h-4 w-4" />
-								Edit fields
+								Editar dados
 							</Button>
 						{/if}
 					</div>
@@ -937,22 +933,22 @@
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
 								<FileText class="h-4 w-4 text-muted-foreground" />
-								<Card.Title class="text-sm">{domainLabel} Document</Card.Title>
+								<Card.Title class="text-sm">Documento de {domainLabel}</Card.Title>
 							{#if reprocessFn}
 								<Button
 									variant="ghost"
 									size="sm"
 									class="h-7 px-2 text-xs"
-									title={`Reprocess stored ${domainLabel.toLowerCase()} files`}
+									title={`Reprocessar arquivos de ${domainLabel.toLowerCase()}`}
 									onclick={handleReprocess}
 									disabled={reprocessing || replacingPdf || detailSaving || detailEditing}
 								>
 									{#if reprocessing}
 										<Loader2 class="h-3.5 w-3.5 animate-spin" />
-										Reprocessing...
+										Reprocessando…
 									{:else}
 										<RefreshCw class="h-3.5 w-3.5" />
-										Reprocess
+										Reprocessar
 									{/if}
 								</Button>
 							{/if}
@@ -960,7 +956,7 @@
 									variant="ghost"
 									size="icon"
 									class="h-7 w-7"
-									title={`Replace ${domainLabel} PDF`}
+									title={`Substituir PDF de ${domainLabel}`}
 									onclick={openReplacePdfPicker}
 									disabled={replacingPdf}
 								>
@@ -982,17 +978,17 @@
 											`${domainLabel} #${detailItem!.id} PDF`,
 											`${routePrefix}_${detailItem!.id}.pdf`
 										)}
-									title="View PDF"
+									title="Ver PDF"
 								>
 									<Eye class="h-3.5 w-3.5" />
-									View
+									Visualizar
 								</Button>
 								<Button
 									variant="outline"
 									size="sm"
 									class="h-7 text-xs"
 									onclick={() => downloadFile(`/${routePrefix}/${detailItem!.id}/pdf`, `${routePrefix}_${detailItem!.id}.pdf`)}
-									title="Download PDF"
+									title="Baixar PDF"
 								>
 									<Download class="h-3.5 w-3.5" />
 									PDF
@@ -1002,7 +998,7 @@
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-							<dt class="text-muted-foreground">Value</dt>
+							<dt class="text-muted-foreground">Valor</dt>
 							<dd class="tabular-nums font-medium">
 								{#if detailEditing}
 									<Input type="number" step="0.01" bind:value={detailValue} class="h-8 text-xs" />
@@ -1010,7 +1006,7 @@
 									{formatBrl(detailItem.value)}
 								{/if}
 							</dd>
-							<dt class="text-muted-foreground">Emission</dt>
+							<dt class="text-muted-foreground">Emissão</dt>
 							<dd class="tabular-nums">
 								{#if detailEditing}
 									<Input type="text" bind:value={detailEmissionDate} placeholder="DD/MM/YYYY" class="h-8 text-xs" />
@@ -1018,7 +1014,7 @@
 									{formatDateBr(detailItem.emission_date)}
 								{/if}
 							</dd>
-							<dt class="text-muted-foreground">Deadline</dt>
+							<dt class="text-muted-foreground">Vencimento</dt>
 							<dd class="tabular-nums">
 								{#if detailEditing}
 									<Input type="text" bind:value={detailDeadlineDate} placeholder="DD/MM/YYYY" class="h-8 text-xs" />
@@ -1026,7 +1022,7 @@
 									{formatDateBr(detailItem.deadline_date)}
 								{/if}
 							</dd>
-							<dt class="text-muted-foreground">Barcode</dt>
+							<dt class="text-muted-foreground">Código de barras</dt>
 							<dd class="font-mono text-xs break-all">
 								{#if detailEditing}
 									<Input type="text" bind:value={detailCodigoBarrasDigits} class="h-8 text-xs font-mono" />
@@ -1034,7 +1030,7 @@
 									{detailItem.codigo_barras_digits ?? '\u2014'}
 								{/if}
 							</dd>
-							<dt class="text-muted-foreground">Barcode (Raw)</dt>
+							<dt class="text-muted-foreground">Código de barras (original)</dt>
 							<dd class="font-mono text-xs break-all">
 								{#if detailEditing}
 									<Input type="text" bind:value={detailCodigoBarras} class="h-8 text-xs font-mono" />
@@ -1042,7 +1038,7 @@
 									{detailItem.codigo_barras ?? '\u2014'}
 								{/if}
 							</dd>
-							<dt class="text-muted-foreground">Fiscal Month</dt>
+							<dt class="text-muted-foreground">Mês fiscal</dt>
 							<dd>
 								{#if detailEditing}
 									<FiscalMonthPicker bind:value={detailFiscalMes} {months} />
@@ -1050,9 +1046,9 @@
 									{formatFiscalMes(detailItem.fiscal_mes)}
 								{/if}
 							</dd>
-							<dt class="text-muted-foreground">Created</dt>
+							<dt class="text-muted-foreground">Criado em</dt>
 							<dd class="text-xs">{detailItem.created_at ?? '\u2014'}</dd>
-							<dt class="text-muted-foreground">Updated</dt>
+							<dt class="text-muted-foreground">Atualizado em</dt>
 							<dd class="text-xs">{detailItem.updated_at ?? '\u2014'}</dd>
 						</dl>
 					</Card.Content>
@@ -1076,7 +1072,7 @@
 										variant="ghost"
 										size="icon"
 										class="h-7 w-7"
-										title={detailItem.attachment_pdf_path ? 'Replace extra PDF' : 'Add extra PDF'}
+										title={detailItem.attachment_pdf_path ? 'Substituir PDF complementar' : 'Adicionar PDF complementar'}
 										onclick={openReplaceSupplementaryPdfPicker}
 										disabled={replacingSupplementaryPdf || detailEditing}
 									>
@@ -1097,13 +1093,13 @@
 											onclick={() =>
 												openPreview(
 													`/${routePrefix}/${detailItem!.id}/attachment-pdf`,
-													`${supplementaryPdfLabel ?? 'Extra PDF'} #${detailItem!.id}`,
+													`${supplementaryPdfLabel ?? 'PDF complementar'} #${detailItem!.id}`,
 													`${routePrefix}_${detailItem!.id}_extra.pdf`
 												)}
-											title="View PDF"
+											title="Ver PDF"
 										>
 											<Eye class="h-3.5 w-3.5" />
-											View
+											Visualizar
 										</Button>
 										<Button
 											variant="outline"
@@ -1115,7 +1111,7 @@
 													`/${routePrefix}/${detailItem!.id}/attachment-pdf`,
 													`${routePrefix}_${detailItem!.id}_extra.pdf`
 												)}
-											title="Download PDF"
+											title="Baixar PDF"
 										>
 											<Download class="h-3.5 w-3.5" />
 											PDF
@@ -1128,7 +1124,7 @@
 												disabled={replacingSupplementaryPdf}
 												onclick={handleDeleteSupplementaryPdf}
 											>
-												Remove
+												Remover
 											</Button>
 										{/if}
 									{/if}
@@ -1137,10 +1133,10 @@
 						</Card.Header>
 						<Card.Content>
 							<p class="text-xs text-muted-foreground">
-								Optional document stored as-is without parsing.
+								Anexo opcional, salvo sem extração de dados.
 							</p>
 							{#if !detailItem.attachment_pdf_path}
-								<p class="text-sm text-muted-foreground mt-2">No extra PDF uploaded.</p>
+								<p class="text-sm text-muted-foreground mt-2">Nenhum PDF complementar anexado.</p>
 							{/if}
 						</Card.Content>
 						<input
@@ -1159,12 +1155,12 @@
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
 								<Receipt class="h-4 w-4 text-muted-foreground" />
-								<Card.Title class="text-sm">Receipt</Card.Title>
+								<Card.Title class="text-sm">Recibo</Card.Title>
 								<Button
 									variant="ghost"
 									size="icon"
 									class="h-7 w-7"
-									title={detailItem.receipt_path ? 'Replace receipt image' : 'Add receipt image'}
+									title={detailItem.receipt_path ? 'Substituir imagem do recibo' : 'Adicionar imagem do recibo'}
 									onclick={openReplaceReceiptPicker}
 									disabled={replacingReceipt || replaceReceiptPreviewing}
 								>
@@ -1189,17 +1185,17 @@
 												`Receipt #${detailItem!.id}`,
 												`receipt_${detailItem!.id}`
 											)}
-										title="View receipt"
+										title="Ver recibo"
 									>
 										<Eye class="h-3.5 w-3.5" />
-										View
+										Visualizar
 									</Button>
 									<Button
 										variant="outline"
 										size="sm"
 										class="h-7 text-xs"
 										onclick={() => downloadFile(`/${routePrefix}/${detailItem!.id}/receipt`, `receipt_${detailItem!.id}`)}
-										title="Download receipt"
+										title="Baixar recibo"
 									>
 										<Download class="h-3.5 w-3.5" />
 										Image
@@ -1211,7 +1207,7 @@
 					<Card.Content class="space-y-4">
 						{#if detailItem.receipt_path}
 							<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-								<dt class="text-muted-foreground">Value</dt>
+								<dt class="text-muted-foreground">Valor</dt>
 								<dd class="tabular-nums">
 									{#if detailEditing}
 										<Input type="number" step="0.01" bind:value={detailReceiptValue} class="h-8 text-xs" />
@@ -1219,7 +1215,7 @@
 										{formatBrl(detailItem.receipt_value)}
 									{/if}
 								</dd>
-								<dt class="text-muted-foreground">Date</dt>
+								<dt class="text-muted-foreground">Data</dt>
 								<dd>
 									{#if detailEditing}
 										<Input type="text" bind:value={detailReceiptDate} placeholder="DD/MM/YYYY HH:MM:SS" class="h-8 text-xs" />
@@ -1227,7 +1223,7 @@
 										{formatDateBr(detailItem.receipt_date)}
 									{/if}
 								</dd>
-								<dt class="text-muted-foreground">Barcode</dt>
+								<dt class="text-muted-foreground">Código de barras</dt>
 								<dd class="font-mono text-xs break-all">
 									{#if detailEditing}
 										<Input type="text" bind:value={detailReceiptCodigoBarrasDigits} class="h-8 text-xs font-mono" />
@@ -1235,7 +1231,7 @@
 										{detailItem.receipt_codigo_barras_digits ?? '\u2014'}
 									{/if}
 								</dd>
-								<dt class="text-muted-foreground">Barcode (Raw)</dt>
+								<dt class="text-muted-foreground">Código de barras (original)</dt>
 								<dd class="font-mono text-xs break-all">
 									{#if detailEditing}
 										<Input type="text" bind:value={detailReceiptCodigoBarras} class="h-8 text-xs font-mono" />
@@ -1254,7 +1250,7 @@
 											onclick={() => loadBarcodeDiff(detailItem!.id)}
 										>
 											<FileWarning class="h-4 w-4" />
-											View Barcode Diff
+											Comparar códigos de barras
 										</Button>
 									{:else if barcodeDiffLoading}
 										<Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
@@ -1264,7 +1260,7 @@
 								</div>
 							{/if}
 						{:else}
-							<p class="text-sm text-muted-foreground">No receipt attached.</p>
+							<p class="text-sm text-muted-foreground">Nenhum recibo anexado.</p>
 						{/if}
 
 						{#if showReplaceReceiptForm}
@@ -1272,7 +1268,7 @@
 								<div class="flex items-center justify-between">
 									<span class="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
 										<RefreshCw class="h-3 w-3" />
-										{detailItem.receipt_path ? 'Replace Receipt' : 'Add Receipt'}
+										{detailItem.receipt_path ? 'Substituir recibo' : 'Adicionar recibo'}
 									</span>
 									<Button variant="outline" size="sm" class="h-7 text-xs" onclick={openReplaceReceiptPicker}>
 										Choose Image
@@ -1282,11 +1278,11 @@
 								{#if replaceReceiptPreview}
 									<div class="rounded-md border p-3 space-y-2">
 										<dl class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-											<dt class="text-muted-foreground">Value</dt>
+											<dt class="text-muted-foreground">Valor</dt>
 											<dd class="tabular-nums">{formatBrl(replaceReceiptPreview.value)}</dd>
-											<dt class="text-muted-foreground">Date/Time</dt>
+											<dt class="text-muted-foreground">Data e hora</dt>
 											<dd>{replaceReceiptPreview.payment_datetime ?? '\u2014'}</dd>
-											<dt class="text-muted-foreground">Barcode</dt>
+											<dt class="text-muted-foreground">Código de barras</dt>
 											<dd class="font-mono break-all">{replaceReceiptPreview.codigo_barras_digits ?? '\u2014'}</dd>
 										</dl>
 									</div>
@@ -1295,11 +1291,11 @@
 								{#if replaceReceiptFile}
 									<div class="grid grid-cols-2 gap-3">
 										<div class="space-y-1">
-											<span class="text-xs font-medium text-muted-foreground">Receipt Date</span>
+											<span class="text-xs font-medium text-muted-foreground">Data do recibo</span>
 											<Input type="date" bind:value={replaceReceiptDate} class="h-8 text-xs" />
 										</div>
 										<div class="space-y-1">
-											<span class="text-xs font-medium text-muted-foreground">Receipt Time</span>
+											<span class="text-xs font-medium text-muted-foreground">Hora do recibo</span>
 											<Input type="time" step="1" bind:value={replaceReceiptTime} class="h-8 text-xs" />
 										</div>
 									</div>
@@ -1312,9 +1308,9 @@
 										>
 											{#if replacingReceipt}
 												<Loader2 class="h-4 w-4 animate-spin" />
-												Saving...
+												Salvando…
 											{:else}
-												Save Receipt
+												Salvar recibo
 											{/if}
 										</Button>
 										<Button
@@ -1324,7 +1320,7 @@
 											onclick={cancelReplaceReceipt}
 											disabled={replacingReceipt}
 										>
-											Cancel
+											Cancelar
 										</Button>
 									</div>
 								{/if}
@@ -1355,7 +1351,7 @@
 <!-- Delete confirmation -->
 <ConfirmDialog
 	bind:open={deleteDialogOpen}
-	title={`Delete ${domainLabel}`}
-	description={`This will permanently remove the ${domainLabel.toLowerCase()}, its PDF, and receipt.`}
+	title={`Excluir ${domainLabel}`}
+	description={`O documento de ${domainLabel.toLowerCase()}, o PDF e o recibo serão excluídos.`}
 	onconfirm={handleDelete}
 />

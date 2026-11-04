@@ -4,9 +4,9 @@
 
 	let {
 		open = $bindable(false),
-		title = 'Are you sure?',
-		description = 'This action cannot be undone.',
-		confirmLabel = 'Delete',
+		title = 'Confirmar exclusão?',
+		description = 'Esta ação não pode ser desfeita.',
+		confirmLabel = 'Excluir',
 		onconfirm
 	}: {
 		open?: boolean;
@@ -36,9 +36,9 @@
 			<Dialog.Description>{description}</Dialog.Description>
 		</Dialog.Header>
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
+			<Button variant="outline" onclick={() => (open = false)}>Cancelar</Button>
 			<Button variant="destructive" onclick={handleConfirm} disabled={loading}>
-				{loading ? 'Deleting...' : confirmLabel}
+				{loading ? 'Excluindo…' : confirmLabel}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

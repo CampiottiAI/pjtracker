@@ -22,7 +22,7 @@
 	listFn={listIrpjCsll}
 	parsePreviewFn={irpjCsllParsePreview}
 	createFn={createIrpjCsll}
-	supplementaryPdfLabel="Extra PDF"
+	supplementaryPdfLabel="PDF complementar"
 	replaceSupplementaryPdfFn={updateIrpjCsllAttachmentPdf}
 	deleteSupplementaryPdfFn={deleteIrpjCsllAttachmentPdf}
 	deleteFn={deleteIrpjCsll}

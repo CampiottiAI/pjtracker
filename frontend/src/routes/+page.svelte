@@ -298,10 +298,10 @@
 
 	const withdrawProgressFillClass = $derived(
 		withdrawZone === 'over'
-			? 'bg-red-500'
-			: withdrawZone === 'safe'
-				? 'bg-emerald-600'
-				: 'bg-amber-500'
+			? 'bg-destructive-foreground'
+			: withdrawZone === 'safe' && saquesPct < 90
+				? 'bg-muted-foreground/60'
+				: 'bg-warning'
 	);
 
 	const incomeLeftover = $derived(
@@ -314,12 +314,12 @@
 		if (coverage.covers_household) {
 			return {
 				text: `Sobram do saque ${formatBrl(coverage.surplus_brl)}`,
-				class: 'text-emerald-400'
+				class: 'text-muted-foreground'
 			};
 		}
 		return {
 			text: `Faltam ${formatBrl(coverage.shortfall_brl)}`,
-			class: 'text-amber-400'
+			class: 'text-warning'
 		};
 	});
 
@@ -350,7 +350,7 @@
 						href: `/nfs?fiscal_mes=${selectedMonth}`
 					},
 					{
-						label: 'Boletos c/ Recibo',
+						label: 'Boleto',
 						icon: Receipt,
 						count: fluxo.completeness.boletos_with_receipt_count,
 						ok: fluxo.completeness.boletos_ok,
@@ -358,7 +358,7 @@
 						href: `/boletos?fiscal_mes=${selectedMonth}`
 					},
 					{
-						label: 'DARFs c/ Recibo',
+						label: 'DARF',
 						icon: Landmark,
 						count: fluxo.completeness.darfs_with_receipt_count,
 						ok: fluxo.completeness.darfs_ok,
@@ -368,7 +368,7 @@
 					...(fluxo.completeness.irpj_csll_required
 						? [
 								{
-									label: 'IRPJ/CSLL c/ Recibo',
+									label: 'IRPJ/CSLL',
 									icon: Landmark,
 									count: fluxo.completeness.irpj_csll_with_receipt_count,
 									ok: fluxo.completeness.irpj_csll_ok,
@@ -390,13 +390,15 @@
 	);
 </script>
 
-<div class="space-y-6">
+<div class="space-y-5">
 	<PageHeader
 		title="Fluxo"
 		description="Receita, saques e sobra do mês."
 	>
 		{#snippet actions()}
 			<Button
+				variant="outline"
+				size="sm"
 				onclick={() => {
 					createMonthValue = selectedMonth || getCurrentMonthValue();
 					createDialogOpen = true;
@@ -417,7 +419,7 @@
 		{:else if months.length > 0}
 			<select
 				id="fluxo-month"
-				class="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+				class="flex h-9 rounded-md border border-input bg-inset px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 				bind:value={selectedMonth}
 			>
 				{#each months as m}
@@ -438,12 +440,12 @@
 		{/if}
 
 		{#if fluxo}
-			<Badge variant={fluxo.casa.saved ? 'default' : 'outline'}>
+			<Badge variant="outline" class="text-muted-foreground">
 				Casa: {fluxo.casa.saved ? 'salva' : 'em aberto'}
 			</Badge>
 			<Badge
-				variant={fluxo.completeness.month_complete ? 'default' : 'outline'}
-				class={fluxo.completeness.month_complete ? '' : 'border-amber-500/50 text-amber-400'}
+				variant="outline"
+				class={fluxo.completeness.month_complete ? 'text-muted-foreground' : 'border-warning/30 text-warning'}
 			>
 				Documentos:
 				{fluxo.completeness.month_complete
@@ -497,6 +499,8 @@
 				</div>
 				{#if activeSummary.over_target_brl > 0}
 					<p class="text-xs text-destructive-foreground">{formatBrl(activeSummary.over_target_brl)} acima do teto</p>
+				{:else if saquesPct >= 90}
+					<p class="text-xs text-warning">Próximo do teto · {formatBrl(Math.max(0, ceilingBrl - activeSummary.total_brl))} disponíveis para saque</p>
 				{/if}
 				{#if saqueLeftover}
 					<div class="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
@@ -510,33 +514,31 @@
 			</div>
 		</section>
 
-		<div>
-			<h2 class="mb-3 text-sm font-medium">Documentos fiscais</h2>
-			<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-				{#each checks as item}
-					<a href={item.href} class="block group">
-						<Card.Root class="transition-colors group-hover:border-muted-foreground/30">
-							<Card.Content class="flex items-center justify-between py-3">
-								<div class="flex items-center gap-2">
-									<item.icon class="h-4 w-4 text-muted-foreground" />
-									<span class="text-sm font-medium">{item.label}</span>
-								</div>
-								<div class="flex items-center gap-2">
-									<span class="text-sm tabular-nums">
-										{item.count}/{item.required}
-									</span>
-									{#if item.ok}
-										<CheckCircle2 class="h-4 w-4 text-emerald-400" />
-									{:else}
-										<AlertCircle class="h-4 w-4 text-amber-400" />
-									{/if}
-								</div>
-							</Card.Content>
-						</Card.Root>
-					</a>
-				{/each}
+		<section aria-labelledby="documents-heading" class="space-y-2">
+			<div class="flex items-center justify-between gap-3">
+				<h2 id="documents-heading" class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Documentos do mês</h2>
+				<a href="/documentos" class="text-xs text-muted-foreground hover:text-primary">Ver documentos →</a>
 			</div>
-		</div>
+			<ul class="grid divide-y divide-border overflow-hidden rounded-lg border border-border sm:grid-cols-2 sm:divide-y-0 lg:flex lg:flex-wrap">
+				{#each checks as item}
+					<li class="min-w-0 lg:flex-1">
+						<a href={item.href} class="flex items-center justify-between gap-3 px-4 py-3 text-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+							<span class="flex items-center gap-2">
+								{#if item.ok}
+									<CheckCircle2 class="h-4 w-4 text-muted-foreground/60" />
+								{:else}
+									<AlertCircle class="h-4 w-4 text-warning" />
+								{/if}
+								{item.label}
+							</span>
+							<span class={cn('text-xs tabular-nums', item.ok ? 'text-muted-foreground' : 'text-warning')}>
+								<span class="sr-only">{item.ok ? 'Completo' : 'Pendente'}: </span>{item.count}/{item.required}
+							</span>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</section>
 
 		<div class="grid gap-4 md:grid-cols-2">
 			<Card.Root>
@@ -567,10 +569,10 @@
 						</p>
 					{/if}
 					<div class="flex gap-2 pt-1">
-						<a href="/extratos?fiscal_mes={selectedMonth}" class="text-sm text-chart-1 hover:underline">
+						<a href="/extratos?fiscal_mes={selectedMonth}" class="text-sm text-primary hover:underline">
 							Extratos
 						</a>
-						<a href="/analytics" class="text-sm text-chart-1 hover:underline">Analytics</a>
+						<a href="/analytics" class="text-sm text-primary hover:underline">Análises</a>
 					</div>
 				</Card.Content>
 			</Card.Root>
@@ -599,13 +601,13 @@
 					{/if}
 					{#each fluxo.casa.reimbursements as reimb, i}
 						{#if reimb > 0}
-							<div class="flex items-center gap-2 text-sm text-amber-400">
+							<div class="flex items-center gap-2 text-sm text-warning">
 								<AlertCircle class="h-4 w-4 shrink-0" />
 								{fluxo.casa.person_names[i]} deve receber {formatBrl(reimb)}
 							</div>
 						{/if}
 					{/each}
-					<a href="/casa?mes={selectedMonth}" class="text-sm text-chart-1 hover:underline">
+					<a href="/casa?mes={selectedMonth}" class="text-sm text-primary hover:underline">
 						{fluxo.casa.saved ? 'Ver / editar casa' : `Fechar a casa de ${formatFiscalMes(selectedMonth)}`}
 					</a>
 				</Card.Content>
@@ -619,8 +621,7 @@
 					<Card.Title>Saques</Card.Title>
 				</div>
 				<Card.Description>
-					Registre saques em BRL. A barra acima compara saques com o que você gastou na casa e a receita do
-					mês anterior, com teto de {formatBrl(ceilingBrl)}.
+					Registre e acompanhe os saques de {formatFiscalMes(selectedMonth)}.
 				</Card.Description>
 			</Card.Header>
 			<Card.Content class="space-y-4">

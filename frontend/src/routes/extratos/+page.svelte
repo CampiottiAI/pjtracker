@@ -25,7 +25,9 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
-	import UploadProcessButton from '$lib/components/UploadProcessButton.svelte';
+	import UploadActions from '$lib/components/UploadActions.svelte';
+	import UploadSteps from '$lib/components/UploadSteps.svelte';
+	import UploadFiles from '$lib/components/UploadFiles.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -80,7 +82,7 @@
 	// File preview
 	let previewOpen = $state(false);
 	let previewPath = $state<string | null>(null);
-	let previewTitle = $state('Preview');
+	let previewTitle = $state('Visualização');
 	let previewFallback = $state('file');
 
 	// Inline fiscal month edit
@@ -124,7 +126,7 @@
 			extratos = await listExtratos(filterMonth || undefined);
 		} catch (e) {
 			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to load extratos'
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao carregar extratos'
 			);
 		} finally {
 			loading = false;
@@ -202,14 +204,14 @@
 
 	function warnIfProLaboreMissing(entries: Record<string, unknown>[]): void {
 		if (hasExpectedProLabore(entries)) return;
-		toast.warning('Pro-Labore value 1.442,69 not found in this extrato');
+		toast.warning('Pró-labore de R$ 1.442,69 não encontrado neste extrato');
 	}
 
 	async function handlePreview() {
 		if (uploadPreviewing || uploadSaving) return;
 		const revision = uploadRevision;
 		if (!uploadExtrato) {
-			toast.error('Extrato PDF is required');
+			toast.error('Selecione o PDF do extrato');
 			return;
 		}
 		uploadPreview = null;
@@ -226,7 +228,7 @@
 		} catch (e) {
 			if (revision !== uploadRevision) return;
 			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Preview failed'
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao processar o documento'
 			);
 		} finally {
 			if (revision === uploadRevision) uploadPreviewing = false;
@@ -236,7 +238,7 @@
 	async function handleSave() {
 		if (!uploadPreview || uploadPreviewing || uploadSaving) return;
 		if (!uploadExtrato || !uploadFiscalMes) {
-			toast.error('Extrato PDF and fiscal month are required');
+			toast.error('Selecione o extrato e o mês fiscal');
 			return;
 		}
 		if (uploadPreview) {
@@ -250,12 +252,12 @@
 				uploadCaixinha ?? undefined,
 				uploadHiglobe ?? undefined
 			);
-			toast.success('Extrato saved successfully');
+			toast.success('Extrato salvo');
 			uploadOpen = false;
 			resetUpload();
 			await loadExtratos();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Save failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao salvar');
 		} finally {
 			uploadSaving = false;
 		}
@@ -302,7 +304,7 @@
 			const { blob, filename } = await downloadBlob(path);
 			triggerDownload(blob, filename ?? fallbackName);
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Download failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao baixar');
 		}
 	}
 
@@ -322,12 +324,12 @@
 		replacingExtrato = true;
 		try {
 			const updated = await updateExtratoPdf(detailItem.id, files[0]);
-			toast.success('Extrato PDF replaced');
+			toast.success('PDF do extrato substituído');
 			warnIfProLaboreMissing(parseJsonField(updated.extrato_entries_json));
 			await refreshDetail(detailItem.id);
 			await loadExtratos();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Replace failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao substituir');
 		} finally {
 			replacingExtrato = false;
 		}
@@ -338,11 +340,11 @@
 		replacingCaixinha = true;
 		try {
 			await updateCaixinhaPdf(detailItem.id, files[0]);
-			toast.success('Caixinha PDF updated');
+			toast.success('PDF da caixinha atualizado');
 			await refreshDetail(detailItem.id);
 			await loadExtratos();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Upload failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao enviar');
 		} finally {
 			replacingCaixinha = false;
 		}
@@ -353,11 +355,11 @@
 		replacingHiglobe = true;
 		try {
 			await updateHiglobePdf(detailItem.id, files[0]);
-			toast.success('Higlobe PDF updated');
+			toast.success('PDF Higlobe atualizado');
 			await refreshDetail(detailItem.id);
 			await loadExtratos();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Upload failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao enviar');
 		} finally {
 			replacingHiglobe = false;
 		}
@@ -367,11 +369,11 @@
 		if (!detailItem) return;
 		try {
 			await deleteCaixinha(detailItem.id);
-			toast.success('Caixinha removed');
+			toast.success('Caixinha removida');
 			await refreshDetail(detailItem.id);
 			await loadExtratos();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Remove failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao remover');
 		}
 	}
 
@@ -379,11 +381,11 @@
 		if (!detailItem) return;
 		try {
 			await deleteHiglobe(detailItem.id);
-			toast.success('Higlobe removed');
+			toast.success('Higlobe removido');
 			await refreshDetail(detailItem.id);
 			await loadExtratos();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Remove failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao remover');
 		}
 	}
 
@@ -429,11 +431,11 @@
 	async function saveFm(id: number) {
 		try {
 			await patchExtratoFiscalMes(id, editingFmValue || null);
-			toast.success('Fiscal month updated');
+			toast.success('Mês fiscal atualizado');
 			editingFmId = null;
 			await loadExtratos();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Update failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao atualizar');
 		}
 	}
 
@@ -450,21 +452,21 @@
 		if (!deleteTarget) return;
 		try {
 			await deleteExtrato(deleteTarget.id);
-			toast.success('Extrato deleted');
+			toast.success('Extrato excluído');
 			deleteTarget = null;
 			await loadExtratos();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Delete failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao excluir');
 		}
 	}
 </script>
 
 <div class="space-y-6">
-	<PageHeader title="Extratos" description="Manage bank statements, caixinha and higlobe">
+	<PageHeader title="Extratos" description="Extratos bancários e seus anexos.">
 		{#snippet actions()}
 			<Button onclick={openUpload}>
 				<Plus class="h-4 w-4" />
-				Upload Extrato
+				Enviar extrato
 			</Button>
 		{/snippet}
 	</PageHeader>
@@ -472,7 +474,7 @@
 	<!-- Filter -->
 	<div class="flex flex-wrap items-end gap-3">
 		<div class="space-y-1">
-			<span class="text-xs font-medium text-muted-foreground">Fiscal Month</span>
+			<span class="text-xs font-medium text-muted-foreground">Mês fiscal</span>
 			<FiscalMonthPicker bind:value={filterMonth} {months} />
 		</div>
 	</div>
@@ -485,7 +487,7 @@
 	{:else if extratos.length === 0}
 		<Card.Root>
 			<Card.Content class="py-12 text-center">
-				<p class="text-muted-foreground">No extratos found.</p>
+				<p class="text-muted-foreground">Nenhum extrato encontrado.</p>
 			</Card.Content>
 		</Card.Root>
 	{:else}
@@ -494,12 +496,12 @@
 				<Table.TableHeader>
 					<Table.TableRow>
 						{#each [
-							{ key: 'period_start', label: 'Period' },
+							{ key: 'period_start', label: 'Período' },
 							{ key: 'saldo_final', label: 'Saldo Final' },
 							{ key: 'pro_labore', label: 'Pro-Labore' },
 							{ key: 'caixinha_pdf_path', label: 'Caixinha' },
 							{ key: 'higlobe_pdf_path', label: 'Higlobe' },
-							{ key: 'fiscal_mes', label: 'Fiscal Month' }
+							{ key: 'fiscal_mes', label: 'Mês fiscal' }
 						] as col}
 							<Table.TableHead>
 								<button
@@ -511,7 +513,7 @@
 								</button>
 							</Table.TableHead>
 						{/each}
-						<Table.TableHead class="w-[100px]">Actions</Table.TableHead>
+						<Table.TableHead class="w-[100px]">Ações</Table.TableHead>
 					</Table.TableRow>
 				</Table.TableHeader>
 				<Table.TableBody>
@@ -524,19 +526,19 @@
 							<Table.TableCell>
 								<StatusBadge
 									status={hasExpectedProLaboreFromJson(item.extrato_entries_json) ? 'success' : 'warning'}
-									label={hasExpectedProLaboreFromJson(item.extrato_entries_json) ? 'Found' : 'Missing'}
+									label={hasExpectedProLaboreFromJson(item.extrato_entries_json) ? 'Encontrado' : 'Não encontrado'}
 								/>
 							</Table.TableCell>
 							<Table.TableCell>
 								<StatusBadge
 									status={item.caixinha_pdf_path ? 'success' : 'neutral'}
-									label={item.caixinha_pdf_path ? 'Yes' : 'No'}
+									label={item.caixinha_pdf_path ? 'Sim' : 'Não'}
 								/>
 							</Table.TableCell>
 							<Table.TableCell>
 								<StatusBadge
 									status={item.higlobe_pdf_path ? 'success' : 'neutral'}
-									label={item.higlobe_pdf_path ? 'Yes' : 'No'}
+									label={item.higlobe_pdf_path ? 'Sim' : 'Não'}
 								/>
 							</Table.TableCell>
 							<Table.TableCell>
@@ -567,13 +569,13 @@
 							</Table.TableCell>
 							<Table.TableCell>
 								<div class="flex items-center gap-1">
-									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => openDetail(item)} title="View">
+									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => openDetail(item)} title="Visualizar">
 										<Eye class="h-3.5 w-3.5" />
 									</Button>
-									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => downloadFile(`/extratos/${item.id}/extrato-pdf`, `extrato_${item.id}.pdf`)} title="Download">
+									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => downloadFile(`/extratos/${item.id}/extrato-pdf`, `extrato_${item.id}.pdf`)} title="Baixar">
 										<Download class="h-3.5 w-3.5" />
 									</Button>
-									<Button variant="ghost" size="icon" class="h-7 w-7 text-destructive-foreground" onclick={() => confirmDelete(item)} title="Delete">
+									<Button variant="ghost" size="icon" class="h-7 w-7 text-destructive-foreground" onclick={() => confirmDelete(item)} title="Excluir">
 										<Trash2 class="h-3.5 w-3.5" />
 									</Button>
 								</div>
@@ -590,45 +592,44 @@
 <Sheet.Sheet bind:open={uploadOpen} onOpenChange={(o) => { if (!o) resetUpload(); }}>
 	<Sheet.SheetContent side="right">
 		<Sheet.SheetHeader>
-			<Sheet.SheetTitle>Upload Extrato</Sheet.SheetTitle>
-			<Sheet.SheetDescription>Select all files, process documents, review the extracted data, then save.</Sheet.SheetDescription>
+			<Sheet.SheetTitle>Enviar extrato</Sheet.SheetTitle>
+			<Sheet.SheetDescription>Selecione os arquivos, processe e revise os dados antes de salvar.</Sheet.SheetDescription>
+			<UploadSteps ready={!!uploadPreview} />
 		</Sheet.SheetHeader>
-		<div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-			<!-- Three file zones -->
-			<div class="space-y-2">
-				<span class="text-sm font-medium">Extrato PDF <span class="text-destructive-foreground">*</span></span>
-				<FileDropZone
-					accept=".pdf,application/pdf"
-					bind:file={uploadExtrato}
-					loading={uploadPreviewing || uploadSaving}
-					onchange={invalidateUpload}
-					label="Drop extrato PDF here"
-				/>
-			</div>
-			<div class="space-y-2">
-				<span class="text-sm font-medium">Caixinha PDF (optional)</span>
-				<FileDropZone
-					accept=".pdf,application/pdf"
-					bind:file={uploadCaixinha}
-					loading={uploadPreviewing || uploadSaving}
-					onchange={invalidateUpload}
-					label="Drop caixinha PDF here"
-				/>
-			</div>
-			<div class="space-y-2">
-				<span class="text-sm font-medium">Higlobe PDF (optional)</span>
-				<FileDropZone
-					accept=".pdf,application/pdf"
-					bind:file={uploadHiglobe}
-					loading={uploadPreviewing || uploadSaving}
-					onchange={invalidateUpload}
-					label="Drop higlobe PDF here"
-				/>
-			</div>
-
-			{#if !uploadPreview}
-				<UploadProcessButton onclick={handlePreview} loading={uploadPreviewing} disabled={!uploadExtrato || uploadSaving} />
-			{/if}
+		<div class="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-6">
+			<UploadFiles ready={!!uploadPreview} count={[uploadExtrato, uploadCaixinha, uploadHiglobe].filter(Boolean).length}>
+				<!-- Three file zones -->
+				<div class="space-y-2">
+					<span class="text-sm font-medium">PDF do extrato <span class="text-destructive-foreground">*</span></span>
+					<FileDropZone
+						accept=".pdf,application/pdf"
+						bind:file={uploadExtrato}
+						loading={uploadPreviewing || uploadSaving}
+						onchange={invalidateUpload}
+						label="Arraste o extrato ou clique para escolher"
+					/>
+				</div>
+				<div class="space-y-2">
+					<span class="text-sm font-medium">PDF da caixinha (opcional)</span>
+					<FileDropZone
+						accept=".pdf,application/pdf"
+						bind:file={uploadCaixinha}
+						loading={uploadPreviewing || uploadSaving}
+						onchange={invalidateUpload}
+						label="Arraste a caixinha ou clique para escolher"
+					/>
+				</div>
+				<div class="space-y-2">
+					<span class="text-sm font-medium">PDF Higlobe (opcional)</span>
+					<FileDropZone
+						accept=".pdf,application/pdf"
+						bind:file={uploadHiglobe}
+						loading={uploadPreviewing || uploadSaving}
+						onchange={invalidateUpload}
+						label="Arraste o Higlobe ou clique para escolher"
+					/>
+				</div>
+			</UploadFiles>
 
 			<!-- Preview -->
 			{#if uploadPreview}
@@ -643,21 +644,21 @@
 						<Card.Root>
 							<Card.Content class="pt-4">
 								<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-									<dt class="text-muted-foreground">Period</dt>
+									<dt class="text-muted-foreground">Período</dt>
 									<dd>{uploadPreview.extrato.period_start} - {uploadPreview.extrato.period_end}</dd>
 									<dt class="text-muted-foreground">Saldo Inicial</dt>
 									<dd class="tabular-nums">{formatBrl(uploadPreview.extrato.saldo_inicial)}</dd>
 									<dt class="text-muted-foreground">Rendimento</dt>
 									<dd class="tabular-nums">{formatBrl(uploadPreview.extrato.rendimento)}</dd>
-									<dt class="text-muted-foreground">Total Entradas</dt>
+									<dt class="text-muted-foreground">Total de entradas</dt>
 									<dd class="tabular-nums">{formatBrl(uploadPreview.extrato.total_entradas)}</dd>
-									<dt class="text-muted-foreground">Total Saidas</dt>
+									<dt class="text-muted-foreground">Total de saídas</dt>
 									<dd class="tabular-nums">{formatBrl(uploadPreview.extrato.total_saidas)}</dd>
 									<dt class="text-muted-foreground">Saldo Final</dt>
 									<dd class="tabular-nums font-medium">{formatBrl(uploadPreview.extrato.saldo_final)}</dd>
 								</dl>
 								{#if uploadPreview.extrato.entries.length > 0}
-									<p class="mt-3 text-xs text-muted-foreground">{uploadPreview.extrato.entries.length} entries parsed</p>
+									<p class="mt-3 text-xs text-muted-foreground">{uploadPreview.extrato.entries.length} movimentações extraídas</p>
 								{/if}
 							</Card.Content>
 						</Card.Root>
@@ -668,13 +669,13 @@
 							<Card.Root>
 								<Card.Content class="pt-4">
 									<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-										<dt class="text-muted-foreground">Period</dt>
+										<dt class="text-muted-foreground">Período</dt>
 										<dd>{uploadPreview.caixinha.period_start} - {uploadPreview.caixinha.period_end}</dd>
 										<dt class="text-muted-foreground">Saldo Final</dt>
 										<dd class="tabular-nums font-medium">{formatBrl(uploadPreview.caixinha.saldo_final)}</dd>
 									</dl>
 									{#if uploadPreview.caixinha.entries.length > 0}
-										<p class="mt-3 text-xs text-muted-foreground">{uploadPreview.caixinha.entries.length} entries parsed</p>
+										<p class="mt-3 text-xs text-muted-foreground">{uploadPreview.caixinha.entries.length} movimentações extraídas</p>
 									{/if}
 								</Card.Content>
 							</Card.Root>
@@ -686,11 +687,11 @@
 							<Card.Root>
 								<Card.Content class="pt-4">
 									<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-										<dt class="text-muted-foreground">Period</dt>
+										<dt class="text-muted-foreground">Período</dt>
 										<dd>{uploadPreview.higlobe.period_start} - {uploadPreview.higlobe.period_end}</dd>
 									</dl>
 									{#if uploadPreview.higlobe.entries.length > 0}
-										<p class="mt-3 text-xs text-muted-foreground">{uploadPreview.higlobe.entries.length} entries parsed</p>
+										<p class="mt-3 text-xs text-muted-foreground">{uploadPreview.higlobe.entries.length} movimentações extraídas</p>
 									{/if}
 								</Card.Content>
 							</Card.Root>
@@ -700,28 +701,23 @@
 
 				<!-- Fiscal month -->
 				<div class="space-y-2">
-					<span class="text-sm font-medium">Fiscal Month <span class="text-destructive-foreground">*</span></span>
+					<span class="text-sm font-medium">Mês fiscal <span class="text-destructive-foreground">*</span></span>
 					<FiscalMonthPicker bind:value={uploadFiscalMes} {months} />
 				</div>
 			{/if}
 		</div>
 
-		{#if uploadPreview}
-			<Sheet.SheetFooter>
-				<Button
-					onclick={handleSave}
-					disabled={uploadSaving || !uploadFiscalMes}
-					class="w-full sm:w-auto"
-				>
-					{#if uploadSaving}
-						<Loader2 class="h-4 w-4 animate-spin" />
-						Saving...
-					{:else}
-						Save Extrato
-					{/if}
-				</Button>
-			</Sheet.SheetFooter>
-		{/if}
+		<UploadActions
+			ready={!!uploadPreview}
+			processing={uploadPreviewing}
+			saving={uploadSaving}
+			canProcess={!!uploadExtrato}
+			canSave={!!uploadFiscalMes}
+			onprocess={handlePreview}
+			onsave={handleSave}
+			oncancel={() => { uploadOpen = false; resetUpload(); }}
+		/>
+
 	</Sheet.SheetContent>
 </Sheet.Sheet>
 
@@ -729,7 +725,7 @@
 <Sheet.Sheet bind:open={detailOpen}>
 	<Sheet.SheetContent side="right" class="sm:max-w-2xl">
 		<Sheet.SheetHeader>
-			<Sheet.SheetTitle>Extrato Details</Sheet.SheetTitle>
+			<Sheet.SheetTitle>Detalhes do extrato</Sheet.SheetTitle>
 			{#if detailItem}
 				<Sheet.SheetDescription>ID: {detailItem.id} &middot; {formatFiscalMes(detailItem.fiscal_mes)}</Sheet.SheetDescription>
 			{/if}
@@ -741,13 +737,13 @@
 					<Card.Header class="pb-3">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
-								<CheckCircle2 class="h-4 w-4 text-emerald-500" />
-								<Card.Title class="text-sm">Extrato PDF</Card.Title>
+								<CheckCircle2 class="h-4 w-4 text-muted-foreground" />
+								<Card.Title class="text-sm">PDF do extrato</Card.Title>
 								<Button
 									variant="ghost"
 									size="icon"
 									class="h-7 w-7"
-									title="Replace extrato PDF"
+									title="Substituir PDF do extrato"
 									onclick={openReplaceExtratoPicker}
 									disabled={replacingExtrato}
 								>
@@ -769,17 +765,17 @@
 											`Extrato #${detailItem!.id}`,
 											`extrato_${detailItem!.id}.pdf`
 										)}
-									title="View PDF"
+									title="Ver PDF"
 								>
 									<Eye class="h-3.5 w-3.5" />
-									View
+									Visualizar
 								</Button>
 								<Button
 									variant="outline"
 									size="sm"
 									class="h-7 text-xs"
 									onclick={() => downloadFile(`/extratos/${detailItem!.id}/extrato-pdf`, `extrato_${detailItem!.id}.pdf`)}
-									title="Download PDF"
+									title="Baixar PDF"
 								>
 									<Download class="h-3.5 w-3.5" />
 									PDF
@@ -789,37 +785,37 @@
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-							<dt class="text-muted-foreground">Period</dt>
+							<dt class="text-muted-foreground">Período</dt>
 							<dd class="tabular-nums">{formatDateBr(detailItem.period_start)} - {formatDateBr(detailItem.period_end)}</dd>
 							<dt class="text-muted-foreground">Saldo Inicial</dt>
 							<dd class="tabular-nums">{formatBrl(detailItem.saldo_inicial)}</dd>
 							<dt class="text-muted-foreground">Rendimento</dt>
 							<dd class="tabular-nums">{formatBrl(detailItem.rendimento)}</dd>
-							<dt class="text-muted-foreground">Total Entradas</dt>
+							<dt class="text-muted-foreground">Total de entradas</dt>
 							<dd class="tabular-nums">{formatBrl(detailItem.total_entradas)}</dd>
-							<dt class="text-muted-foreground">Total Saidas</dt>
+							<dt class="text-muted-foreground">Total de saídas</dt>
 							<dd class="tabular-nums">{formatBrl(detailItem.total_saidas)}</dd>
 							<dt class="text-muted-foreground">Saldo Final</dt>
 							<dd class="tabular-nums font-medium">{formatBrl(detailItem.saldo_final)}</dd>
 							<dt class="text-muted-foreground">Status</dt>
-							<dd>Attached</dd>
+							<dd>Anexado</dd>
 						</dl>
 						<div
 							class={`rounded-md border px-3 py-2 text-sm ${
 								hasExpectedProLabore(detailEntries)
-									? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
-									: 'border-amber-500/25 bg-amber-500/10 text-amber-300'
+									? 'border-border bg-muted/30 text-muted-foreground'
+									: 'border-warning/25 bg-warning/10 text-warning'
 							}`}
 						>
 							{#if hasExpectedProLabore(detailEntries)}
-								Pro-Labore value 1.442,69 found in this extrato.
+								Pró-labore de R$ 1.442,69 encontrado neste extrato.
 							{:else}
-								Warning: Pro-Labore value 1.442,69 was not found in this extrato.
+								Pró-labore de R$ 1.442,69 não encontrado neste extrato.
 							{/if}
 						</div>
 						<div class="space-y-2">
 							<div class="text-xs font-medium text-muted-foreground">
-								Parsed Entries ({detailEntries.length})
+								Movimentações ({detailEntries.length})
 							</div>
 							{#if detailEntries.length > 0}
 								<div class="max-h-64 overflow-auto rounded-md border">
@@ -843,7 +839,7 @@
 									</table>
 								</div>
 							{:else}
-								<p class="text-sm text-muted-foreground">No parsed entries found for this extrato.</p>
+								<p class="text-sm text-muted-foreground">Nenhuma movimentação extraída deste extrato.</p>
 							{/if}
 						</div>
 					</Card.Content>
@@ -862,16 +858,16 @@
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
 								{#if detailItem.caixinha_pdf_path}
-									<CheckCircle2 class="h-4 w-4 text-emerald-500" />
+									<CheckCircle2 class="h-4 w-4 text-muted-foreground" />
 								{:else}
 									<XCircle class="h-4 w-4 text-muted-foreground" />
 								{/if}
-								<Card.Title class="text-sm">Caixinha PDF</Card.Title>
+								<Card.Title class="text-sm">PDF da caixinha</Card.Title>
 								<Button
 									variant="ghost"
 									size="icon"
 									class="h-7 w-7"
-									title={detailItem.caixinha_pdf_path ? 'Replace caixinha PDF' : 'Add caixinha PDF'}
+									title={detailItem.caixinha_pdf_path ? 'Substituir PDF da caixinha' : 'Adicionar PDF da caixinha'}
 									onclick={openReplaceCaixinhaPicker}
 									disabled={replacingCaixinha}
 								>
@@ -894,17 +890,17 @@
 												`Caixinha #${detailItem!.id}`,
 												`caixinha_${detailItem!.id}.pdf`
 											)}
-										title="View PDF"
+										title="Ver PDF"
 									>
 										<Eye class="h-3.5 w-3.5" />
-										View
+										Visualizar
 									</Button>
 									<Button
 										variant="outline"
 										size="sm"
 										class="h-7 text-xs"
 										onclick={() => downloadFile(`/extratos/${detailItem!.id}/caixinha-pdf`, `caixinha_${detailItem!.id}.pdf`)}
-										title="Download PDF"
+										title="Baixar PDF"
 									>
 										<Download class="h-3.5 w-3.5" />
 										PDF
@@ -923,16 +919,16 @@
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-							<dt class="text-muted-foreground">Type</dt>
-							<dd>Optional attachment</dd>
+							<dt class="text-muted-foreground">Tipo</dt>
+							<dd>Anexo opcional</dd>
 							<dt class="text-muted-foreground">Status</dt>
-							<dd>{detailItem.caixinha_pdf_path ? 'Attached' : 'Not attached'}</dd>
+							<dd>{detailItem.caixinha_pdf_path ? 'Anexado' : 'Não anexado'}</dd>
 							<dt class="text-muted-foreground">Saldo Final</dt>
 							<dd class="tabular-nums">{formatBrl(detailItem.caixinha_saldo_final)}</dd>
 						</dl>
 						<div class="space-y-2">
 							<div class="text-xs font-medium text-muted-foreground">
-								Parsed Entries ({detailCaixinhaEntries.length})
+								Movimentações ({detailCaixinhaEntries.length})
 							</div>
 							{#if detailCaixinhaEntries.length > 0}
 								<div class="max-h-64 overflow-auto rounded-md border">
@@ -956,9 +952,9 @@
 									</table>
 								</div>
 							{:else if detailItem.caixinha_pdf_path}
-								<p class="text-sm text-muted-foreground">No parsed entries found for this caixinha PDF.</p>
+								<p class="text-sm text-muted-foreground">Nenhuma movimentação extraída da caixinha.</p>
 							{:else}
-								<p class="text-sm text-muted-foreground">No caixinha PDF attached.</p>
+								<p class="text-sm text-muted-foreground">Nenhum PDF da caixinha anexado.</p>
 							{/if}
 						</div>
 					</Card.Content>
@@ -977,16 +973,16 @@
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2">
 								{#if detailItem.higlobe_pdf_path}
-									<CheckCircle2 class="h-4 w-4 text-emerald-500" />
+									<CheckCircle2 class="h-4 w-4 text-muted-foreground" />
 								{:else}
 									<XCircle class="h-4 w-4 text-muted-foreground" />
 								{/if}
-								<Card.Title class="text-sm">Higlobe PDF</Card.Title>
+								<Card.Title class="text-sm">PDF Higlobe</Card.Title>
 								<Button
 									variant="ghost"
 									size="icon"
 									class="h-7 w-7"
-									title={detailItem.higlobe_pdf_path ? 'Replace Higlobe PDF' : 'Add Higlobe PDF'}
+									title={detailItem.higlobe_pdf_path ? 'Substituir PDF Higlobe' : 'Adicionar PDF Higlobe'}
 									onclick={openReplaceHiglobePicker}
 									disabled={replacingHiglobe}
 								>
@@ -1009,17 +1005,17 @@
 												`Higlobe #${detailItem!.id}`,
 												`higlobe_${detailItem!.id}.pdf`
 											)}
-										title="View PDF"
+										title="Ver PDF"
 									>
 										<Eye class="h-3.5 w-3.5" />
-										View
+										Visualizar
 									</Button>
 									<Button
 										variant="outline"
 										size="sm"
 										class="h-7 text-xs"
 										onclick={() => downloadFile(`/extratos/${detailItem!.id}/higlobe-pdf`, `higlobe_${detailItem!.id}.pdf`)}
-										title="Download PDF"
+										title="Baixar PDF"
 									>
 										<Download class="h-3.5 w-3.5" />
 										PDF
@@ -1038,14 +1034,14 @@
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-							<dt class="text-muted-foreground">Type</dt>
-							<dd>Optional attachment</dd>
+							<dt class="text-muted-foreground">Tipo</dt>
+							<dd>Anexo opcional</dd>
 							<dt class="text-muted-foreground">Status</dt>
-							<dd>{detailItem.higlobe_pdf_path ? 'Attached' : 'Not attached'}</dd>
+							<dd>{detailItem.higlobe_pdf_path ? 'Anexado' : 'Não anexado'}</dd>
 						</dl>
 						<div class="space-y-2">
 							<div class="text-xs font-medium text-muted-foreground">
-								Parsed Entries ({detailHiglobeEntries.length})
+								Movimentações ({detailHiglobeEntries.length})
 							</div>
 							{#if detailHiglobeEntries.length > 0}
 								<div class="max-h-64 overflow-auto rounded-md border">
@@ -1069,9 +1065,9 @@
 									</table>
 								</div>
 							{:else if detailItem.higlobe_pdf_path}
-								<p class="text-sm text-muted-foreground">No parsed entries found for this Higlobe PDF.</p>
+								<p class="text-sm text-muted-foreground">Nenhuma movimentação extraída do Higlobe.</p>
 							{:else}
-								<p class="text-sm text-muted-foreground">No Higlobe PDF attached.</p>
+								<p class="text-sm text-muted-foreground">Nenhum PDF Higlobe anexado.</p>
 							{/if}
 						</div>
 					</Card.Content>
@@ -1100,7 +1096,7 @@
 <!-- Delete confirmation -->
 <ConfirmDialog
 	bind:open={deleteDialogOpen}
-	title="Delete Extrato"
-	description="This will permanently remove the extrato and all attached PDFs."
+	title="Excluir extrato"
+	description="O extrato e todos os PDFs anexos serão excluídos."
 	onconfirm={handleDelete}
 />

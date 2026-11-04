@@ -32,7 +32,9 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import FiscalMonthPicker from '$lib/components/FiscalMonthPicker.svelte';
 	import FileDropZone from '$lib/components/FileDropZone.svelte';
-	import UploadProcessButton from '$lib/components/UploadProcessButton.svelte';
+	import UploadActions from '$lib/components/UploadActions.svelte';
+	import UploadSteps from '$lib/components/UploadSteps.svelte';
+	import UploadFiles from '$lib/components/UploadFiles.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import FilePreviewDialog from '$lib/components/FilePreviewDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -95,7 +97,7 @@
 	// File preview
 	let previewOpen = $state(false);
 	let previewPath = $state<string | null>(null);
-	let previewTitle = $state('Preview');
+	let previewTitle = $state('Visualização');
 	let previewFallback = $state('file');
 
 	// Detail replacement state
@@ -143,7 +145,7 @@
 			}
 			nfs = await listNfs(params);
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to load NFs');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao carregar notas fiscais');
 		} finally {
 			loading = false;
 		}
@@ -220,10 +222,10 @@
 			if (revision !== uploadRevision) return;
 			uploadPreview = preview;
 			uploadSpread = preview.spread == null ? '' : String(preview.spread);
-			if (preview.brl == null) toast.warning('Could not extract USD/rate from this PDF');
+			if (preview.brl == null) toast.warning('Não foi possível extrair o valor em USD e a cotação deste PDF');
 		} catch (e) {
 			if (revision === uploadRevision) {
-				toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Preview failed');
+				toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao processar o documento');
 			}
 		} finally {
 			if (revision === uploadRevision) uploadPreviewing = false;
@@ -234,18 +236,18 @@
 		if (uploadPreviewing || uploadSaving) return;
 		if (!uploadPreview?.brl || !validSpread(uploadSpread)) return;
 		if (!uploadFile || !uploadFiscalMes) {
-			toast.error('PDF and fiscal month are required');
+			toast.error('Selecione o PDF e o mês fiscal');
 			return;
 		}
 		uploadSaving = true;
 		try {
 			await createNf(uploadFile, uploadFiscalMes, uploadImages.length > 0 ? uploadImages : undefined, Number(uploadSpread));
-			toast.success('NF saved successfully');
+			toast.success('NF salva');
 			uploadOpen = false;
 			resetUpload();
 			await loadNfs();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Save failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao salvar');
 		} finally {
 			uploadSaving = false;
 		}
@@ -279,10 +281,10 @@
 				detailNf = updated;
 				detailSpread = String(updated.spread);
 			}
-			toast.success('Spread updated and BRL totals recalculated');
+			toast.success('Spread atualizado e valores em BRL recalculados');
 			await loadNfs();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to update spread');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao atualizar spread');
 		} finally {
 			savingSpread = false;
 		}
@@ -310,7 +312,7 @@
 			const { blob, filename } = await downloadBlob(`/nfs/${nfId}/pdf`);
 			triggerDownload(blob, filename ?? `nf_${nfId}.pdf`);
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Download failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao baixar');
 		}
 	}
 
@@ -319,7 +321,7 @@
 			const { blob, filename } = await downloadBlob(`/nfs/${nfId}/images/${imageId}`);
 			triggerDownload(blob, filename ?? `nf_${nfId}_img_${imageId}`);
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Download failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao baixar');
 		}
 	}
 
@@ -345,10 +347,10 @@
 		try {
 			detailNf = await updateNfPdf(detailNf.id, files[0]);
 			detailSpread = String(detailNf.spread);
-			toast.success('NF PDF replaced');
+			toast.success('PDF da NF substituído');
 			await loadNfs();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Replace failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao substituir');
 		} finally {
 			replacingPdf = false;
 		}
@@ -373,9 +375,9 @@
 		addingImages = true;
 		try {
 			detailImages = await addNfImages(detailNf.id, files);
-			toast.success(`${files.length} image(s) added`);
+			toast.success(`${files.length} imagem(ns) adicionada(s)`);
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Upload failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao enviar');
 		} finally {
 			addingImages = false;
 		}
@@ -386,9 +388,9 @@
 		try {
 			await deleteNfImage(detailNf.id, imageId);
 			detailImages = detailImages.filter((img) => img.id !== imageId);
-			toast.success('Image deleted');
+			toast.success('Imagem excluída');
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Delete failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao excluir');
 		}
 	}
 
@@ -404,11 +406,11 @@
 	async function saveFm(nfId: number) {
 		try {
 			await patchNfFiscalMes(nfId, editingFmValue || null);
-			toast.success('Fiscal month updated');
+			toast.success('Mês fiscal atualizado');
 			editingFmId = null;
 			await loadNfs();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Update failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao atualizar');
 		}
 	}
 
@@ -425,21 +427,21 @@
 		if (!deleteTarget) return;
 		try {
 			await deleteNf(deleteTarget.id);
-			toast.success('NF deleted');
+			toast.success('NF excluída');
 			deleteTarget = null;
 			await loadNfs();
 		} catch (e) {
-			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Delete failed');
+			toast.error(e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao excluir');
 		}
 	}
 </script>
 
 <div class="space-y-6">
-	<PageHeader title="Notas Fiscais" description="Manage NF-e documents">
+	<PageHeader title="Notas Fiscais" description="Notas fiscais de serviço e conversão de USD para BRL.">
 		{#snippet actions()}
 			<Button onclick={openUpload}>
 				<Plus class="h-4 w-4" />
-				Upload NF
+				Enviar NF
 			</Button>
 		{/snippet}
 	</PageHeader>
@@ -447,16 +449,16 @@
 	<!-- Filters -->
 	<div class="flex flex-wrap items-end gap-3">
 		<div class="space-y-1">
-			<span class="text-xs font-medium text-muted-foreground">Fiscal Month</span>
+			<span class="text-xs font-medium text-muted-foreground">Mês fiscal</span>
 			<FiscalMonthPicker bind:value={filterMonth} {months} />
 		</div>
 		{#if !filterMonth}
 			<div class="space-y-1">
-				<label for="nf-date-from" class="text-xs font-medium text-muted-foreground">From</label>
+				<label for="nf-date-from" class="text-xs font-medium text-muted-foreground">De</label>
 				<Input id="nf-date-from" type="date" bind:value={filterDateFrom} class="w-40" />
 			</div>
 			<div class="space-y-1">
-				<label for="nf-date-to" class="text-xs font-medium text-muted-foreground">To</label>
+				<label for="nf-date-to" class="text-xs font-medium text-muted-foreground">Até</label>
 				<Input id="nf-date-to" type="date" bind:value={filterDateTo} class="w-40" />
 			</div>
 		{/if}
@@ -470,7 +472,7 @@
 	{:else if nfs.length === 0}
 		<Card.Root>
 			<Card.Content class="py-12 text-center">
-				<p class="text-muted-foreground">No notas fiscais found.</p>
+				<p class="text-muted-foreground">Nenhuma nota fiscal encontrada.</p>
 			</Card.Content>
 		</Card.Root>
 	{:else}
@@ -479,13 +481,13 @@
 				<Table.TableHeader>
 					<Table.TableRow>
 						{#each [
-							{ key: 'nf_date', label: 'Date' },
-							{ key: 'company', label: 'Company' },
+							{ key: 'nf_date', label: 'Data' },
+							{ key: 'company', label: 'Empresa' },
 							{ key: 'usd', label: 'USD' },
-							{ key: 'rate', label: 'Rate' },
+							{ key: 'rate', label: 'Cotação' },
 							{ key: 'spread', label: 'Spread' },
 							{ key: 'brl_with_spread', label: 'BRL' },
-							{ key: 'fiscal_mes', label: 'Fiscal Month' }
+							{ key: 'fiscal_mes', label: 'Mês fiscal' }
 						] as col}
 							<Table.TableHead>
 								<button
@@ -497,7 +499,7 @@
 								</button>
 							</Table.TableHead>
 						{/each}
-						<Table.TableHead class="w-[100px]">Actions</Table.TableHead>
+						<Table.TableHead class="w-[100px]">Ações</Table.TableHead>
 					</Table.TableRow>
 				</Table.TableHeader>
 				<Table.TableBody>
@@ -530,7 +532,7 @@
 									<button
 										class="text-sm hover:underline"
 										onclick={() => startEditFm(nf)}
-										title="Click to edit fiscal month"
+										title="Clique para editar o mês fiscal"
 									>
 										{formatFiscalMes(nf.fiscal_mes)}
 									</button>
@@ -538,13 +540,13 @@
 							</Table.TableCell>
 							<Table.TableCell>
 								<div class="flex items-center gap-1">
-									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => openDetail(nf)} title="View details">
+									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => openDetail(nf)} title="Ver detalhes">
 										<Eye class="h-3.5 w-3.5" />
 									</Button>
-									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => downloadPdf(nf.id)} title="Download PDF">
+									<Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => downloadPdf(nf.id)} title="Baixar PDF">
 										<Download class="h-3.5 w-3.5" />
 									</Button>
-									<Button variant="ghost" size="icon" class="h-7 w-7 text-destructive-foreground" onclick={() => confirmDelete(nf)} title="Delete">
+									<Button variant="ghost" size="icon" class="h-7 w-7 text-destructive-foreground" onclick={() => confirmDelete(nf)} title="Excluir">
 										<Trash2 class="h-3.5 w-3.5" />
 									</Button>
 								</div>
@@ -561,78 +563,77 @@
 <Sheet.Sheet bind:open={uploadOpen} onOpenChange={(o) => { if (!o) resetUpload(); }}>
 	<Sheet.SheetContent side="right">
 		<Sheet.SheetHeader>
-			<Sheet.SheetTitle>Upload Nota Fiscal</Sheet.SheetTitle>
-			<Sheet.SheetDescription>Select all files, process documents, review the extracted data, then save.</Sheet.SheetDescription>
+			<Sheet.SheetTitle>Enviar nota fiscal</Sheet.SheetTitle>
+			<Sheet.SheetDescription>Selecione os arquivos, processe e revise os dados antes de salvar.</Sheet.SheetDescription>
+			<UploadSteps ready={!!uploadPreview} />
 		</Sheet.SheetHeader>
-		<div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-			<!-- PDF drop zone -->
-			<div class="space-y-2">
-				<span class="text-sm font-medium">NF PDF</span>
-				<FileDropZone
-					accept=".pdf,application/pdf"
-					loading={uploadPreviewing || uploadSaving}
-					bind:file={uploadFile}
-					onchange={invalidateUpload}
-					label="Drop NF PDF here"
-				/>
-			</div>
+		<div class="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-6">
+			<UploadFiles ready={!!uploadPreview} count={(uploadFile ? 1 : 0) + uploadImages.length}>
+				<!-- PDF drop zone -->
+				<div class="space-y-2">
+					<span class="text-sm font-medium">PDF da NF</span>
+					<FileDropZone
+						accept=".pdf,application/pdf"
+						loading={uploadPreviewing || uploadSaving}
+						bind:file={uploadFile}
+						onchange={invalidateUpload}
+						label="Arraste o PDF da NF ou clique para escolher"
+					/>
+				</div>
 
-			<!-- Image attachments -->
-			<div class="space-y-2">
-				<span class="text-sm font-medium">Image Attachments (optional)</span>
-				<FileDropZone
-					accept="image/*"
-					multiple={true}
-					bind:files={uploadImages}
-					loading={uploadPreviewing || uploadSaving}
-					onchange={invalidateUpload}
-					label="Drop images here"
-				/>
-			</div>
-
-			{#if !uploadPreview}
-				<UploadProcessButton onclick={handlePreview} loading={uploadPreviewing || uploadSaving} disabled={!uploadFile || uploadSaving} />
-			{/if}
+				<!-- Image attachments -->
+				<div class="space-y-2">
+					<span class="text-sm font-medium">Imagens anexas (opcional)</span>
+					<FileDropZone
+						accept="image/*"
+						multiple={true}
+						bind:files={uploadImages}
+						loading={uploadPreviewing || uploadSaving}
+						onchange={invalidateUpload}
+						label="Arraste as imagens ou clique para escolher"
+					/>
+				</div>
+			</UploadFiles>
 
 			<!-- Preview card -->
 			{#if uploadPreview}
 				<Card.Root>
 					<Card.Header class="pb-3">
-						<Card.Title class="text-sm">Extracted Data</Card.Title>
+						<Card.Title class="text-sm">Dados extraídos</Card.Title>
 					</Card.Header>
 					<Card.Content>
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-							<dt class="text-muted-foreground">Company</dt>
+							<dt class="text-muted-foreground">Empresa</dt>
 							<dd>{uploadPreview.company ?? '\u2014'}</dd>
 							<dt class="text-muted-foreground">USD</dt>
 							<dd class="tabular-nums">{formatUsd(uploadPreview.usd)}</dd>
-							<dt class="text-muted-foreground">Rate</dt>
+							<dt class="text-muted-foreground">Cotação</dt>
 							<dd class="tabular-nums">{formatNumber(uploadPreview.rate, 4)}</dd>
 							<dt class="text-muted-foreground"><label for="upload-spread">Spread (%)</label></dt>
 							<dd class="tabular-nums">
 								<Input id="upload-spread" type="number" min="0" max="100" step="any" bind:value={uploadSpread} disabled={uploadSaving} aria-describedby="upload-spread-help" />
 								{#if uploadPreview.spread_was_default}
-									<Badge variant="outline" class="ml-1 text-[10px] px-1">default</Badge>
+									<Badge variant="outline" class="ml-1 text-[10px] px-1">padrão</Badge>
 								{/if}
 							</dd>
 							{#if uploadPreview.brl}
-								<dt class="text-muted-foreground">BRL (no spread)</dt>
+								<dt class="text-muted-foreground">BRL (sem spread)</dt>
 								<dd class="tabular-nums">{formatBrl(uploadPreview.brl.brl_no_spread)}</dd>
-								<dt class="text-muted-foreground">BRL (with spread)</dt>
+								<dt class="text-muted-foreground">BRL (com spread)</dt>
 								<dd class="tabular-nums font-medium">{formatBrl(uploadBrl)}</dd>
 							{/if}
-							<dt class="text-muted-foreground">Date</dt>
+							<dt class="text-muted-foreground">Data</dt>
 							<dd>{formatDateBr(uploadPreview.nf_date)}</dd>
-							<dt class="text-muted-foreground">Verification Code</dt>
+							<dt class="text-muted-foreground">Código de verificação</dt>
 							<dd class="font-mono text-xs">{uploadPreview.verification_code ?? '\u2014'}</dd>
-							<dt class="text-muted-foreground">Payment Via</dt>
+							<dt class="text-muted-foreground">Forma de pagamento</dt>
 							<dd>{uploadPreview.payment_via ?? '\u2014'}</dd>
-							<dt class="text-muted-foreground">Source</dt>
+							<dt class="text-muted-foreground">Origem</dt>
 							<dd>
 								<Badge variant="secondary" class="text-xs">{uploadPreview.source}</Badge>
 							</dd>
 						</dl>
-						<p id="upload-spread-help" class="mt-3 text-xs text-muted-foreground">Spread used for calculations (0–100%). For 0.3%, enter 0.3. The original PDF is preserved.</p>
+						<p id="upload-spread-help" class="mt-3 text-xs text-muted-foreground">Spread usado no cálculo (0–100%). Para 0,3%, digite 0.3. O PDF original é preservado.</p>
 					</Card.Content>
 				</Card.Root>
 			{/if}
@@ -640,29 +641,24 @@
 			<!-- Fiscal month picker -->
 			{#if uploadPreview}
 				<div class="space-y-2">
-					<span class="text-sm font-medium">Fiscal Month <span class="text-destructive-foreground">*</span></span>
+					<span class="text-sm font-medium">Mês fiscal <span class="text-destructive-foreground">*</span></span>
 					<FiscalMonthPicker bind:value={uploadFiscalMes} {months} />
 				</div>
 
 			{/if}
 		</div>
 
-		{#if uploadPreview}
-			<Sheet.SheetFooter>
-				<Button
-					onclick={handleSave}
-					disabled={uploadSaving || !uploadFiscalMes || !uploadPreview.brl || !uploadSpreadValid}
-					class="w-full sm:w-auto"
-				>
-					{#if uploadSaving}
-						<Loader2 class="h-4 w-4 animate-spin" />
-						Saving...
-					{:else}
-						Save NF
-					{/if}
-				</Button>
-			</Sheet.SheetFooter>
-		{/if}
+		<UploadActions
+			ready={!!uploadPreview}
+			processing={uploadPreviewing}
+			saving={uploadSaving}
+			canProcess={!!uploadFile}
+			canSave={!!uploadFiscalMes && !!uploadPreview?.brl && uploadSpreadValid}
+			onprocess={handlePreview}
+			onsave={handleSave}
+			oncancel={() => { uploadOpen = false; resetUpload(); }}
+		/>
+
 	</Sheet.SheetContent>
 </Sheet.Sheet>
 
@@ -670,7 +666,7 @@
 <Sheet.Sheet bind:open={detailOpen}>
 	<Sheet.SheetContent side="right" class="sm:max-w-2xl">
 		<Sheet.SheetHeader>
-			<Sheet.SheetTitle>NF Details</Sheet.SheetTitle>
+			<Sheet.SheetTitle>Detalhes da NF</Sheet.SheetTitle>
 			{#if detailNf}
 				<Sheet.SheetDescription>ID: {detailNf.id} &middot; {formatFiscalMes(detailNf.fiscal_mes)}</Sheet.SheetDescription>
 			{/if}
@@ -688,7 +684,7 @@
 									variant="ghost"
 									size="icon"
 									class="h-7 w-7"
-									title="Replace NF PDF"
+									title="Substituir PDF da NF"
 									onclick={openReplacePdfPicker}
 									disabled={replacingPdf || savingSpread}
 								>
@@ -705,17 +701,17 @@
 									size="sm"
 									class="h-7 text-xs"
 									onclick={() => previewPdf(detailNf!.id)}
-									title="View PDF"
+									title="Ver PDF"
 								>
 									<Eye class="h-3.5 w-3.5" />
-									View
+									Visualizar
 								</Button>
 								<Button
 									variant="outline"
 									size="sm"
 									class="h-7 text-xs"
 									onclick={() => downloadPdf(detailNf!.id)}
-									title="Download PDF"
+									title="Baixar PDF"
 								>
 									<Download class="h-3.5 w-3.5" />
 									PDF
@@ -725,38 +721,38 @@
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-							<dt class="text-muted-foreground">Company</dt>
+							<dt class="text-muted-foreground">Empresa</dt>
 							<dd>{detailNf.company ?? '\u2014'}</dd>
 							<dt class="text-muted-foreground">USD</dt>
 							<dd class="tabular-nums font-medium">{formatUsd(detailNf.usd)}</dd>
-							<dt class="text-muted-foreground">Rate</dt>
+							<dt class="text-muted-foreground">Cotação</dt>
 							<dd class="tabular-nums">{formatNumber(detailNf.rate, 4)}</dd>
 							<dt class="text-muted-foreground">Spread</dt>
 							<dd class="tabular-nums">{formatPercent(detailNf.spread)}</dd>
-							<dt class="text-muted-foreground">BRL (no spread)</dt>
+							<dt class="text-muted-foreground">BRL (sem spread)</dt>
 							<dd class="tabular-nums">{formatBrl(detailNf.brl_no_spread)}</dd>
-							<dt class="text-muted-foreground">BRL (with spread)</dt>
+							<dt class="text-muted-foreground">BRL (com spread)</dt>
 							<dd class="tabular-nums font-medium">{formatBrl(detailNf.brl_with_spread)}</dd>
-							<dt class="text-muted-foreground">Date</dt>
+							<dt class="text-muted-foreground">Data</dt>
 							<dd>{formatDateBr(detailNf.nf_date)}</dd>
-							<dt class="text-muted-foreground">Verification Code</dt>
+							<dt class="text-muted-foreground">Código de verificação</dt>
 							<dd class="font-mono text-xs">{detailNf.verification_code ?? '\u2014'}</dd>
-							<dt class="text-muted-foreground">Payment Via</dt>
+							<dt class="text-muted-foreground">Forma de pagamento</dt>
 							<dd>{detailNf.payment_via ?? '\u2014'}</dd>
-							<dt class="text-muted-foreground">Fiscal Month</dt>
+							<dt class="text-muted-foreground">Mês fiscal</dt>
 							<dd>{formatFiscalMes(detailNf.fiscal_mes)}</dd>
-							<dt class="text-muted-foreground">Created</dt>
+							<dt class="text-muted-foreground">Criado em</dt>
 							<dd class="text-xs">{detailNf.created_at}</dd>
 						</dl>
 						<form class="space-y-2 border-t border-border pt-4" onsubmit={(event) => { event.preventDefault(); saveSpread(); }}>
-							<label for="detail-spread" class="text-sm font-medium">Calculation spread (%)</label>
+							<label for="detail-spread" class="text-sm font-medium">Spread do cálculo (%)</label>
 							<div class="flex items-center gap-2">
 								<Input id="detail-spread" type="number" min="0" max="100" step="any" required bind:value={detailSpread} disabled={savingSpread || replacingPdf} aria-describedby="detail-spread-help" />
 								<Button type="submit" disabled={savingSpread || replacingPdf || !validSpread(detailSpread) || Number(detailSpread) === detailNf.spread}>
-									{savingSpread ? 'Saving...' : 'Save spread'}
+									{savingSpread ? 'Salvando…' : 'Salvar spread'}
 									</Button>
 								</div>
-							<p id="detail-spread-help" class="text-xs text-muted-foreground">Recalculates BRL totals used by the system. The original PDF is preserved. For 0.3%, enter 0.3.</p>
+							<p id="detail-spread-help" class="text-xs text-muted-foreground">Recalcula os valores em BRL. O PDF original é preservado. Para 0,3%, digite 0.3.</p>
 						</form>
 					</Card.Content>
 					<input
@@ -793,7 +789,7 @@
 												size="icon"
 												class="h-7 w-7"
 												onclick={() => previewImage(detailNf!.id, img.id)}
-												title="View"
+												title="Visualizar"
 											>
 												<Eye class="h-3.5 w-3.5" />
 											</Button>
@@ -802,7 +798,7 @@
 												size="icon"
 												class="h-7 w-7"
 												onclick={() => downloadImage(detailNf!.id, img.id)}
-												title="Download"
+												title="Baixar"
 											>
 												<Download class="h-3.5 w-3.5" />
 											</Button>
@@ -811,7 +807,7 @@
 												size="icon"
 												class="h-7 w-7 text-destructive-foreground"
 												onclick={() => handleDeleteImage(img.id)}
-												title="Delete"
+												title="Excluir"
 											>
 												<Trash2 class="h-3.5 w-3.5" />
 											</Button>
@@ -820,7 +816,7 @@
 								{/each}
 							</div>
 						{:else}
-							<p class="text-sm text-muted-foreground">No images attached.</p>
+							<p class="text-sm text-muted-foreground">Nenhuma imagem anexada.</p>
 						{/if}
 
 						<Separator />
@@ -856,7 +852,7 @@
 <!-- Delete confirmation -->
 <ConfirmDialog
 	bind:open={deleteDialogOpen}
-	title="Delete Nota Fiscal"
-	description="This will permanently remove the NF, its PDF, and all attached images."
+	title="Excluir nota fiscal"
+	description="A nota fiscal, o PDF e as imagens anexas serão excluídos."
 	onconfirm={handleDelete}
 />

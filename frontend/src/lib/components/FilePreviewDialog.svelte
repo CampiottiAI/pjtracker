@@ -13,7 +13,7 @@
 	let {
 		open = $bindable(false),
 		path = $bindable<string | null>(null),
-		title = 'Preview',
+		title = 'Visualização',
 		fallbackFilename = 'file'
 	}: {
 		open?: boolean;
@@ -86,7 +86,7 @@
 			objectUrl = URL.createObjectURL(blob);
 		} catch (e) {
 			if (seq !== loadSeq) return;
-			error = e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to load file';
+			error = e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao carregar arquivo';
 		} finally {
 			if (seq === loadSeq) loading = false;
 		}
@@ -123,7 +123,7 @@
 	>
 		<Dialog.Header class="pr-8">
 			<Dialog.Title>{title}</Dialog.Title>
-			<Dialog.Description class="sr-only">In-browser document preview</Dialog.Description>
+			<Dialog.Description class="sr-only">Visualização do documento</Dialog.Description>
 		</Dialog.Header>
 
 		<div class="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-muted/30">
@@ -153,20 +153,20 @@
 				<div
 					class="flex h-[40vh] flex-col items-center justify-center gap-3 px-4 text-sm text-muted-foreground"
 				>
-					<p>Preview is not available for this file type.</p>
+					<p>Visualização indisponível para este tipo de arquivo.</p>
 					<Button variant="outline" size="sm" onclick={handleDownload}>
 						<Download class="h-3.5 w-3.5" />
-						Download
+						Baixar
 					</Button>
 				</div>
 			{/if}
 		</div>
 
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (open = false)}>Close</Button>
+			<Button variant="outline" onclick={() => (open = false)}>Fechar</Button>
 			<Button onclick={handleDownload} disabled={!blob || loading}>
 				<Download class="h-3.5 w-3.5" />
-				Download
+				Baixar
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

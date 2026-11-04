@@ -8,7 +8,7 @@
 		loading = false,
 		file = $bindable<File | null>(null),
 		files = $bindable<File[]>([]),
-		label = 'Drop file here or click to browse',
+		label = 'Arraste um arquivo ou clique para escolher',
 		onchange
 	}: {
 		accept?: string;
@@ -65,11 +65,11 @@
 <button
 	type="button"
 	class={cn(
-		'relative flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition-colors cursor-pointer',
+		'relative flex w-full flex-col items-center justify-center rounded-lg border border-dashed p-5 text-center transition-colors cursor-pointer',
 		dragover
-			? 'border-chart-1 bg-chart-1/5'
+			? 'border-primary bg-primary/5'
 			: hasFile
-				? 'border-emerald-500/50 bg-emerald-500/5'
+				? 'border-border bg-muted/25'
 				: 'border-border hover:border-muted-foreground/50 hover:bg-accent/30'
 	)}
 	ondrop={handleDrop}
@@ -79,14 +79,14 @@
 	disabled={loading}
 >
 	{#if loading}
-		<Loader2 class="h-8 w-8 text-muted-foreground animate-spin mb-2" />
-		<span class="text-sm text-muted-foreground">Processing...</span>
+		<Loader2 class="h-6 w-6 text-muted-foreground animate-spin mb-2" />
+		<span class="text-sm text-muted-foreground">Processando…</span>
 	{:else if hasFile}
-		<FileCheck class="h-8 w-8 text-emerald-400 mb-2" />
+		<FileCheck class="h-6 w-6 text-muted-foreground mb-2" />
 		<span class="text-sm text-foreground font-medium truncate max-w-full">{displayName}</span>
-		<span class="text-xs text-muted-foreground mt-1">Click or drop to replace</span>
+		<span class="text-xs text-muted-foreground mt-1">Clique ou arraste para substituir</span>
 	{:else}
-		<Upload class="h-8 w-8 text-muted-foreground mb-2" />
+		<Upload class="h-6 w-6 text-muted-foreground mb-2" />
 		<span class="text-sm text-muted-foreground">{label}</span>
 	{/if}
 	<input

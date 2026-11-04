@@ -420,7 +420,7 @@
 		<label for="casa-month" class="text-sm font-medium text-muted-foreground">Mês</label>
 		<select
 			id="casa-month"
-			class="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+			class="flex h-9 rounded-md border border-input bg-inset px-3 py-1 text-sm"
 			bind:value={selectedMonth}
 		>
 			{#each months as m}
@@ -430,7 +430,7 @@
 		{#if isSaved && !isDirty}
 			<Badge>Salva</Badge>
 		{:else if isDirty}
-			<Badge variant="outline" class="border-amber-500/50 text-amber-400">Edição em aberto</Badge>
+			<Badge variant="outline" class="border-warning/30 text-warning">Edição em aberto</Badge>
 		{:else}
 			<Badge variant="outline">Em aberto</Badge>
 		{/if}
@@ -473,7 +473,7 @@
 													type="number"
 													min="0"
 													step="0.01"
-													class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm tabular-nums"
+													class="flex h-9 w-full rounded-md border border-input bg-inset px-3 py-1 text-sm tabular-nums"
 													value={bill.value}
 													aria-label={`Valor de ${bill.name || `conta fixa ${i + 1}`}`}
 													oninput={(e) =>
@@ -482,7 +482,7 @@
 											</Table.TableCell>
 											<Table.TableCell>
 												<select
-													class="flex h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+													class="flex h-9 w-full rounded-md border border-input bg-inset px-2 text-sm"
 													value={bill.paid_by}
 													aria-label={`Pago por ${bill.name || `conta fixa ${i + 1}`}`}
 													onchange={(e) =>
@@ -521,7 +521,7 @@
 							<Input placeholder="Nome" bind:value={newFixedName} />
 							<Input placeholder="Valor" bind:value={newFixedValue} inputmode="decimal" />
 							<select
-								class="flex h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+								class="flex h-9 rounded-md border border-input bg-inset px-2 text-sm"
 								bind:value={newFixedPaidBy}
 							>
 								{#each people as p}
@@ -598,7 +598,7 @@
 							<Input placeholder="Descrição" bind:value={newExpenseDesc} />
 							<Input placeholder="Valor" bind:value={newExpenseAmount} inputmode="decimal" />
 							<select
-								class="flex h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+								class="flex h-9 rounded-md border border-input bg-inset px-2 text-sm"
 								bind:value={newExpensePaidBy}
 							>
 								{#each people as p}
@@ -652,7 +652,7 @@
 													type="number"
 													min="0"
 													step="0.01"
-													class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm tabular-nums"
+													class="flex h-9 w-full rounded-md border border-input bg-inset px-3 py-1 text-sm tabular-nums"
 													value={card.value}
 													aria-label={`Valor do cartão ${card.name || i + 1}`}
 													oninput={(e) =>
@@ -701,7 +701,7 @@
 									type="number"
 									min="0"
 									step="50"
-									class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+									class="flex h-9 w-full rounded-md border border-input bg-inset px-3 py-1 text-sm"
 									value={ccReservedAmount}
 									oninput={(e) => {
 										ccReservedAmount =
@@ -717,7 +717,7 @@
 								<label for="cc-owner" class="text-sm font-medium">Quem paga a fatia exclusiva</label>
 								<select
 									id="cc-owner"
-									class="flex h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+									class="flex h-9 w-full rounded-md border border-input bg-inset px-2 text-sm"
 									value={resolvedCcReservedPersonId() ?? ''}
 									onchange={(e) => {
 										ccReservedPersonId = (e.currentTarget as HTMLSelectElement).value;
@@ -768,7 +768,7 @@
 										max="100"
 										step="0.1"
 										inputmode="decimal"
-										class="flex h-9 w-20 rounded-md border border-input bg-transparent px-2 text-sm tabular-nums"
+										class="flex h-9 w-20 rounded-md border border-input bg-inset px-2 text-sm tabular-nums"
 										value={pcts[0] * 100}
 										oninput={(e) =>
 											onPctChange(0, (e.currentTarget as HTMLInputElement).value)}
@@ -790,7 +790,7 @@
 										max="100"
 										step="0.1"
 										inputmode="decimal"
-										class="flex h-9 w-20 rounded-md border border-input bg-transparent px-2 text-sm tabular-nums"
+										class="flex h-9 w-20 rounded-md border border-input bg-inset px-2 text-sm tabular-nums"
 										value={pcts[i] * 100}
 										oninput={(e) =>
 											onPctChange(i, (e.currentTarget as HTMLInputElement).value)}
@@ -799,7 +799,7 @@
 								</div>
 							{/each}
 							{#if !pctValid}
-								<p class="text-xs text-amber-400">Percentuais devem somar 100%.</p>
+								<p class="text-xs text-warning">Percentuais devem somar 100%.</p>
 							{/if}
 						{/if}
 
@@ -816,7 +816,7 @@
 										</span>
 									</div>
 									{#if split.reimbursements[i] > 0}
-										<div class="flex items-center gap-1 text-xs text-amber-400">
+										<div class="flex items-center gap-1 text-xs text-warning">
 											<AlertCircle class="h-3 w-3" />
 											Reembolso {formatBrl(split.reimbursements[i])}
 										</div>

@@ -17,11 +17,11 @@
 	type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
 
 	const primaryItems: NavItem[] = [
-		{ href: '/', label: 'Fluxo', icon: Home },
+		{ href: '/', label: 'Fluxo', icon: LayoutDashboard },
 		{ href: '/casa', label: 'Casa', icon: Home },
 		{ href: '/carros', label: 'Carros', icon: Car },
 		{ href: '/documentos', label: 'Documentos', icon: FolderOpen },
-		{ href: '/analytics', label: 'Analytics', icon: BarChart3 }
+		{ href: '/analytics', label: 'Análises', icon: BarChart3 }
 	];
 
 	let mobileOpen = $state(false);
@@ -61,7 +61,7 @@
 <nav class="border-b border-border bg-card sticky top-0 z-40">
 	<div class="mx-auto flex h-14 max-w-7xl items-center px-4 sm:px-6">
 		<a href="/" class="mr-8 flex items-center gap-2 text-foreground font-semibold tracking-tight">
-			<FileText class="h-5 w-5 text-chart-1" />
+			<FileText class="h-5 w-5 text-primary" />
 			<span>pjtracker</span>
 		</a>
 
@@ -73,7 +73,7 @@
 					class={cn(
 						'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
 						active
-							? 'bg-accent text-accent-foreground'
+							? 'bg-primary/10 text-primary'
 							: 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
 					)}
 				>
@@ -87,27 +87,17 @@
 
 		<div
 			class="hidden md:flex items-center gap-2 text-xs text-muted-foreground"
-			title={`API: ${apiStatus}`}
+			title="Status da conexão"
 		>
-			<span class="relative flex h-2 w-2">
-				{#if apiStatus === 'ok'}
-					<span
-						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"
-					></span>
-					<span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-				{:else if apiStatus === 'degraded'}
-					<span class="relative inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
-				{:else}
-					<span class="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
-				{/if}
-			</span>
-			API
+			<span class={cn('h-1.5 w-1.5 rounded-full', apiStatus === 'ok' ? 'bg-success' : apiStatus === 'degraded' ? 'bg-warning' : 'bg-destructive-foreground')}></span>
+			{apiStatus === 'ok' ? 'Conectado' : apiStatus === 'degraded' ? 'Conexão limitada' : 'Sem conexão'}
 		</div>
 
 		<button
 			class="md:hidden ml-2 inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-accent"
 			onclick={() => (mobileOpen = !mobileOpen)}
-			aria-label="Toggle menu"
+			aria-label="Abrir ou fechar menu"
+			aria-expanded={mobileOpen}
 		>
 			{#if mobileOpen}
 				<X class="h-5 w-5" />
@@ -127,7 +117,7 @@
 					class={cn(
 						'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
 						active
-							? 'bg-accent text-accent-foreground'
+							? 'bg-primary/10 text-primary'
 							: 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
 					)}
 				>

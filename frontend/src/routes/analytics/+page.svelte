@@ -64,7 +64,7 @@
 		} catch (e) {
 			if (requestId !== requestSequence) return;
 			toast.error(
-				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Failed to load analytics'
+				e instanceof ApiError ? formatApiErrorMessage(e.body) : 'Falha ao carregar análises'
 			);
 			points = [];
 			darfEntries = [];
@@ -96,13 +96,13 @@
 	const brlSeries: ChartSeries[] = [
 		{
 			key: 'brl_no_spread',
-			label: 'BRL (no spread)',
+			label: 'BRL (sem spread)',
 			color: 'var(--color-chart-2)',
 			format: formatBrl
 		},
 		{
 			key: 'brl_with_spread',
-			label: 'BRL (with spread)',
+			label: 'BRL (com spread)',
 			color: 'var(--color-chart-4)',
 			format: formatBrl
 		}
@@ -111,7 +111,7 @@
 	const rateSeries: ChartSeries[] = [
 		{
 			key: 'rate',
-			label: 'Rate',
+			label: 'Cotação',
 			color: 'var(--color-chart-1)',
 			format: (value) => formatNumber(value, 4)
 		},
@@ -213,7 +213,7 @@
 </script>
 
 <div class="space-y-6">
-	<PageHeader title="Analytics" description="NF, impostos e saques vs casa" />
+	<PageHeader title="Análises" description="NF, impostos e saques vs casa" />
 
 	{#if fluxoPoints.length > 0}
 		<Card.Root>
@@ -247,8 +247,8 @@
 										class={cn(
 											'text-right tabular-nums',
 											row.saques_brl >= row.primary_share_brl
-												? 'text-emerald-400'
-												: 'text-amber-400'
+												? 'text-muted-foreground'
+												: 'text-warning'
 										)}
 									>
 										{formatBrl(row.saques_brl - row.primary_share_brl)}
@@ -268,11 +268,11 @@
 	<!-- Date range -->
 	<div class="flex flex-wrap items-end gap-3">
 		<div class="space-y-1">
-			<span class="text-xs font-medium text-muted-foreground">From</span>
+			<span class="text-xs font-medium text-muted-foreground">De</span>
 			<Input type="date" bind:value={dateFrom} class="w-40" />
 		</div>
 		<div class="space-y-1">
-			<span class="text-xs font-medium text-muted-foreground">To</span>
+			<span class="text-xs font-medium text-muted-foreground">Até</span>
 			<Input type="date" bind:value={dateTo} class="w-40" />
 		</div>
 		<Button onclick={loadData} disabled={loading} variant="outline">
@@ -291,16 +291,16 @@
 		<Card.Root>
 			<Card.Content class="py-12 text-center">
 				<TrendingUp class="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-				<p class="text-muted-foreground">No data found in the selected date range.</p>
+				<p class="text-muted-foreground">Nenhum dado encontrado no período selecionado.</p>
 			</Card.Content>
 		</Card.Root>
 	{:else if hasAnyChartData}
 		{#if summaryTableRows.length > 0}
 			<Card.Root>
 				<Card.Header>
-					<Card.Title class="text-sm">Monthly Tax and NF Summary</Card.Title>
+					<Card.Title class="text-sm">Resumo mensal de notas e impostos</Card.Title>
 					<Card.Description>
-						DARF and IRPJ/CSLL taxes plus NF totals with spread, grouped by month
+						Impostos de DARF e IRPJ/CSLL e totais das notas com spread, por mês.
 					</Card.Description>
 				</Card.Header>
 				<Card.Content>
@@ -308,12 +308,12 @@
 						<Table.Table>
 							<Table.TableHeader>
 								<Table.TableRow>
-									<Table.TableHead>Fiscal month</Table.TableHead>
-									<Table.TableHead class="text-right">Monthly taxes</Table.TableHead>
-									<Table.TableHead class="text-right">Accumulated taxes</Table.TableHead>
-									<Table.TableHead class="text-right">Monthly NF (with spread)</Table.TableHead>
-									<Table.TableHead class="text-right">Accumulated NF (with spread)</Table.TableHead>
-									<Table.TableHead class="text-right">Accumulated difference</Table.TableHead>
+									<Table.TableHead>Mês fiscal</Table.TableHead>
+									<Table.TableHead class="text-right">Impostos do mês</Table.TableHead>
+									<Table.TableHead class="text-right">Impostos acumulados</Table.TableHead>
+									<Table.TableHead class="text-right">NFs do mês (com spread)</Table.TableHead>
+									<Table.TableHead class="text-right">NFs acumuladas (com spread)</Table.TableHead>
+									<Table.TableHead class="text-right">Diferença acumulada</Table.TableHead>
 								</Table.TableRow>
 							</Table.TableHeader>
 							<Table.TableBody>
@@ -348,7 +348,7 @@
 			<!-- USD Chart -->
 			<Card.Root>
 				<Card.Header>
-					<Card.Title class="text-sm">USD over Time</Card.Title>
+					<Card.Title class="text-sm">Valores em USD</Card.Title>
 				</Card.Header>
 				<Card.Content class="space-y-4">
 					<AnalyticsLineChart data={chartData} series={usdSeries} yTickFormat={formatUsd} />
@@ -358,8 +358,8 @@
 			<!-- BRL Chart -->
 			<Card.Root>
 				<Card.Header>
-					<Card.Title class="text-sm">BRL over Time</Card.Title>
-					<Card.Description>No spread vs. with spread</Card.Description>
+					<Card.Title class="text-sm">Valores em BRL</Card.Title>
+					<Card.Description>Valores sem spread e com spread</Card.Description>
 				</Card.Header>
 				<Card.Content class="space-y-4">
 					<AnalyticsLineChart
@@ -371,11 +371,11 @@
 					<div class={legendClass}>
 						<span class="flex items-center gap-2">
 							<span class={`${legendSwatchClass} bg-chart-2`}></span>
-							No spread
+							Sem spread
 						</span>
 						<span class="flex items-center gap-2">
 							<span class={`${legendSwatchClass} bg-chart-4`}></span>
-							With spread
+							Com spread
 						</span>
 					</div>
 				</Card.Content>
@@ -384,7 +384,7 @@
 			<!-- Rate Chart -->
 			<Card.Root>
 				<Card.Header>
-					<Card.Title class="text-sm">Exchange Rate over Time</Card.Title>
+					<Card.Title class="text-sm">Cotação ao longo do tempo</Card.Title>
 					<Card.Description>Rate vs. effective rate</Card.Description>
 				</Card.Header>
 				<Card.Content class="space-y-4">
@@ -396,7 +396,7 @@
 					<div class={legendClass}>
 						<span class="flex items-center gap-2">
 							<span class={`${legendSwatchClass} bg-chart-1`}></span>
-							Rate
+							Cotação
 						</span>
 						<span class="flex items-center gap-2">
 							<span class={`${legendSwatchClass} bg-chart-5`}></span>

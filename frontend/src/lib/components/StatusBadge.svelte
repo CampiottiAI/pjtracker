@@ -12,9 +12,9 @@
 	} = $props();
 
 	const colorMap = {
-		success: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
-		warning: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
-		error: 'bg-red-500/15 text-red-400 border-red-500/25',
+		success: 'bg-muted/50 text-muted-foreground border-border',
+		warning: 'bg-warning/10 text-warning border-warning/25',
+		error: 'bg-destructive-foreground/10 text-destructive-foreground border-destructive-foreground/25',
 		neutral: 'bg-muted text-muted-foreground border-border'
 	};
 

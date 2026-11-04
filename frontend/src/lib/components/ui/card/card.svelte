@@ -9,6 +9,6 @@
 	}: HTMLAttributes<HTMLDivElement> = $props();
 </script>
 
-<div class={cn('bg-card text-card-foreground rounded-xl border shadow', className)} {...restProps}>
+<div class={cn('bg-card text-card-foreground rounded-xl border shadow-sm shadow-black/20', className)} {...restProps}>
 	{@render children?.()}
 </div>

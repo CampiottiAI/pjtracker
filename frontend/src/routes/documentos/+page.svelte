@@ -1,7 +1,6 @@
 <script lang="ts">
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { formatFiscalMes } from '$lib/utils/format.js';
 	import {
 		FileText,
 		Receipt,
@@ -38,7 +37,7 @@
 		{
 			href: '/irpj-csll',
 			label: 'IRPJ/CSLL',
-			description: 'Trimestral (Mar/Jun/Sep/Dez)',
+			description: 'Trimestral (mar/jun/set/dez)',
 			icon: Landmark
 		},
 		{
@@ -53,7 +52,7 @@
 <div class="space-y-6">
 	<PageHeader
 		title="Documentos"
-		description="Upload e gestão de documentos fiscais da PJ. Filtre por mês fiscal em cada página."
+		description="Envie e acompanhe os documentos fiscais da sua empresa."
 	/>
 
 	<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -72,11 +71,4 @@
 		{/each}
 	</div>
 
-	<p class="text-sm text-muted-foreground">
-		Use o seletor de mês fiscal em cada página ou abra com
-		<code class="text-xs">?fiscal_mes=YYYY-MM</code> (ex. agosto 2026 →
-		<a href="/nfs?fiscal_mes=2026-08" class="underline hover:text-foreground">
-			{formatFiscalMes('2026-08')}
-		</a>).
-	</p>
 </div>
