@@ -11,6 +11,6 @@
 	}: HTMLAttributes<HTMLDivElement> & { variant?: Variant } = $props();
 </script>
 
-<div class={cn(badgeVariants({ variant, className }))} {...restProps}>
+<div class={cn(badgeVariants({ variant }), className)} {...restProps}>
 	{@render children?.()}
 </div>

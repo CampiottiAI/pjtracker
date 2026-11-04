@@ -24,9 +24,10 @@
 		error: X,
 		neutral: Minus
 	};
+	const Icon = $derived(iconMap[status]);
 </script>
 
 <Badge variant="outline" class={cn('gap-1', colorMap[status])}>
-	<svelte:component this={iconMap[status]} class="h-3 w-3" />
+	<Icon class="h-3 w-3" />
 	{label}
 </Badge>
