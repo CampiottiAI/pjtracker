@@ -22,6 +22,7 @@
 	import { cn } from '$lib/utils.js';
 	import { formatFiscalMes, formatBrl, formatWithdrawDate } from '$lib/utils/format.js';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import FiscalPendingNotice from '$lib/components/FiscalPendingNotice.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -407,6 +408,8 @@
 		{/snippet}
 	</PageHeader>
 
+	<FiscalPendingNotice {months} onselect={(month) => { selectedMonth = month; }} />
+
 	<div class="flex flex-wrap items-center gap-3">
 		<label for="fluxo-month" class="text-sm font-medium text-muted-foreground">Mês</label>
 		{#if loading}
@@ -451,29 +454,24 @@
 	</div>
 
 	{#if fluxo && selectedMonth}
-		<p class="text-sm text-muted-foreground">
-			Receita de {formatFiscalMes(fluxo.previous_fiscal_mes)} menos saques de
-			{formatFiscalMes(selectedMonth)}; abaixo, seu gasto na casa e o que sobra do saque.
-		</p>
-
-		<section aria-labelledby="receita-heading" class="overflow-hidden rounded-xl border border-border bg-card">
-			<div class="px-5 py-6 sm:px-7 sm:py-7">
+		<section aria-labelledby="receita-heading" class="overflow-hidden rounded-lg border border-border bg-card">
+			<div class="px-4 py-3 sm:px-5">
 				<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 					<h2 id="receita-heading" class="text-sm font-medium text-muted-foreground">Receita</h2>
 					<span class="text-xs text-muted-foreground">{formatFiscalMes(fluxo.previous_fiscal_mes)}</span>
 				</div>
-				<p class="mt-2 text-3xl font-semibold tracking-tight tabular-nums sm:text-5xl">
+				<p class="mt-1 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
 					{formatBrl(activeSummary.previous_month_income_brl)}
 				</p>
 
-				<dl class="mt-6 grid gap-4 border-t border-border pt-5 sm:grid-cols-2 sm:gap-8">
-					<div class="space-y-1.5">
-						<dt class="text-sm text-muted-foreground">Saques</dt>
-						<dd class="text-xl font-medium tabular-nums sm:text-2xl">{formatBrl(fluxo.coverage.saques_brl)}</dd>
+				<dl class="mt-3 flex flex-wrap gap-x-8 gap-y-2">
+					<div class="space-y-0.5">
+						<dt class="text-xs text-muted-foreground">Saques · {formatFiscalMes(selectedMonth)}</dt>
+						<dd class="text-base font-medium tabular-nums">{formatBrl(fluxo.coverage.saques_brl)}</dd>
 					</div>
-					<div class="space-y-1.5">
-						<dt class="text-sm text-muted-foreground">Sobra</dt>
-						<dd class={cn('text-xl font-medium tabular-nums sm:text-2xl', incomeLeftover < 0 ? 'text-destructive-foreground' : 'text-foreground')}>
+					<div class="space-y-0.5">
+						<dt class="text-xs text-muted-foreground">Sobra</dt>
+						<dd class={cn('text-base font-medium tabular-nums', incomeLeftover < 0 ? 'text-destructive-foreground' : 'text-foreground')}>
 							{formatBrl(incomeLeftover)}
 						</dd>
 						{#if incomeLeftover < 0}
@@ -483,12 +481,12 @@
 				</dl>
 			</div>
 
-			<div class="space-y-3 border-t border-border bg-muted/20 px-5 py-4 sm:px-7">
+			<div class="space-y-2 border-t border-border bg-muted/20 px-4 py-3 sm:px-5">
 				<div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs">
-					<span class="text-muted-foreground">Saques em relação ao teto</span>
+					<span class="text-muted-foreground">Limite de saques</span>
 					<span class="font-medium">Teto {formatBrl(ceilingBrl)}</span>
 				</div>
-				<div class="relative h-2 overflow-hidden rounded-full bg-muted" role="img" aria-label={`Saques ${formatBrl(fluxo.coverage.saques_brl)} de um teto de ${formatBrl(ceilingBrl)}`}>
+				<div class="relative h-1.5 overflow-hidden rounded-full bg-muted" role="img" aria-label={`Saques ${formatBrl(fluxo.coverage.saques_brl)} de um teto de ${formatBrl(ceilingBrl)}`}>
 					<div class={cn('absolute inset-y-0 left-0 rounded-full transition-all', withdrawProgressFillClass)} style={`width: ${saquesPct}%`}></div>
 					{#if casaNeedPct > 0 && casaNeedPct < 100}
 						<div class="absolute inset-y-0 w-0.5 bg-foreground/80" style={`left: ${casaNeedPct}%`} title="Seu gasto na casa"></div>
