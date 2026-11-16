@@ -41,8 +41,6 @@
 		Pencil,
 		Trash2,
 		Banknote,
-		Home,
-		Building2,
 		Download
 	} from 'lucide-svelte';
 
@@ -323,11 +321,6 @@
 		};
 	});
 
-	const showCompanyRemainder = $derived(
-		fluxo != null &&
-			(!fluxo.company.restante_estimated || fluxo.company.nf_income_brl > 0)
-	);
-
 	type CheckItem = {
 		label: string;
 		icon: typeof FileText;
@@ -539,80 +532,6 @@
 				{/each}
 			</ul>
 		</section>
-
-		<div class="grid gap-4 md:grid-cols-2">
-			<Card.Root>
-				<Card.Header class="pb-2">
-					<div class="flex items-center gap-2">
-						<Building2 class="h-4 w-4 text-muted-foreground" />
-						<Card.Title class="text-base">Restante na empresa</Card.Title>
-					</div>
-				</Card.Header>
-				<Card.Content class="space-y-2">
-					{#if showCompanyRemainder}
-						<p class="text-2xl font-bold tabular-nums">
-							{formatBrl(fluxo.company.restante_brl)}
-							{#if fluxo.company.restante_estimated}
-								<Badge variant="outline" class="ml-2 text-xs">estimado</Badge>
-							{/if}
-						</p>
-						<p class="text-sm text-muted-foreground">
-							NFs {formatBrl(fluxo.company.nf_income_brl)} · Impostos
-							{formatBrl(fluxo.company.taxes_brl)}
-							{#if fluxo.company.saldo_final_brl != null}
-								· Saldo extrato {formatBrl(fluxo.company.saldo_final_brl)}
-							{/if}
-						</p>
-					{:else}
-						<p class="text-sm text-muted-foreground">
-							Envie o extrato ou as NFs do mês para ver o saldo na empresa.
-						</p>
-					{/if}
-					<div class="flex gap-2 pt-1">
-						<a href="/extratos?fiscal_mes={selectedMonth}" class="text-sm text-primary hover:underline">
-							Extratos
-						</a>
-						<a href="/analytics" class="text-sm text-primary hover:underline">Análises</a>
-					</div>
-				</Card.Content>
-			</Card.Root>
-
-			<Card.Root>
-				<Card.Header class="pb-2">
-					<div class="flex items-center gap-2">
-						<Home class="h-4 w-4 text-muted-foreground" />
-						<Card.Title class="text-base">Acerto da casa</Card.Title>
-					</div>
-				</Card.Header>
-				<Card.Content class="space-y-2">
-					{#if fluxo.casa.person_names.length > 0}
-						<div class="space-y-1 text-sm">
-							{#each fluxo.casa.person_names as name, i}
-								<div class="flex justify-between gap-4">
-									<span class="text-muted-foreground">{name} no cartão</span>
-									<span class="tabular-nums font-medium">
-										{formatBrl(fluxo.casa.nubank_per_person[i] ?? 0)}
-									</span>
-								</div>
-							{/each}
-						</div>
-					{:else}
-						<p class="text-sm text-muted-foreground">Casa ainda não fechada.</p>
-					{/if}
-					{#each fluxo.casa.reimbursements as reimb, i}
-						{#if reimb > 0}
-							<div class="flex items-center gap-2 text-sm text-warning">
-								<AlertCircle class="h-4 w-4 shrink-0" />
-								{fluxo.casa.person_names[i]} deve receber {formatBrl(reimb)}
-							</div>
-						{/if}
-					{/each}
-					<a href="/casa?mes={selectedMonth}" class="text-sm text-primary hover:underline">
-						{fluxo.casa.saved ? 'Ver / editar casa' : `Fechar a casa de ${formatFiscalMes(selectedMonth)}`}
-					</a>
-				</Card.Content>
-			</Card.Root>
-		</div>
 
 		<Card.Root>
 			<Card.Header>
