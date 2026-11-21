@@ -26,13 +26,15 @@ KEEP_LOCAL_N="${KEEP_LOCAL_N:-0}"
 DRY_RUN=0
 LOCAL_ONLY=0
 CLEAN_LOCAL=0
+OUTPUT_PATH=""
 
 usage() {
   cat <<'EOF'
-Usage: backup.sh [--dry-run] [--local-only] [--clean-local] [-h|--help]
+Usage: backup.sh [--dry-run] [--local-only [--output PATH]] [--clean-local] [-h|--help]
 
   --dry-run       Build the tar.gz; do not upload or prune
   --local-only    Build the tar.gz and keep it locally; skip rclone
+  --output PATH   Write to this exact path (requires --local-only)
   --clean-local   Delete local pjtracker-*.tar.gz archives (no backup)
   -h, --help      Show this help
 
@@ -52,6 +54,14 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=1; shift ;;
     --local-only) LOCAL_ONLY=1; shift ;;
     --clean-local) CLEAN_LOCAL=1; shift ;;
+    --output)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "error: --output requires a path" >&2
+        exit 1
+      fi
+      OUTPUT_PATH="$2"
+      shift 2
+      ;;
     -h|--help) usage; exit 0 ;;
     *)
       echo "error: unknown argument: $1" >&2
@@ -60,6 +70,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$OUTPUT_PATH" && ( "$LOCAL_ONLY" -ne 1 || "$CLEAN_LOCAL" -eq 1 || "$DRY_RUN" -eq 1 ) ]]; then
+  echo "error: --output requires --local-only and cannot be combined with --clean-local or --dry-run" >&2
+  exit 1
+fi
 
 if [[ -n "${PJTRACKER_DB_PATH:-}" ]]; then
   DB_PATH="$(cd "$(dirname "${PJTRACKER_DB_PATH}")" && pwd)/$(basename "${PJTRACKER_DB_PATH}")"
@@ -147,7 +162,9 @@ echo "Snapshotting SQLite: $DB_PATH"
 sqlite3 "$DB_PATH" ".backup '$STAGING/pjtracker.db'"
 
 # Write archive to data root for --dry-run / --local-only / KEEP_LOCAL; else temp
-if [[ "$LOCAL_ONLY" -eq 1 || "$KEEP_LOCAL" -eq 1 || "$DRY_RUN" -eq 1 ]]; then
+if [[ -n "$OUTPUT_PATH" ]]; then
+  ARCHIVE_PATH="$OUTPUT_PATH"
+elif [[ "$LOCAL_ONLY" -eq 1 || "$KEEP_LOCAL" -eq 1 || "$DRY_RUN" -eq 1 ]]; then
   ARCHIVE_PATH="$DATA_ROOT/$ARCHIVE_NAME"
 else
   ARCHIVE_PATH="$WORKDIR/$ARCHIVE_NAME"
@@ -165,7 +182,8 @@ if [[ -d "$IMAGES_DIR" ]]; then
 else
   echo "warning: images/ not found at $IMAGES_DIR (skipping)" >&2
 fi
-"${TAR_CMD[@]}"
+# macOS tar otherwise adds AppleDouble metadata that restore.sh rejects.
+COPYFILE_DISABLE=1 "${TAR_CMD[@]}"
 
 ARCHIVE_SIZE="$(du -h "$ARCHIVE_PATH" | awk '{print $1}')"
 echo "Archive size: $ARCHIVE_SIZE"

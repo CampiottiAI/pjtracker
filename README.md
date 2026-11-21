@@ -149,6 +149,14 @@ Backs up the durable data only: `pjtracker.db`, `pdfs/`, and `images/`. Secrets 
 
 Requires: `sqlite3` and `tar`. [`rclone`](https://rclone.org/) is only needed to upload; `--local-only` works without it and prints the archive path plus an `scp` command to fetch it.
 
+You can also click **Baixar backup** (download icon) in the app's navigation on
+desktop or mobile. It generates a fresh `.tar.gz` using `scripts/backup.sh` and
+downloads it to your browser. The temporary archive on the server is removed
+after sending. This uses the same `pjtracker.db` + `pdfs/` + `images/` format
+accepted by `scripts/restore.sh`; Casa/Carros JSON under `data/casa/` and secrets
+are not included. No rclone configuration is needed for browser downloads.
+On Raspberry Pi OS, install the backup tools with `sudo apt install sqlite3 tar`.
+
 ### Install rclone (Pi)
 
 Preferred (latest binary):

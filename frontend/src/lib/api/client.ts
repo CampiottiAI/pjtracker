@@ -168,6 +168,10 @@ export async function getReady(): Promise<ReadyResponse> {
 	return apiJson<ReadyResponse>('/ready');
 }
 
+export async function downloadBackup(): Promise<{ blob: Blob; filename?: string }> {
+	return downloadBlob('/backups/download', { method: 'POST' });
+}
+
 // ---------------------------------------------------------------------------
 // NFs
 // ---------------------------------------------------------------------------

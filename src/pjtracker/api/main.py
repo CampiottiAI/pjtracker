@@ -10,6 +10,7 @@ from pjtracker.app import init_db
 
 from .routers import (
     analytics,
+    backups,
     boletos,
     cars,
     casa,
@@ -39,6 +40,7 @@ app = FastAPI(
 api_prefix = "/api/v1"
 
 app.include_router(health.router, prefix=api_prefix)
+app.include_router(backups.router, prefix=api_prefix)
 app.include_router(receipts.router, prefix=api_prefix)
 app.include_router(nfs.router, prefix=api_prefix)
 app.include_router(boletos.router, prefix=api_prefix)

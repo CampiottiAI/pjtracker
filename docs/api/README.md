@@ -70,6 +70,15 @@ Routes such as `/pdf`, `/receipt`, `/images/{image_id}`, `/extrato-pdf`, `/caixi
 
 In a browser client, treat them as downloads or open them in a new tab using a blob/object URL.
 
+`POST /api/v1/backups/download` (no body) creates a fresh SQLite snapshot and
+returns an `application/gzip` attachment named `pjtracker-YYYYMMDD-HHMMSS.tar.gz`.
+It reuses `scripts/backup.sh --local-only`, requires `bash`, `sqlite3` and `tar`
+on the server, and does not upload to rclone. The archive contains `pjtracker.db`,
+`pdfs/` and `images/` when present, matching `scripts/restore.sh`. Casa/Carros JSON
+and secrets are excluded. Temporary archives are cleaned after sending or on
+generation failure. Responses use `Cache-Control: no-store`; generation failures
+return `500`, and generation exceeding five minutes returns `504`.
+
 ### Stored rows are mostly raw database rows
 
 List/get/create responses for saved entities are mostly direct database rows converted to JSON dictionaries. That matters because:

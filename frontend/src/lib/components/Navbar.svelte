@@ -2,7 +2,9 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { cn } from '$lib/utils.js';
-	import { getReady } from '$lib/api/client.js';
+	import { ApiError, downloadBackup, formatApiErrorMessage, getReady, triggerDownload } from '$lib/api/client.js';
+	import { Button } from '$lib/components/ui/button';
+	import { toast } from 'svelte-sonner';
 	import {
 		LayoutDashboard,
 		Home,
@@ -11,7 +13,9 @@
 		X,
 		FolderOpen,
 		FileText,
-		Car
+		Car,
+		Download,
+		LoaderCircle
 	} from 'lucide-svelte';
 
 	type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
@@ -25,7 +29,21 @@
 	];
 
 	let mobileOpen = $state(false);
+	let downloadingBackup = $state(false);
 	let apiStatus = $state<'ok' | 'degraded' | 'down'>('down');
+
+	async function handleBackupDownload() {
+		if (downloadingBackup) return;
+		downloadingBackup = true;
+		try {
+			const { blob, filename } = await downloadBackup();
+			triggerDownload(blob, filename ?? 'pjtracker-backup.tar.gz');
+		} catch (error) {
+			toast.error(error instanceof ApiError ? formatApiErrorMessage(error.body) : 'Falha ao baixar backup');
+		} finally {
+			downloadingBackup = false;
+		}
+	}
 
 	function isActive(href: string, pathname: string): boolean {
 		if (href === '/') return pathname === '/';
@@ -84,6 +102,24 @@
 		</div>
 
 		<div class="flex-1"></div>
+
+		<Button
+			variant="ghost"
+			size="sm"
+			class="mr-2"
+			disabled={downloadingBackup}
+			onclick={handleBackupDownload}
+			aria-label={downloadingBackup ? 'Preparando backup' : 'Baixar backup'}
+			aria-busy={downloadingBackup}
+			title="Baixar backup do banco de dados, PDFs e imagens"
+		>
+			{#if downloadingBackup}
+				<LoaderCircle class="h-4 w-4 animate-spin" />
+			{:else}
+				<Download class="h-4 w-4" />
+			{/if}
+			<span class="hidden lg:inline">{downloadingBackup ? 'Preparando…' : 'Baixar backup'}</span>
+		</Button>
 
 		<div
 			class="hidden md:flex items-center gap-2 text-xs text-muted-foreground"
