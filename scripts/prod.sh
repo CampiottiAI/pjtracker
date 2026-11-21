@@ -50,4 +50,10 @@ echo "  LAN:     http://<this-machine-ip>:$PROD_PORT"
 echo ""
 echo "Optional: PJTRACKER_OCR=0 to skip local OCR (LLM-only parsing)."
 
-wait
+# Exit when either server stops so systemd can restart the complete app.
+# Bash on Raspberry Pi OS supports wait -n.
+STATUS=0
+wait -n "$BACKEND_PID" "$FRONTEND_PID" || STATUS=$?
+kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+wait "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+exit "$STATUS"

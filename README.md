@@ -98,6 +98,51 @@ Open `http://<machine-ip>:4173` (default). Environment variables:
 
 On a 4GB Pi, prefer `./scripts/prod.sh` over dev mode. If uploads still struggle, try `PJTRACKER_OCR=0` when Maritaca LLM extraction is reliable, and consider adding swap.
 
+### Start automatically on Raspberry Pi (systemd)
+
+Install Python 3.13+, uv, Node.js/npm (a version supported by the frontend),
+and curl first. Put your Maritaca key in `.token` in the repo root. Then run
+as your normal Linux user, **without sudo**:
+
+```bash
+./scripts/install-service.sh
+```
+
+The installer runs `uv sync --frozen`, installs frontend dependencies and builds
+the frontend, then uses sudo to install and start `pjtracker.service` and enable
+it at boot. It detects your username, repo location and executable paths,
+including Node installed through nvm. Rerun it after pulling updates to rebuild
+and restart. Keep the repository and those executable locations in place.
+Stop any manually started copy first to free ports 8000 and 4173.
+
+```bash
+sudo systemctl status pjtracker --no-pager
+sudo journalctl -u pjtracker -f
+sudo systemctl restart pjtracker
+sudo systemctl stop pjtracker
+```
+
+Open `http://<pi-ip>:4173`. For persistent settings, optionally create
+`/etc/pjtracker.env` using `sudoedit /etc/pjtracker.env`, for example:
+
+```ini
+PJTRACKER_OCR=0
+PROD_PORT=4173
+```
+
+Restart the service after editing. `MARITACA_API_KEY` can also be set in that file
+instead of `.token`; protect the file with `sudo chmod 600 /etc/pjtracker.env`
+when it contains secrets. Keep `API_PORT=8000`: the frontend proxy targets 8000.
+
+To stop the app and remove its boot service:
+
+```bash
+./scripts/uninstall-service.sh
+```
+
+Uninstalling preserves the repository, database, uploaded files, `.token` and
+`/etc/pjtracker.env`.
+
 ## Backup (Google Drive via rclone)
 
 Backs up the durable data only: `pjtracker.db`, `pdfs/`, and `images/`. Secrets (`.token`, SMTP env) are **not** included — keep those separately.
